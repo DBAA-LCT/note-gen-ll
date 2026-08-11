@@ -2,12 +2,6 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tauri::{command, AppHandle, Manager};
 
-#[cfg(target_os = "macos")]
-const MACOS_VISION_PROVIDER_ID: &str = "ocr-native-macos-vision";
-#[cfg(target_os = "macos")]
-const MACOS_VISION_PROVIDER_NAME: &str = "System OCR (macOS)";
-#[cfg(target_os = "macos")]
-const MACOS_VISION_PROVIDER_VERSION: &str = "1.0.0";
 #[cfg(target_os = "windows")]
 const WINDOWS_OCR_PROVIDER_ID: &str = "ocr-native-windows";
 #[cfg(target_os = "windows")]
@@ -20,12 +14,6 @@ const ANDROID_MLKIT_PROVIDER_ID: &str = "ocr-native-android-mlkit";
 const ANDROID_MLKIT_PROVIDER_NAME: &str = "System OCR (Android)";
 #[cfg(target_os = "android")]
 const ANDROID_MLKIT_PROVIDER_VERSION: &str = "1.0.0";
-#[cfg(target_os = "ios")]
-const IOS_VISION_PROVIDER_ID: &str = "ocr-native-ios-vision";
-#[cfg(target_os = "ios")]
-const IOS_VISION_PROVIDER_NAME: &str = "System OCR (iOS)";
-#[cfg(target_os = "ios")]
-const IOS_VISION_PROVIDER_VERSION: &str = "1.0.0";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,19 +26,8 @@ pub struct OcrProviderInfo {
 }
 
 #[command]
-pub async fn list_ocr_providers(app_handle: AppHandle) -> Result<Vec<OcrProviderInfo>, String> {
+pub async fn list_ocr_providers(_app_handle: AppHandle) -> Result<Vec<OcrProviderInfo>, String> {
     let mut providers = Vec::new();
-
-    #[cfg(target_os = "macos")]
-    if macos_builtin_provider_command(&app_handle).is_ok() {
-        providers.push(OcrProviderInfo {
-            id: MACOS_VISION_PROVIDER_ID.to_string(),
-            name: MACOS_VISION_PROVIDER_NAME.to_string(),
-            version: MACOS_VISION_PROVIDER_VERSION.to_string(),
-            platform: current_platform_tag(),
-            builtin: true,
-        });
-    }
 
     #[cfg(target_os = "windows")]
     if windows_ocr_available().is_ok() {
@@ -64,22 +41,11 @@ pub async fn list_ocr_providers(app_handle: AppHandle) -> Result<Vec<OcrProvider
     }
 
     #[cfg(target_os = "android")]
-    if crate::android_ocr::is_available(&app_handle) {
+    if crate::android_ocr::is_available(&_app_handle) {
         providers.push(OcrProviderInfo {
             id: ANDROID_MLKIT_PROVIDER_ID.to_string(),
             name: ANDROID_MLKIT_PROVIDER_NAME.to_string(),
             version: ANDROID_MLKIT_PROVIDER_VERSION.to_string(),
-            platform: current_platform_tag(),
-            builtin: true,
-        });
-    }
-
-    #[cfg(target_os = "ios")]
-    if crate::ios_ocr::is_available(&app_handle) {
-        providers.push(OcrProviderInfo {
-            id: IOS_VISION_PROVIDER_ID.to_string(),
-            name: IOS_VISION_PROVIDER_NAME.to_string(),
-            version: IOS_VISION_PROVIDER_VERSION.to_string(),
             platform: current_platform_tag(),
             builtin: true,
         });
@@ -128,11 +94,6 @@ fn run_ocr_provider_sync(
         app_data_dir.join(relative_image_path)
     };
 
-    #[cfg(target_os = "macos")]
-    if provider_id == MACOS_VISION_PROVIDER_ID {
-        return run_macos_ocr_provider_sync(app_handle, &absolute_image_path, languages);
-    }
-
     #[cfg(target_os = "windows")]
     if provider_id == WINDOWS_OCR_PROVIDER_ID {
         let _ = app_handle;
@@ -144,97 +105,7 @@ fn run_ocr_provider_sync(
         return crate::android_ocr::recognize_image(app_handle, &absolute_image_path, languages);
     }
 
-    #[cfg(target_os = "ios")]
-    if provider_id == IOS_VISION_PROVIDER_ID {
-        return crate::ios_ocr::recognize_image(app_handle, &absolute_image_path, languages);
-    }
-
     Err(format!("Unknown OCR provider: {}", provider_id))
-}
-
-#[cfg(target_os = "macos")]
-fn run_macos_ocr_provider_sync(
-    app_handle: &AppHandle,
-    absolute_image_path: &Path,
-    languages: Vec<String>,
-) -> Result<String, String> {
-    use serde_json::json;
-    use serde_json::Value;
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-
-    let command_path = macos_builtin_provider_command(app_handle)?;
-    let payload = json!({
-        "imagePath": absolute_image_path.to_string_lossy(),
-        "languages": languages,
-    });
-
-    let mut child = Command::new(command_path)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to start OCR provider: {}", e))?;
-
-    if let Some(stdin) = child.stdin.as_mut() {
-        stdin
-            .write_all(payload.to_string().as_bytes())
-            .map_err(|e| format!("Failed to write OCR provider input: {}", e))?;
-    }
-
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("Failed to read OCR provider output: {}", e))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!(
-            "OCR provider exited with {}: {}",
-            output.status,
-            stderr.trim()
-        ));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let parsed: Value = serde_json::from_str(stdout.trim())
-        .map_err(|e| format!("Failed to parse OCR provider output: {}", e))?;
-
-    parsed
-        .get("text")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned)
-        .ok_or("OCR provider output is missing text.".to_string())
-}
-
-#[cfg(target_os = "macos")]
-fn macos_builtin_provider_command(app_handle: &AppHandle) -> Result<PathBuf, String> {
-    let mut candidates = Vec::new();
-
-    if let Ok(resource_dir) = app_handle.path().resource_dir() {
-        candidates.push(resource_dir.join("ocr").join("notegen-ocr-vision"));
-        candidates.push(
-            resource_dir
-                .join("resources")
-                .join("ocr")
-                .join("notegen-ocr-vision"),
-        );
-    }
-
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources")
-            .join("ocr")
-            .join("notegen-ocr-vision"),
-    );
-
-    for candidate in candidates {
-        if candidate.is_file() {
-            set_executable_permission(&candidate)?;
-            return Ok(candidate);
-        }
-    }
-
-    Err("Built-in macOS OCR provider is not available.".to_string())
 }
 
 #[cfg(target_os = "windows")]
@@ -450,23 +321,6 @@ fn windows_ocr_language_alias_matches(available: &str, candidate: &str) -> bool 
     }
 }
 
-#[cfg(target_os = "macos")]
-fn set_executable_permission(path: &Path) -> Result<(), String> {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-
-    let mut permissions = fs::metadata(path)
-        .map_err(|e| format!("Failed to read provider permissions: {}", e))?
-        .permissions();
-    if permissions.mode() & 0o111 != 0 {
-        return Ok(());
-    }
-
-    permissions.set_mode(0o755);
-    fs::set_permissions(path, permissions)
-        .map_err(|e| format!("Failed to set provider executable permission: {}", e))
-}
-
 fn current_platform_tag() -> String {
     format!(
         "{}-{}",
@@ -477,7 +331,6 @@ fn current_platform_tag() -> String {
 
 fn normalize_os(os: &str) -> &str {
     match os {
-        "macos" => "macos",
         "windows" => "windows",
         "linux" => "linux",
         other => other,

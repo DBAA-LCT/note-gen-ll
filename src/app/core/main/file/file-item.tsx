@@ -6,7 +6,6 @@ import { BaseDirectory, exists, rename, writeTextFile } from "@tauri-apps/plugin
 import { Copy, Database, Download, File, FileCode, FileJson, FileText, FileUp, FolderOpen, ImageIcon, LoaderCircle, RefreshCwOff, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ask } from '@tauri-apps/plugin-dialog';
-import { platform } from '@tauri-apps/plugin-os';
 import { Store } from '@tauri-apps/plugin-store';
 import { RepoNames } from "@/lib/sync/github.types";
 import { S3Config, WebDAVConfig } from "@/types/sync";
@@ -45,8 +44,6 @@ import { useSettingsDialogStore } from "@/stores/settings-dialog";
 import { FileTreeDecorations } from "./file-tree-decorations";
 import { moveEntryToSystemTrash } from './system-trash'
 import { rewriteWorkspaceMarkdownMediaPaths } from '@/lib/markdown-media-path'
-
-type Platform = 'macos' | 'windows' | 'linux' | 'unknown'
 
 function shouldAutoSyncOnInitialRead(options?: { isNewFile?: boolean }) {
   return options?.isNewFile !== true
@@ -814,27 +811,10 @@ export function FileItem({
   }, [path, handleStartRename, handleDeleteFile, handlePasteFile])
 
   // 获取当前平台（用于显示快捷键）
-  const [currentPlatform, setCurrentPlatform] = useState<Platform>('unknown')
-
-  useEffect(() => {
-    try {
-      const p = platform()
-      if (p === 'macos') {
-        setCurrentPlatform('macos')
-      } else if (p === 'windows') {
-        setCurrentPlatform('windows')
-      } else if (p === 'linux') {
-        setCurrentPlatform('linux')
-      }
-    } catch {
-      setCurrentPlatform('unknown')
-    }
-  }, [])
-
   // 快捷键显示文本
-  const modKey = currentPlatform === 'macos' ? '⌘' : 'Ctrl'
-  const deleteKey = currentPlatform === 'macos' ? '⌫' : 'Del'
-  const renameKey = currentPlatform === 'macos' ? '↩' : 'F2'
+  const modKey = 'Ctrl'
+  const deleteKey = 'Del'
+  const renameKey = 'F2'
   return (
     <>
       <ContextMenu>

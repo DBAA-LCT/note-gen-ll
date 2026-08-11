@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { platform } from '@tauri-apps/plugin-os'
 import { Store } from '@tauri-apps/plugin-store'
 import { CircleCheck, Cloud, CloudDownload, Copy, CopyCheck, ExternalLink, FolderSync, LogIn, LogOut, TriangleAlert } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -15,8 +14,6 @@ import { InputGroup, InputGroupInput } from '@/components/ui/input-group'
 import { Spinner } from '@/components/ui/spinner'
 import {
   releaseAndroidSyncFolder,
-  releaseIOSSyncFolder,
-  setIOSWorkspaceFolderAccess,
   testCloudFolderConnection,
 } from '@/lib/sync/cloud-folder'
 import {
@@ -277,10 +274,7 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
         description: oneDriveT('workspaceReadyDescription', transferred),
       })
 
-      if (platform() === 'ios' && previousConfig?.bookmarkBase64) {
-        await setIOSWorkspaceFolderAccess(null)
-        await releaseIOSSyncFolder(previousConfig.bookmarkBase64).catch(() => undefined)
-      } else if (previousConfig?.path.startsWith('content://') && previousConfig.path !== next.path) {
+      if (previousConfig?.path.startsWith('content://') && previousConfig.path !== next.path) {
         await releaseAndroidSyncFolder(previousConfig.path).catch(() => undefined)
       }
     } catch (cause) {

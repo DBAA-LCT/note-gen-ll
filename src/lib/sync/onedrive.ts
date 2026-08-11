@@ -42,7 +42,7 @@ export function logOneDriveTiming(
   details: OneDriveTimingDetails = {},
 ): void {
   const currentPlatform = platform()
-  if (currentPlatform !== 'android' && currentPlatform !== 'ios') return
+  if (currentPlatform !== 'android') return
   recordSyncTiming(operation, startedAt, details, 'OneDriveTiming')
 }
 
@@ -199,7 +199,7 @@ function retryDelayMs(response: Response | null, attempt: number): number {
 
 function oneDriveRequestConcurrency(): number {
   const currentPlatform = platform()
-  return currentPlatform === 'android' || currentPlatform === 'ios'
+  return currentPlatform === 'android'
     ? MOBILE_REQUEST_CONCURRENCY
     : DESKTOP_REQUEST_CONCURRENCY
 }
@@ -351,7 +351,7 @@ async function parseJson<T>(response: Response): Promise<T> {
 async function oauthRequest<T>(path: string, body: URLSearchParams): Promise<{ response: Response; data: T }> {
   const startedAt = Date.now()
   const response = await fetchWithTransientRetry(async () => {
-    if (platform() === 'android' || platform() === 'ios') {
+    if (platform() === 'android') {
       const result = await invoke<NativeOAuthResponse>('microsoft_oauth_request', {
         path,
         form: Object.fromEntries(body.entries()),
@@ -382,7 +382,7 @@ async function saveTokens(response: OneDriveTokenResponse, fallbackRefreshToken 
   } satisfies OneDriveAuthTokens
   const store = await Store.load('store.json')
   const currentPlatform = platform()
-  if (currentPlatform === 'android' || currentPlatform === 'ios') {
+  if (currentPlatform === 'android') {
     await invoke(`set_${currentPlatform}_secure_value`, {
       key: ONE_DRIVE_TOKEN_KEY,
       value: JSON.stringify(tokens),
@@ -400,7 +400,7 @@ async function readStoredTokens(): Promise<OneDriveAuthTokens | null> {
   const store = await Store.load('store.json')
   const legacyTokens = await store.get<OneDriveAuthTokens>(ONE_DRIVE_TOKEN_KEY) ?? null
   const currentPlatform = platform()
-  if (currentPlatform !== 'android' && currentPlatform !== 'ios') return legacyTokens
+  if (currentPlatform !== 'android') return legacyTokens
 
   try {
     const startedAt = Date.now()
@@ -827,7 +827,7 @@ export async function disconnectOneDrive(): Promise<void> {
   await clearCloudFolderTreeCache()
   const store = await Store.load('store.json')
   const currentPlatform = platform()
-  if (currentPlatform === 'android' || currentPlatform === 'ios') {
+  if (currentPlatform === 'android') {
     await invoke(`delete_${currentPlatform}_secure_value`, { key: ONE_DRIVE_TOKEN_KEY })
   }
   await store.delete(ONE_DRIVE_TOKEN_KEY)

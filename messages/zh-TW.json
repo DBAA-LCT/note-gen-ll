@@ -1035,9 +1035,7 @@
       "mobileUpdateTitle": "發現新版本",
       "mobileUpdateDescription": "目前版本 v{currentVersion}，可升級至 v{latestVersion}。",
       "androidUpdateHint": "Android 暫不支援應用程式內安裝，請前往官網下載新版安裝包。",
-      "iosUpdateHint": "iOS 暫時透過 TestFlight 提供更新。",
       "openDownloadPage": "前往官網升級",
-      "openTestFlight": "前往 TestFlight",
       "viewUpdateDetails": "更新內容",
       "updateDetailsTitle": "v{version} 更新內容",
       "later": "稍後",
@@ -1331,7 +1329,7 @@
       },
       "cloudFolder": {
         "title": "雲端硬碟同步",
-        "description": "透過 OneDrive、iCloud Drive 等雲端硬碟資料夾同步資料。",
+        "description": "透過 OneDrive 同步資料。",
         "androidDescription": "選擇系統檔案應用程式中的雲端硬碟資料夾。",
         "dialogTitle": "選擇雲端硬碟中的 NoteGen 資料夾",
         "workspaceWarningTitle": "工作區尚未遷移",
@@ -1420,28 +1418,6 @@
         "statusDisconnectingTitle": "正在中斷 OneDrive",
         "statusDisconnectingDescription": "正在安全移除本機儲存的 Microsoft 登入憑證。",
         "statusErrorTitle": "OneDrive 操作失敗"
-      },
-      "iCloud": {
-        "title": "iCloud",
-        "description": "選擇 iCloud Drive 中的資料夾同步資料。",
-        "workspaceWarningTitle": "工作區尚未遷移",
-        "workspaceWarningDescription": "遷移後，Markdown 筆記才能透過 iCloud 同步。",
-        "migrateWorkspace": "複製筆記並切換工作區",
-        "migrating": "正在遷移",
-        "migrationConfirmTitle": "遷移工作區到 iCloud",
-        "migrationConfirm": "NoteGen 將把目前工作區完整複製到所選 iCloud 資料夾，然後切換到新工作區。原工作區會保留為安全副本；iCloud 可能讀取複製後的筆記內容。是否繼續？",
-        "migrationSuccess": "工作區遷移完成",
-        "migrationSuccessDescription": "已複製 {count} 個檔案，之後的 Markdown 變更將透過 iCloud 同步。",
-        "migrationFailed": "工作區遷移失敗",
-        "migrationFailedDescription": "無法複製並切換工作區，請檢查資料夾權限或目標檔案衝突。",
-        "folder": "iCloud 資料夾",
-        "folderDescription": "可以選擇 macOS 已在使用的 iCloud 資料夾。",
-        "empty": "尚未選擇資料夾",
-        "choose": "選擇資料夾",
-        "change": "更換",
-        "selecting": "正在選擇",
-        "accessFailedTitle": "無法存取資料夾",
-        "accessFailedDescription": "請選擇可讀寫的 iCloud 資料夾後重試。"
       }
     },
     "imageHosting": {

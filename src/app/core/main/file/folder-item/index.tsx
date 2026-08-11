@@ -861,31 +861,10 @@ export function FolderItem({
   }, [path, handleStartRename, handleDeleteFolder, handlePasteInFolder])
 
   // 获取当前平台（用于显示快捷键）
-  const [currentPlatform, setCurrentPlatform] = useState<'macos' | 'windows' | 'linux' | 'unknown'>('unknown')
-
-  useEffect(() => {
-    const detectPlatform = async () => {
-      try {
-        const { platform } = await import('@tauri-apps/plugin-os')
-        const p = platform()
-        if (p === 'macos') {
-          setCurrentPlatform('macos')
-        } else if (p === 'windows') {
-          setCurrentPlatform('windows')
-        } else if (p === 'linux') {
-          setCurrentPlatform('linux')
-        }
-      } catch {
-        setCurrentPlatform('unknown')
-      }
-    }
-    detectPlatform()
-  }, [])
-
   // 快捷键显示文本
-  const modKey = currentPlatform === 'macos' ? '⌘' : 'Ctrl'
-  const deleteKey = currentPlatform === 'macos' ? '⌫' : 'Del'
-  const renameKey = currentPlatform === 'macos' ? '↩' : 'F2'
+  const modKey = 'Ctrl'
+  const deleteKey = 'Del'
+  const renameKey = 'F2'
   const isExpanded = expanded ?? collapsibleList.includes(path)
 
   return (

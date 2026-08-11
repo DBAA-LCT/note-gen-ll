@@ -1,4 +1,4 @@
-type Platform = 'macos' | 'windows' | 'linux' | 'unknown'
+type Platform = 'windows' | 'linux' | 'unknown'
 
 interface ToolbarShortcutEventLike {
   key: string
@@ -18,9 +18,7 @@ export function resolveToolbarShortcutIndex(
     return null
   }
 
-  const usesPlatformModifier = platform === 'macos'
-    ? Boolean(event.metaKey) && !event.ctrlKey && !event.altKey
-    : Boolean(event.altKey) && !event.ctrlKey && !event.metaKey
+  const usesPlatformModifier = Boolean(event.altKey) && !event.ctrlKey && !event.metaKey
 
   if (!usesPlatformModifier || event.shiftKey) {
     return null

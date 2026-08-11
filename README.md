@@ -158,10 +158,8 @@ You can also keep local backups without enabling cloud sync.
 | Platform | Status | Download |
 | --- | --- | --- |
 | Windows | Beta | [Download for Windows](https://notegen.top/en/download) |
-| macOS | Beta | [Download for Apple Silicon or Intel](https://notegen.top/en/download) |
 | Linux | Beta | [AppImage, DEB, or RPM](https://notegen.top/en/download) |
 | Android | Alpha · ARM64 | [Download APK](https://notegen.top/en/download) |
-| iOS | Alpha | [Join TestFlight](https://testflight.apple.com/join/8KjFRTCq) |
 
 GitHub Releases are also available as a fallback mirror:
 

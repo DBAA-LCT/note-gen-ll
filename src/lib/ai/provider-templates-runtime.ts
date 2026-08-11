@@ -5,8 +5,8 @@ import { fetchConfigCenterConfig } from '@/lib/config-center/client'
 import type { ConfigCenterConfigKey } from '@/lib/config-center/types'
 import {
   excludeBuiltInOpenAIProviders,
-  isMainlandChinaAppStore,
-} from '@/lib/ai/storefront-policy'
+  isMainlandChinaRegion,
+} from '@/lib/ai/provider-region-policy'
 
 export const PROVIDER_TEMPLATE_CACHE_KEY = 'providerTemplatesCache'
 
@@ -148,7 +148,7 @@ export async function getCachedProviderTemplates(): Promise<AiConfig[]> {
 }
 
 async function getProviderTemplateConfigKey(): Promise<ConfigCenterConfigKey> {
-  return await isMainlandChinaAppStore()
+  return await isMainlandChinaRegion()
     ? 'providerTemplatesChina'
     : 'providerTemplates'
 }

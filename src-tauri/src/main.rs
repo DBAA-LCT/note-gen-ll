@@ -24,7 +24,6 @@ mod remote_skills;
 mod screenshot;
 mod skill_runtime;
 mod skills;
-mod storefront;
 mod system_trash;
 mod tray;
 mod web_clipper;
@@ -37,9 +36,8 @@ use ai::{
 use backup::{export_app_data, import_app_data, import_app_data_from_file};
 use backup_manager::{create_managed_backup, list_managed_backups, restore_managed_backup};
 use cloud_folder_sync::{
-    delete_cloud_folder_sync_file, get_icloud_sync_folder, list_cloud_folder_sync_files,
-    migrate_workspace_to_cloud_folder, read_cloud_folder_sync_file, test_cloud_folder_sync,
-    write_cloud_folder_sync_file,
+    delete_cloud_folder_sync_file, list_cloud_folder_sync_files, migrate_workspace_to_cloud_folder,
+    read_cloud_folder_sync_file, test_cloud_folder_sync, write_cloud_folder_sync_file,
 };
 use device::get_device_id;
 use fonts::list_system_fonts;
@@ -118,7 +116,6 @@ fn main() {
             create_managed_backup,
             list_managed_backups,
             restore_managed_backup,
-            get_icloud_sync_folder,
             test_cloud_folder_sync,
             write_cloud_folder_sync_file,
             read_cloud_folder_sync_file,
@@ -158,7 +155,6 @@ fn main() {
             update_tray_record_toolbar_config,
             list_ocr_providers,
             run_ocr_provider,
-            storefront::get_app_storefront_country_code,
             printing::print_webview,
             file_open::drain_pending_open_files,
             system_trash::move_paths_to_trash,
@@ -176,14 +172,7 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         .run(|app_handle, event| match event {
-            #[cfg(target_os = "macos")]
-            tauri::RunEvent::Reopen {
-                has_visible_windows,
-                ..
-            } => {
-                window::handle_macos_reopen(&app_handle, has_visible_windows);
-            }
-            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+            #[cfg(target_os = "android")]
             tauri::RunEvent::Opened { urls } => {
                 file_open::handle_opened_urls(&app_handle, urls);
             }

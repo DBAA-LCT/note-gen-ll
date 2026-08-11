@@ -19,7 +19,7 @@ import ModelCard from "./model-card";
 import CreateConfig from "./create";
 import { getCachedProviderTemplates, getProviderTemplateMatch, loadProviderTemplates } from "@/lib/ai/provider-templates-runtime";
 import { isValidProxyURL } from "@/lib/ai/tauri-client";
-import { excludeBuiltInOpenAIProviders, isMainlandChinaAppStore } from "@/lib/ai/storefront-policy";
+import { excludeBuiltInOpenAIProviders, isMainlandChinaRegion } from "@/lib/ai/provider-region-policy";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -319,7 +319,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
   useEffect(() => {
     async function init() {
       const store = await Store.load('store.json')
-      const shouldHideBuiltInOpenAI = await isMainlandChinaAppStore()
+      const shouldHideBuiltInOpenAI = await isMainlandChinaRegion()
       setHideBuiltInOpenAI(shouldHideBuiltInOpenAI)
       let templates: AiConfig[] = []
       try {

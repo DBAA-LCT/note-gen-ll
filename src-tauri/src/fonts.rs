@@ -14,7 +14,7 @@ pub fn list_system_fonts() -> Result<Vec<SystemFont>, String> {
     })
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "android"))]
 fn collect_system_font_families() -> Result<Vec<String>, String> {
     use font_kit::source::SystemSource;
     use std::collections::HashSet;
@@ -35,7 +35,7 @@ fn collect_system_font_families() -> Result<Vec<String>, String> {
     Ok(families)
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(target_os = "android")]
 fn collect_system_font_families() -> Result<Vec<String>, String> {
     Ok(Vec::new())
 }

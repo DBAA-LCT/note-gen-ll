@@ -110,20 +110,19 @@ fn read_mcp_message<R: BufRead>(reader: &mut R) -> Result<String, String> {
 fn find_npx_path() -> Option<String> {
     // 常见的 npx 安装路径
     let common_paths = vec![
-        // macOS/Linux - Volta
+        // Linux - Volta
         format!(
             "{}/.volta/bin/npx",
             std::env::var("HOME").unwrap_or_default()
         ),
-        // macOS/Linux - Homebrew
+        // Linux - system install
         "/usr/local/bin/npx".to_string(),
-        "/opt/homebrew/bin/npx".to_string(),
-        // macOS/Linux - nvm
+        // Linux - nvm
         format!(
             "{}/.nvm/versions/node/*/bin/npx",
             std::env::var("HOME").unwrap_or_default()
         ),
-        // macOS/Linux - 用户本地
+        // Linux - 用户本地
         format!(
             "{}/.local/bin/npx",
             std::env::var("HOME").unwrap_or_default()

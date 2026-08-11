@@ -1035,9 +1035,7 @@
       "mobileUpdateTitle": "新しいバージョンがあります",
       "mobileUpdateDescription": "現在の v{currentVersion} から v{latestVersion} に更新できます。",
       "androidUpdateHint": "Android はまだアプリ内インストールに対応していません。公式サイトから最新版をダウンロードしてください。",
-      "iosUpdateHint": "iOS の更新は現在 TestFlight で配布しています。",
       "openDownloadPage": "ダウンロードページを開く",
-      "openTestFlight": "TestFlight を開く",
       "viewUpdateDetails": "更新内容",
       "updateDetailsTitle": "v{version} の更新内容",
       "later": "後で",
@@ -1331,7 +1329,7 @@
       },
       "cloudFolder": {
         "title": "クラウドドライブ同期",
-        "description": "OneDrive、iCloud Drive などのクラウドフォルダーでデータを同期します。",
+        "description": "OneDrive でデータを同期します。",
         "androidDescription": "システムのファイル選択画面からクラウドフォルダーを選択します。",
         "dialogTitle": "クラウド内の NoteGen フォルダーを選択",
         "workspaceWarningTitle": "ワークスペースは未移行です",
@@ -1420,28 +1418,6 @@
         "statusDisconnectingTitle": "OneDrive を切断中",
         "statusDisconnectingDescription": "このデバイスに保存された Microsoft の認証情報を安全に削除しています。",
         "statusErrorTitle": "OneDrive の操作に失敗しました"
-      },
-      "iCloud": {
-        "title": "iCloud",
-        "description": "iCloud Drive 内のフォルダーを選択してデータを同期します。",
-        "workspaceWarningTitle": "ワークスペースは未移行です",
-        "workspaceWarningDescription": "移行すると、Markdown ノートを iCloud で同期できます。",
-        "migrateWorkspace": "ノートをコピーして切り替える",
-        "migrating": "移行中",
-        "migrationConfirmTitle": "ワークスペースを iCloud へ移行",
-        "migrationConfirm": "現在のワークスペース全体を選択した iCloud フォルダーへコピーし、その後新しいワークスペースへ切り替えます。元のワークスペースは安全なコピーとして残りますが、iCloud がコピー後の内容を読み取れる場合があります。続行しますか？",
-        "migrationSuccess": "ワークスペースの移行が完了しました",
-        "migrationSuccessDescription": "{count} 個のファイルをコピーしました。今後の Markdown の変更は iCloud で同期されます。",
-        "migrationFailed": "ワークスペースの移行に失敗しました",
-        "migrationFailedDescription": "コピーと切り替えができませんでした。フォルダー権限またはファイル競合を確認してください。",
-        "folder": "iCloud フォルダー",
-        "folderDescription": "macOS ですでに使用している iCloud フォルダーも選択できます。",
-        "empty": "フォルダー未選択",
-        "choose": "フォルダーを選択",
-        "change": "変更",
-        "selecting": "選択中",
-        "accessFailedTitle": "フォルダーにアクセスできません",
-        "accessFailedDescription": "読み書き可能な iCloud フォルダーを選択して再試行してください。"
       }
     },
     "imageHosting": {

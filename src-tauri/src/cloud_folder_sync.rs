@@ -36,42 +36,6 @@ pub struct WorkspaceMigrationResult {
     skipped_files: u64,
 }
 
-#[cfg(target_os = "ios")]
-fn resolve_icloud_sync_folder() -> Result<String, String> {
-    use objc2_foundation::NSFileManager;
-
-    // Apple recommends resolving an ubiquity container away from the main thread.
-    // The command below runs this function through Tauri's blocking task pool.
-    let manager = unsafe { NSFileManager::defaultManager() };
-    if unsafe { manager.ubiquityIdentityToken() }.is_none() {
-        return Err("iCloud Drive is unavailable. Sign in to iCloud and enable iCloud Drive.".into());
-    }
-
-    let container = unsafe { manager.URLForUbiquityContainerIdentifier(None) }
-        .ok_or_else(|| "NoteGen could not access its iCloud container.".to_string())?;
-    let container_path = unsafe { container.path() }
-        .ok_or_else(|| "NoteGen could not resolve its iCloud container path.".to_string())?
-        .to_string();
-    let documents = PathBuf::from(container_path).join("Documents");
-    fs::create_dir_all(&documents)
-        .map_err(|error| format!("Failed to create the iCloud Documents directory: {error}"))?;
-    ensure_real_directory(&documents)?;
-    Ok(documents.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-pub async fn get_icloud_sync_folder() -> Result<String, String> {
-    #[cfg(target_os = "ios")]
-    {
-        return tauri::async_runtime::spawn_blocking(resolve_icloud_sync_folder)
-            .await
-            .map_err(|error| format!("Failed to resolve the iCloud container: {error}"))?;
-    }
-
-    #[cfg(not(target_os = "ios"))]
-    Err("Native iCloud sync is only available on iOS.".to_string())
-}
-
 fn modified_millis(metadata: &fs::Metadata) -> u64 {
     metadata
         .modified()

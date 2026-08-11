@@ -17,7 +17,6 @@ import { WorkspaceRepoMapping } from '@/app/core/setting/sync/components/workspa
 import { DataSyncOverview } from '@/app/core/setting/sync/components/data-sync-overview'
 import { MobileSelectDrawer } from '@/app/mobile/components/mobile-select-drawer'
 import { OneDriveCloudFolderSync } from '@/app/mobile/setting/pages/sync/android-cloud-folder-sync'
-import { ICloudFolderSync } from '@/app/mobile/setting/pages/sync/ios-cloud-folder-sync'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
 import { RepoNames, SyncStateEnum } from '@/lib/sync/github.types'
@@ -26,10 +25,10 @@ import useSettingStore from '@/stores/setting'
 import useSyncStore from '@/stores/sync'
 import { SYNC_PLATFORMS, SYNC_PLATFORM_INFO, SyncPlatform, type CloudFolderConfig } from '@/types/sync'
 
-type MobileSyncPlatform = SyncPlatform | 'iCloud' | 'oneDrive'
+type MobileSyncPlatform = SyncPlatform | 'oneDrive'
 
 function toSyncPlatform(platformName: MobileSyncPlatform): SyncPlatform {
-  return platformName === 'iCloud' || platformName === 'oneDrive' ? 'cloudFolder' : platformName
+  return platformName === 'oneDrive' ? 'cloudFolder' : platformName
 }
 
 function isRepoSyncPlatform(platformName: MobileSyncPlatform): platformName is SyncRepoPlatform {
@@ -42,14 +41,11 @@ function isRepoSyncPlatform(platformName: MobileSyncPlatform): platformName is S
 export default function SyncPage() {
   const t = useTranslations()
   const currentPlatform = platform()
-  const isIOS = currentPlatform === 'ios'
   const isAndroid = currentPlatform === 'android'
   const standardPlatforms = SYNC_PLATFORMS.filter(platformName => platformName !== 'cloudFolder')
-  const availablePlatforms: MobileSyncPlatform[] = isIOS
-    ? [...standardPlatforms, 'iCloud', 'oneDrive']
-    : isAndroid
-      ? [...standardPlatforms, 'oneDrive']
-      : standardPlatforms
+  const availablePlatforms: MobileSyncPlatform[] = isAndroid
+    ? [...standardPlatforms, 'oneDrive']
+    : standardPlatforms
   const {
     primaryBackupMethod,
     setPrimaryBackupMethod,
@@ -141,11 +137,9 @@ export default function SyncPage() {
         if (savedMethod) {
           const nextTab: MobileSyncPlatform = savedMethod !== 'cloudFolder'
             ? savedMethod
-            : isIOS
-              ? cloudFolderConfig?.provider === 'oneDrive' ? 'oneDrive' : 'iCloud'
-              : isAndroid
-                ? 'oneDrive'
-                : 'github'
+            : isAndroid
+              ? 'oneDrive'
+              : 'github'
           await setPrimaryBackupMethod(toSyncPlatform(nextTab))
           setTab(nextTab)
         }
@@ -157,7 +151,7 @@ export default function SyncPage() {
     }
 
     void loadPrimaryBackupMethod()
-  }, [isAndroid, isIOS, setPrimaryBackupMethod])
+  }, [isAndroid, setPrimaryBackupMethod])
 
   const selectedSyncPlatform = toSyncPlatform(tab)
   const currentSyncState = getCurrentSyncState(selectedSyncPlatform)
@@ -181,8 +175,8 @@ export default function SyncPage() {
         return webdavConnected ? SyncStateEnum.success : SyncStateEnum.fail
       case 'cloudFolder':
         return cloudFolderConnected
-          && ((tab === 'oneDrive' && activeCloudFolderProvider === 'oneDrive')
-            || (tab === 'iCloud' && activeCloudFolderProvider === 'folder'))
+          && tab === 'oneDrive'
+          && activeCloudFolderProvider === 'oneDrive'
           ? SyncStateEnum.success
           : SyncStateEnum.fail
       default:
@@ -191,7 +185,6 @@ export default function SyncPage() {
   }
 
   function getProviderLabel(platform: MobileSyncPlatform) {
-    if (platform === 'iCloud') return t('settings.sync.iCloud.title')
     if (platform === 'oneDrive' || platform === 'cloudFolder') return t('settings.sync.oneDrive.title')
     return SYNC_PLATFORM_INFO[platform].name
   }
@@ -227,13 +220,9 @@ export default function SyncPage() {
         return <S3Sync />
       case 'webdav':
         return <WebDAVSync />
-      case 'iCloud':
-        return isIOS
-          ? <ICloudFolderSync onActiveProviderChange={setActiveCloudFolderProvider} />
-          : <GithubSync />
       case 'oneDrive':
       case 'cloudFolder':
-        return isIOS || isAndroid
+        return isAndroid
           ? <OneDriveCloudFolderSync onActiveProviderChange={setActiveCloudFolderProvider} />
           : <GithubSync />
       default:

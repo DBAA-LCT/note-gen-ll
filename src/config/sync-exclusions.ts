@@ -14,7 +14,7 @@ export const DEFAULT_SYNC_EXCLUDE_PATTERNS: SyncExcludePattern[] = [
   { pattern: '*.bak', description: '备份文件' },
   { pattern: '*.swp', description: '编辑器临时文件' },
   { pattern: 'Thumbs.db', description: 'Windows 缩略图' },
-  { pattern: '.DS_Store', description: 'macOS 系统文件' },
+  { pattern: '.DS_Store', description: '系统元数据文件' },
   { pattern: '*.lock', description: '锁定文件' },
 ]
 
@@ -120,7 +120,6 @@ export const ALWAYS_SYNC_EXCLUDED_FIELDS: string[] = [
   'managedBackupLastError',
   'cloudFolderSyncConfig',
   'oneDriveAuthTokens',
-  'iosWorkspaceFolderAccess',
   // 工作区和资源目录是设备本地状态，任何隐私设置下都不能跨设备覆盖。
   'workspacePath',
   'workspaceHistory',

@@ -12,7 +12,7 @@ import { getNormalizedImageHosting } from '@/lib/image-hosting-config'
 import { normalizeSpeechMode } from '@/lib/speech/preferences'
 import type { SpeechMode } from '@/lib/speech/types'
 import { applyNoteGenDefaultConfig, loadNoteGenDefaultConfig } from '@/lib/ai/notegen-default-models-runtime'
-import { excludeBuiltInOpenAIProviders, isMainlandChinaAppStore } from '@/lib/ai/storefront-policy'
+import { excludeBuiltInOpenAIProviders, isMainlandChinaRegion } from '@/lib/ai/provider-region-policy'
 import { enqueueAutoDataSync, isAutoDataSyncApplyingRemote } from '@/lib/sync/auto-data-sync-queue'
 import { shouldExcludeFromSync } from '@/config/sync-exclusions'
 import {
@@ -697,7 +697,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
 
     // 初始化默认的NoteGen模型配置
     const storedAiModelList = (await store.get('aiModelList') as AiConfig[]) || []
-    const existingAiModelList = await isMainlandChinaAppStore()
+    const existingAiModelList = await isMainlandChinaRegion()
       ? excludeBuiltInOpenAIProviders(storedAiModelList)
       : storedAiModelList
     const hasNoteGenModels = existingAiModelList.some(config => 

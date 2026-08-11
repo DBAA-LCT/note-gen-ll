@@ -15,7 +15,7 @@ export const SYNC_PLATFORM_INFO: Record<SyncPlatform, SyncPlatformType> = {
   gitea: { platform: 'gitea', name: 'Gitea', icon: 'gitea' },
   s3: { platform: 's3', name: 'S3', icon: 's3' },
   webdav: { platform: 'webdav', name: 'WebDAV', icon: 'webdav' },
-  cloudFolder: { platform: 'cloudFolder', name: 'OneDrive / iCloud', icon: 'cloudFolder' },
+  cloudFolder: { platform: 'cloudFolder', name: 'OneDrive', icon: 'cloudFolder' },
 }
 
 export interface S3Config {
@@ -38,7 +38,6 @@ export interface WebDAVConfig {
 export interface CloudFolderConfig {
   path: string
   provider?: 'folder' | 'oneDrive'
-  bookmarkBase64?: string
   displayName?: string
   oneDriveClientId?: string
   oneDriveRootId?: string

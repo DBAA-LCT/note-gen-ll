@@ -608,25 +608,10 @@ async function printExportDocument(source: MarkdownExportSource, options?: Markd
   const fileName = getMarkdownExportBaseName(source.baseName)
 
   if (checkIsTauri()) {
-    const { platform } = await import('@tauri-apps/plugin-os')
-    let outputPath: string | undefined
-
-    if (platform() === 'macos') {
-      const selectedPath = await save({
-        title: '导出 PDF',
-        defaultPath: `${fileName}.pdf`,
-        filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
-      })
-
-      if (!selectedPath) return false
-      outputPath = ensureExtension(selectedPath, 'pdf')
-    }
-
     await notifyPdfRenderStart(options)
     return await openTauriPrintWindow(
       await buildMarkdownExportDocument(source),
       fileName,
-      outputPath,
     )
   }
 

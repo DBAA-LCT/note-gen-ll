@@ -29,7 +29,7 @@ pub fn handle_single_instance_open_files(app: &AppHandle, argv: Vec<String>) {
     emit_open_files(app, paths);
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+#[cfg(target_os = "android")]
 pub fn handle_opened_urls(app: &AppHandle, urls: Vec<url::Url>) {
     let paths = urls
         .into_iter()

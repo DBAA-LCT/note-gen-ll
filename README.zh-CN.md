@@ -162,10 +162,8 @@ AI 生成的画布不会变成一张无法修改的图片，其中的节点、�
 | 平台 | 当前状态 | 下载 |
 | --- | --- | --- |
 | Windows | Beta | [下载 Windows 版](https://notegen.top/cn/download) |
-| macOS | Beta | [下载 Apple Silicon 或 Intel 版](https://notegen.top/cn/download) |
 | Linux | Beta | [下载 AppImage、DEB 或 RPM](https://notegen.top/cn/download) |
 | Android | Alpha · ARM64 | [下载 APK](https://notegen.top/cn/download) |
-| iOS | Alpha | [加入 TestFlight](https://testflight.apple.com/join/8KjFRTCq) |
 
 如果官网下载速度不理想，也可以通过 GitHub Releases 获取安装包：
 

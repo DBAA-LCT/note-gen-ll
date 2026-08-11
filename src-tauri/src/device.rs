@@ -1,7 +1,7 @@
 use tauri::command;
 
 /// 获取设备唯一标识 - 桌面端实现
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "android"))]
 #[command]
 pub fn get_device_id() -> Result<String, String> {
     machine_uid::get().map_err(|e| format!("Failed to get device ID: {}", e))
@@ -14,15 +14,8 @@ pub fn get_device_id() -> Result<String, String> {
     get_or_create_device_id()
 }
 
-/// 获取设备唯一标识 - iOS 实现
-#[cfg(target_os = "ios")]
-#[command]
-pub fn get_device_id() -> Result<String, String> {
-    get_or_create_device_id()
-}
-
 /// 移动端通用的设备 ID 获取逻辑
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(target_os = "android")]
 fn get_or_create_device_id() -> Result<String, String> {
     // 使用更简单的方法：直接使用临时目录
     // 这样可以确保跨平台兼容性和权限访问

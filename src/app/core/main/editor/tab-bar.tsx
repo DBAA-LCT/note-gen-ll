@@ -276,13 +276,11 @@ export function TabBar({
   }, [])
 
   // Get current platform
-  const [currentPlatform, setCurrentPlatform] = useState<'macos' | 'windows' | 'linux' | 'unknown'>('unknown')
+  const [currentPlatform, setCurrentPlatform] = useState<'windows' | 'linux' | 'unknown'>('unknown')
   useEffect(() => {
     try {
       const p = platform()
-      if (p === 'macos') {
-        setCurrentPlatform('macos')
-      } else if (p === 'windows') {
+      if (p === 'windows') {
         setCurrentPlatform('windows')
       } else if (p === 'linux') {
         setCurrentPlatform('linux')
@@ -295,8 +293,7 @@ export function TabBar({
   // Keyboard shortcut for closing tab (Cmd/Ctrl + W)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isMac = currentPlatform === 'macos'
-      const modKey = isMac ? e.metaKey : e.ctrlKey
+      const modKey = e.ctrlKey
 
       // Cmd/Ctrl + W: Close current tab
       if (modKey && e.key === 'w' && activeTabId) {
@@ -312,7 +309,7 @@ export function TabBar({
   const t = useTranslations('tabContext')
 
   // Get modifier key display text
-  const modKey = currentPlatform === 'macos' ? '⌘' : 'Ctrl'
+  const modKey = 'Ctrl'
 
   // Dnd sensors
   const sensors = useSensors(

@@ -38,10 +38,8 @@ body:
       multiple: true
       options:
         - Windows
-        - macOS
         - Linux
         - Android
-        - iOS
     validations:
       required: true
 

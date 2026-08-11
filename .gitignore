@@ -100,3 +100,10 @@ docs/.vitepress/cache
 
 # Local Remotion video workspace
 /remotion/*
+.next-stale-webpack/
+.codex-runtime/
+.codex-audit/
+.tauri-dev.stdout.log
+.next-dev.stderr.log
+.next-dev.stdout.log
+.tauri-dev.stderr.log

@@ -109,7 +109,7 @@ jobs:
           
           # Set custom Android icon
           echo "🎨 Setting custom Android icon..."
-          ICON_SOURCE="public/app-ios-icon.png"
+          ICON_SOURCE="public/app-icon.png"
           MIPMAP_DIRS=(
             "src-tauri/gen/android/app/src/main/res/mipmap-mdpi"
             "src-tauri/gen/android/app/src/main/res/mipmap-hdpi"
@@ -217,14 +217,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin'
-            name: 'macos-arm64'
-            bundlePath: 'src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/NoteGen_*.dmg'
-          - platform: 'macos-latest'
-            args: '--target x86_64-apple-darwin'
-            name: 'macos-x64'
-            bundlePath: 'src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/NoteGen_*.dmg'
           - platform: 'ubuntu-24.04'
             args: '--bundles deb,rpm'
             name: 'linux-deb-rpm'
@@ -256,8 +248,6 @@ jobs:
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: install dependencies (ubuntu only)
         if: startsWith(matrix.platform, 'ubuntu-')
@@ -271,52 +261,12 @@ jobs:
       - name: install frontend dependencies
         run: pnpm install
 
-      - name: Import Apple Certificate
-        id: import_apple_certificate
-        if: matrix.platform == 'macos-latest'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          EXPECTED_APPLE_SIGNING_IDENTITY_SHA1: A32FAF7F3494DC03D9BAAC6CE857740DEB69123E
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD || 'temporary_keychain_password' }}
-        run: |
-          # Create variables
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-
-          # Import certificate from secrets
-          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $CERTIFICATE_PATH
-
-          # Create temporary keychain
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # Import certificate to keychain
-          security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -f pkcs12 -k $KEYCHAIN_PATH
-          security list-keychains -d user -s $KEYCHAIN_PATH
-          security default-keychain -s $KEYCHAIN_PATH
-
-          # Enable codesigning from a non user interactive shell
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          # Resolve the imported identity from the temporary keychain so the
-          # workflow does not depend on a manually synchronized identity string.
-          APPLE_SIGNING_IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | awk -v expected="$EXPECTED_APPLE_SIGNING_IDENTITY_SHA1" '$2 == expected {print $2; exit}')
-          if [ -z "$APPLE_SIGNING_IDENTITY" ]; then
-            echo "Expected Apple codesigning identity was not found in imported certificate"
-            security find-identity -v -p codesigning $KEYCHAIN_PATH
-            exit 1
-          fi
-          echo "apple_signing_identity=$APPLE_SIGNING_IDENTITY" >> $GITHUB_OUTPUT
-
       - uses: tauri-apps/tauri-action@v0.5.23
         id: tauri-action
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ steps.import_apple_certificate.outputs.apple_signing_identity || secrets.APPLE_SIGNING_IDENTITY }}
         with:
           tagName: note-gen-v__VERSION__
           releaseName: 'NoteGen v__VERSION__'
@@ -349,12 +299,6 @@ jobs:
         run: |
           # 注意：这里引用的是 save_tag 步骤的 tag_name 输出
           echo "appVersion=${{ steps.save_tag.outputs.appVersion }}" >> $GITHUB_OUTPUT
-
-      - name: Cleanup keychain
-        if: matrix.platform == 'macos-latest' && always()
-        run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          security delete-keychain $KEYCHAIN_PATH || true
 
   mirror-release-to-aliyun:
     needs:

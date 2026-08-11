@@ -121,15 +121,6 @@ export default function RootLayout({
           import('@/lib/mcp/init'),
           import('@/lib/sync/sync-push-queue'),
         ])
-        const { platform } = await import('@tauri-apps/plugin-os')
-        if (platform() === 'ios') {
-          try {
-            const { restoreSavedIOSFolderAccess } = await import('@/lib/sync/cloud-folder')
-            await restoreSavedIOSFolderAccess()
-          } catch (error) {
-            console.error('Failed to restore the iOS cloud folder authorization:', error)
-          }
-        }
         await initSettingData()
         getSyncPushQueue()
         const useImageStore = (await import('@/stores/imageHosting')).default

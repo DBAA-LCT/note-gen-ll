@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
 import { platform } from '@tauri-apps/plugin-os'
-import { Store } from '@tauri-apps/plugin-store'
 import { Buffer } from 'buffer'
 import {
   isOneDriveConfig,
@@ -48,18 +47,11 @@ export interface WorkspaceMigrationResult {
   skippedFiles: number
 }
 
-export interface IOSFolderAccess {
-  path: string
-  bookmarkBase64: string
-  displayName: string
-}
-
 export interface AndroidFolderAccess {
   uri: string
   displayName: string
 }
 
-const IOS_WORKSPACE_FOLDER_ACCESS_KEY = 'iosWorkspaceFolderAccess'
 const SYNC_DIRECTORY = '.notegen/sync-v1'
 
 function oneDriveSyncKey(key: string): string {
@@ -77,66 +69,12 @@ export function supportsCloudFolderWorkspace(config: CloudFolderConfig): boolean
   return isOneDriveConfig(config) || (platform() === 'android' && config.path.startsWith('content://'))
 }
 
-export async function getICloudSyncFolder(): Promise<string> {
-  return invoke<string>('get_icloud_sync_folder')
-}
-
-export async function pickIOSSyncFolder(): Promise<IOSFolderAccess | null> {
-  return invoke<IOSFolderAccess | null>('pick_ios_sync_folder')
-}
-
-export async function restoreIOSSyncFolder(bookmarkBase64: string): Promise<IOSFolderAccess> {
-  return invoke<IOSFolderAccess>('restore_ios_sync_folder', { bookmarkBase64 })
-}
-
-export async function releaseIOSSyncFolder(bookmarkBase64: string): Promise<void> {
-  await invoke('release_ios_sync_folder', { bookmarkBase64 })
-}
-
 export async function pickAndroidSyncFolder(): Promise<AndroidFolderAccess | null> {
   return invoke<AndroidFolderAccess | null>('pick_android_sync_folder')
 }
 
 export async function releaseAndroidSyncFolder(rootUri: string): Promise<void> {
   await invoke('release_android_sync_folder', { rootUri })
-}
-
-export async function getIOSWorkspaceFolderAccess(): Promise<IOSFolderAccess | null> {
-  const store = await Store.load('store.json')
-  return await store.get<IOSFolderAccess>(IOS_WORKSPACE_FOLDER_ACCESS_KEY) ?? null
-}
-
-export async function setIOSWorkspaceFolderAccess(access: IOSFolderAccess | null): Promise<void> {
-  const store = await Store.load('store.json')
-  await store.set(IOS_WORKSPACE_FOLDER_ACCESS_KEY, access)
-  await store.save()
-}
-
-export async function restoreSavedIOSFolderAccess(): Promise<void> {
-  const store = await Store.load('store.json')
-  const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-  const workspaceAccess = await store.get<IOSFolderAccess>(IOS_WORKSPACE_FOLDER_ACCESS_KEY)
-  let changed = false
-
-  if (workspaceAccess?.bookmarkBase64) {
-    const restoredWorkspace = await restoreIOSSyncFolder(workspaceAccess.bookmarkBase64)
-    await store.set(IOS_WORKSPACE_FOLDER_ACCESS_KEY, restoredWorkspace)
-    await store.set('workspacePath', restoredWorkspace.path)
-    changed = true
-  }
-
-  if (config?.bookmarkBase64) {
-    const restoredConfig = await restoreIOSSyncFolder(config.bookmarkBase64)
-    await store.set('cloudFolderSyncConfig', {
-      ...config,
-      path: restoredConfig.path,
-      bookmarkBase64: restoredConfig.bookmarkBase64,
-      displayName: restoredConfig.displayName,
-    } satisfies CloudFolderConfig)
-    changed = true
-  }
-
-  if (changed) await store.save()
 }
 
 function requirePath(config: CloudFolderConfig): string {
@@ -146,8 +84,7 @@ function requirePath(config: CloudFolderConfig): string {
 }
 
 async function authorizedPath(config: CloudFolderConfig): Promise<string> {
-  if (!config.bookmarkBase64 || platform() !== 'ios') return requirePath(config)
-  return (await restoreIOSSyncFolder(config.bookmarkBase64)).path
+  return requirePath(config)
 }
 
 function encodeContent(content: string | Uint8Array): string {

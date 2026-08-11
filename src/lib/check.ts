@@ -23,7 +23,7 @@ export function isMobileDevice() {
 
   try {
     const platformName = platform();
-    cachedResult = platformName === 'android' || platformName === 'ios';
+    cachedResult = platformName === 'android';
     return cachedResult;
   } catch (error) {
     console.error('Error detecting platform:', error);

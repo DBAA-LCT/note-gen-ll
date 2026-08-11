@@ -12,7 +12,7 @@ import { flattenFileTree, getFileSelectionEntries, toClipboardItems } from "./fi
 import { useShallow } from 'zustand/react/shallow'
 import { useWorkspaceFileWatcher } from './use-workspace-file-watcher'
 
-type Platform = 'macos' | 'windows' | 'linux' | 'unknown'
+type Platform = 'windows' | 'linux' | 'unknown'
 
 /**
  * 统一的文件管理器快捷键处理
@@ -33,9 +33,7 @@ function useFileManagerShortcuts() {
   useEffect(() => {
     try {
       const p = platform()
-      if (p === 'macos') {
-        setCurrentPlatform('macos')
-      } else if (p === 'windows') {
+      if (p === 'windows') {
         setCurrentPlatform('windows')
       } else if (p === 'linux') {
         setCurrentPlatform('linux')
@@ -47,11 +45,7 @@ function useFileManagerShortcuts() {
 
   // 检查是否按下了正确的修饰键
   const isModKey = useCallback((e: KeyboardEvent): boolean => {
-    if (currentPlatform === 'macos') {
-      return e.metaKey && !e.ctrlKey
-    } else {
-      return e.ctrlKey && !e.metaKey
-    }
+    return e.ctrlKey && !e.metaKey
   }, [currentPlatform])
 
   // 获取当前激活的 item（文件或文件夹）
@@ -153,10 +147,8 @@ function useFileManagerShortcuts() {
       return
     }
 
-    // 删除: macOS 使用 Backspace，Windows/Linux 使用 Delete
-    const isDeleteKey = currentPlatform === 'macos'
-      ? e.key === 'Backspace'
-      : e.key === 'Delete'
+    // 删除: Delete
+    const isDeleteKey = e.key === 'Delete'
 
     if (isDeleteKey) {
       e.preventDefault()
@@ -170,10 +162,8 @@ function useFileManagerShortcuts() {
       return
     }
 
-    // 重命名: macOS 使用 Enter 键，Windows/Linux 使用 F2 键
-    const isRenameKey = currentPlatform === 'macos'
-      ? e.key === 'Enter'
-      : e.key === 'F2'
+    // 重命名: F2
+    const isRenameKey = e.key === 'F2'
 
     if (isRenameKey) {
       e.preventDefault()

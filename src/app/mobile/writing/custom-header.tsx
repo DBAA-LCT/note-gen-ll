@@ -51,7 +51,7 @@ function shouldLoadRemoteOnTreeRefresh(options?: { isCreateFlow?: boolean }) {
 }
 
 async function isMobileOneDriveSyncEnabled() {
-  if (getRuntimePlatform() !== 'android' && getRuntimePlatform() !== 'ios') return false
+  if (getRuntimePlatform() !== 'android') return false
   const store = await Store.load('store.json')
   if (await store.get<string>('primaryBackupMethod') !== 'cloudFolder') return false
   const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')

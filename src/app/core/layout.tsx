@@ -398,7 +398,7 @@ export default function RootLayout({
   // 禁用浏览器后退快捷键（Backspace）和添加搜索快捷键（Cmd/Ctrl+F）
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 搜索快捷键：Cmd+F (macOS) 或 Ctrl+F (Windows/Linux)
+      // 搜索快捷键：Ctrl+F
       if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
         // 检查焦点是否在编辑器内
         const target = e.target as HTMLElement

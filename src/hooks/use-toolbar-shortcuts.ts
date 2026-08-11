@@ -4,7 +4,7 @@ import emitter from '@/lib/emitter'
 import useSettingStore from '@/stores/setting'
 import { resolveToolbarShortcutIndex } from '@/lib/toolbar-shortcuts'
 
-type Platform = 'macos' | 'windows' | 'linux' | 'unknown'
+type Platform = 'windows' | 'linux' | 'unknown'
 
 export function useToolbarShortcuts() {
   const [currentPlatform, setCurrentPlatform] = useState<Platform>('unknown')
@@ -15,9 +15,7 @@ export function useToolbarShortcuts() {
   useEffect(() => {
     try {
       const p = platform()
-      if (p === 'macos') {
-        setCurrentPlatform('macos')
-      } else if (p === 'windows') {
+      if (p === 'windows') {
         setCurrentPlatform('windows')
       } else if (p === 'linux') {
         setCurrentPlatform('linux')
@@ -53,17 +51,13 @@ export function useToolbarShortcuts() {
         return
       }
 
-      if (currentPlatform === 'macos' && e.metaKey) {
-        setIsModifierPressed(true)
-      } else if ((currentPlatform === 'windows' || currentPlatform === 'linux') && e.altKey) {
+      if ((currentPlatform === 'windows' || currentPlatform === 'linux') && e.altKey) {
         setIsModifierPressed(true)
       }
     }
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (currentPlatform === 'macos' && !e.metaKey) {
-        setIsModifierPressed(false)
-      } else if ((currentPlatform === 'windows' || currentPlatform === 'linux') && !e.altKey) {
+      if ((currentPlatform === 'windows' || currentPlatform === 'linux') && !e.altKey) {
         setIsModifierPressed(false)
       }
     }

@@ -9,10 +9,7 @@
     "start": "next start --turbopack -p 3456",
     "lint": "next lint",
     "tauri": "tauri",
-    "docs:build": "npm --prefix ./docs run build",
-    "sync-version": "./scripts/sync-version.sh",
-    "ios-build": "npm run sync-version && pnpm tauri ios build --open",
-    "macos-app-store-build": "tauri build --config src-tauri/tauri.macos-app-store.conf.json"
+    "docs:build": "npm --prefix ./docs run build"
   },
   "dependencies": {
     "@antv/infographic": "^0.2.7",

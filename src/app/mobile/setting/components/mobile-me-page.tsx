@@ -5,7 +5,6 @@ import { RefreshCw } from 'lucide-react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { Store } from '@tauri-apps/plugin-store'
-import { platform } from '@tauri-apps/plugin-os'
 
 import { ActivityHeatmap } from '@/components/activity/activity-heatmap'
 import { Button } from '@/components/ui/button'
@@ -87,7 +86,6 @@ export function MobileMePage({
   )
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [loading, setLoading] = useState(() => !mobileActivityCache)
-  const [cloudFolderProvider, setCloudFolderProvider] = useState<CloudFolderConfig['provider']>()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const restoredScrollRef = useRef(false)
   const refreshOnMountRef = useRef(refreshOnMount)
@@ -314,7 +312,6 @@ export function MobileMePage({
           }
           case 'cloudFolder': {
             const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-            if (!cancelled) setCloudFolderProvider(config?.provider)
             if (!config?.path) return
             const connected = await testCloudFolderConnection(config).catch(() => false)
             if (!cancelled) syncState.setCloudFolderConnected(connected)
@@ -443,11 +440,9 @@ export function MobileMePage({
       return tMe('sync.localOnly')
     }
 
-    const cloudFolderName = platform() === 'ios' && cloudFolderProvider !== 'oneDrive'
-      ? tSync('iCloud.title')
-      : tSync('oneDrive.title')
+    const cloudFolderName = tSync('oneDrive.title')
     return getBackupProviderName(primaryBackupMethod, cloudFolderName)
-  }, [cloudFolderProvider, primaryBackupMethod, syncStatus, tMe, tSync])
+  }, [primaryBackupMethod, syncStatus, tMe, tSync])
 
   const profileCardName = useMemo(() => {
     if (profileProviderType === 'git') {

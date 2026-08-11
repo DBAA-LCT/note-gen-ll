@@ -10,21 +10,18 @@ mod cloud_folder_sync;
 mod database_recovery;
 mod device;
 mod fonts;
-#[cfg(target_os = "ios")]
-mod ios_ocr;
 mod mcp;
 mod mcp_runtime;
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(target_os = "android")]
 mod microsoft_oauth;
 mod mobile_system_bars;
 mod notion_import;
 mod ocr_packages;
 mod printing;
 mod remote_skills;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "android"))]
 mod skill_runtime;
 mod skills;
-mod storefront;
 mod system_trash;
 
 use ai::{
@@ -34,9 +31,8 @@ use ai::{
 use backup::{export_app_data, import_app_data, import_app_data_from_file};
 use backup_manager::{create_managed_backup, list_managed_backups, restore_managed_backup};
 use cloud_folder_sync::{
-    delete_cloud_folder_sync_file, get_icloud_sync_folder, list_cloud_folder_sync_files,
-    migrate_workspace_to_cloud_folder, read_cloud_folder_sync_file, test_cloud_folder_sync,
-    write_cloud_folder_sync_file,
+    delete_cloud_folder_sync_file, list_cloud_folder_sync_files, migrate_workspace_to_cloud_folder,
+    read_cloud_folder_sync_file, test_cloud_folder_sync, write_cloud_folder_sync_file,
 };
 use device::get_device_id;
 use fonts::list_system_fonts;
@@ -53,7 +49,7 @@ use remote_skills::{
     cancel_remote_skill_download, inspect_remote_skill, install_remote_skill, search_remote_skills,
     RemoteSkillManager,
 };
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "android"))]
 use skill_runtime::{
     cancel_skill_script, inspect_skill_python, install_skill_python_dependencies, run_skill_script,
     SkillProcessManager,
@@ -79,7 +75,7 @@ pub fn run() {
         .manage(AiRequestManager::new())
         .manage(RemoteSkillManager::default());
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(target_os = "android"))]
     let builder = builder.manage(SkillProcessManager::default());
 
     #[cfg(target_os = "android")]
@@ -88,9 +84,6 @@ pub fn run() {
     let builder = builder.plugin(android_ocr::init());
     #[cfg(target_os = "android")]
     let builder = builder.plugin(mobile_system_bars::init());
-    #[cfg(target_os = "ios")]
-    let builder = builder.plugin(ios_ocr::init());
-
     builder
         .invoke_handler(tauri::generate_handler![
             start_mcp_stdio_server,
@@ -109,7 +102,6 @@ pub fn run() {
             create_managed_backup,
             list_managed_backups,
             restore_managed_backup,
-            get_icloud_sync_folder,
             test_cloud_folder_sync,
             write_cloud_folder_sync_file,
             read_cloud_folder_sync_file,
@@ -127,13 +119,13 @@ pub fn run() {
             inspect_remote_skill,
             install_remote_skill,
             cancel_remote_skill_download,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(target_os = "android"))]
             run_skill_script,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(target_os = "android"))]
             cancel_skill_script,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(target_os = "android"))]
             inspect_skill_python,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(not(target_os = "android"))]
             install_skill_python_dependencies,
             ai_json_request,
             ai_binary_request,
@@ -142,25 +134,13 @@ pub fn run() {
             cancel_ai_request,
             list_ocr_providers,
             run_ocr_provider,
-            #[cfg(target_os = "ios")]
-            ios_ocr::pick_ios_sync_folder,
-            #[cfg(target_os = "ios")]
-            ios_ocr::restore_ios_sync_folder,
-            #[cfg(target_os = "ios")]
-            ios_ocr::release_ios_sync_folder,
-            #[cfg(target_os = "ios")]
-            ios_ocr::set_ios_secure_value,
-            #[cfg(target_os = "ios")]
-            ios_ocr::get_ios_secure_value,
-            #[cfg(target_os = "ios")]
-            ios_ocr::delete_ios_secure_value,
             #[cfg(target_os = "android")]
             android_cloud_folder::set_android_secure_value,
             #[cfg(target_os = "android")]
             android_cloud_folder::get_android_secure_value,
             #[cfg(target_os = "android")]
             android_cloud_folder::delete_android_secure_value,
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            #[cfg(target_os = "android")]
             microsoft_oauth::microsoft_oauth_request,
             #[cfg(target_os = "android")]
             android_cloud_folder::pick_android_sync_folder,
@@ -176,7 +156,6 @@ pub fn run() {
             android_cloud_folder::delete_android_cloud_folder_file,
             #[cfg(target_os = "android")]
             android_cloud_folder::list_android_cloud_folder_files,
-            storefront::get_app_storefront_country_code,
             printing::print_webview,
             mobile_system_bars::set_mobile_system_bars,
             system_trash::move_paths_to_trash,

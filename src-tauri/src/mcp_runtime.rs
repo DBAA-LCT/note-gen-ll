@@ -143,14 +143,6 @@ pub fn classify_runtime_requirement(command: &str, args: &[String]) -> RuntimeRe
 
 pub fn install_recipe_for(kind: &RuntimeKind, platform: &str) -> Option<InstallRecipe> {
     match (kind, platform) {
-        (RuntimeKind::Uvx, "macos") => Some(InstallRecipe {
-            id: "install-uv-macos",
-            title: "Install uv",
-            command_preview: "curl -LsSf https://astral.sh/uv/install.sh | sh",
-            post_install_hint: Some("If uv is still unavailable after installation, restart NoteGen or open a new terminal session and re-check."),
-            scope: "current_user",
-            manual_only: false,
-        }),
         (RuntimeKind::Uvx, "linux") => Some(InstallRecipe {
             id: "install-uv-linux",
             title: "Install uv",
@@ -164,14 +156,6 @@ pub fn install_recipe_for(kind: &RuntimeKind, platform: &str) -> Option<InstallR
             title: "Install uv",
             command_preview: "powershell -ExecutionPolicy Bypass -c \"irm https://astral.sh/uv/install.ps1 | iex\"",
             post_install_hint: Some("If uv is still unavailable after installation, restart NoteGen or open a new terminal session and re-check."),
-            scope: "current_user",
-            manual_only: false,
-        }),
-        (RuntimeKind::Bunx, "macos") => Some(InstallRecipe {
-            id: "install-bun-macos",
-            title: "Install Bun",
-            command_preview: "curl -fsSL https://bun.com/install | bash",
-            post_install_hint: Some("Bun installs into ~/.bun/bin. If bun is still unavailable after installation, add that directory to PATH, then restart NoteGen or open a new terminal session and re-check."),
             scope: "current_user",
             manual_only: false,
         }),
@@ -191,7 +175,7 @@ pub fn install_recipe_for(kind: &RuntimeKind, platform: &str) -> Option<InstallR
             scope: "current_user",
             manual_only: false,
         }),
-        (RuntimeKind::Npx, "macos") | (RuntimeKind::Npx, "linux") => Some(InstallRecipe {
+        (RuntimeKind::Npx, "linux") => Some(InstallRecipe {
             id: "install-node-volta-unix",
             title: "Install Node.js via Volta",
             command_preview: "curl https://get.volta.sh | bash && export VOLTA_HOME=\"$HOME/.volta\" && export PATH=\"$VOLTA_HOME/bin:$PATH\" && volta install node",
@@ -207,9 +191,7 @@ pub fn install_recipe_for(kind: &RuntimeKind, platform: &str) -> Option<InstallR
             scope: "current_user",
             manual_only: false,
         }),
-        (RuntimeKind::Python, "macos")
-        | (RuntimeKind::Python3, "macos")
-        | (RuntimeKind::Python, "windows")
+        (RuntimeKind::Python, "windows")
         | (RuntimeKind::Python3, "windows")
         | (RuntimeKind::Python, "linux")
         | (RuntimeKind::Python3, "linux") => Some(InstallRecipe {
@@ -225,9 +207,7 @@ pub fn install_recipe_for(kind: &RuntimeKind, platform: &str) -> Option<InstallR
 }
 
 fn current_platform() -> &'static str {
-    if cfg!(target_os = "macos") {
-        "macos"
-    } else if cfg!(target_os = "windows") {
+    if cfg!(target_os = "windows") {
         "windows"
     } else {
         "linux"
@@ -320,7 +300,7 @@ fn inspect_requirement(requirement: &RuntimeRequirement) -> RuntimeInspection {
 
 fn install_recipe_command(recipe_id: &str) -> Option<(&'static str, Vec<&'static str>)> {
     match recipe_id {
-        "install-uv-macos" | "install-uv-linux" => Some((
+        "install-uv-linux" => Some((
             "sh",
             vec!["-lc", "curl -LsSf https://astral.sh/uv/install.sh | sh"],
         )),
@@ -328,7 +308,7 @@ fn install_recipe_command(recipe_id: &str) -> Option<(&'static str, Vec<&'static
             "powershell",
             vec!["-ExecutionPolicy", "Bypass", "-c", "irm https://astral.sh/uv/install.ps1 | iex"],
         )),
-        "install-bun-macos" | "install-bun-linux" => Some((
+        "install-bun-linux" => Some((
             "sh",
             vec!["-lc", "curl -fsSL https://bun.com/install | bash"],
         )),
@@ -652,24 +632,17 @@ mod tests {
     }
 
     #[test]
-    fn returns_macos_recipe_for_uvx() {
-        let recipe = install_recipe_for(&RuntimeKind::Uvx, "macos")
-            .expect("uvx should have a macOS install recipe");
-
-        assert_eq!(recipe.id, "install-uv-macos");
-    }
-
     #[test]
     fn uses_bun_dot_com_installer_for_bun() {
-        let recipe = install_recipe_for(&RuntimeKind::Bunx, "macos")
-            .expect("bunx should have a macOS install recipe");
+        let recipe = install_recipe_for(&RuntimeKind::Bunx, "linux")
+            .expect("bunx should have a Linux install recipe");
 
         assert!(recipe.command_preview.contains("https://bun.com/install"));
     }
 
     #[test]
     fn returns_none_for_unknown_runtime() {
-        let recipe = install_recipe_for(&RuntimeKind::Unknown, "macos");
+        let recipe = install_recipe_for(&RuntimeKind::Unknown, "linux");
 
         assert!(recipe.is_none());
     }

@@ -3,7 +3,7 @@ import { isMobileDevice } from '@/lib/check'
 import { platform } from '@tauri-apps/plugin-os'
 import useArticleStore from '@/stores/article'
 
-type Platform = 'macos' | 'windows' | 'linux' | 'unknown'
+type Platform = 'windows' | 'linux' | 'unknown'
 
 interface FileShortcutsProps {
   path: string
@@ -18,7 +18,6 @@ interface FileShortcutsProps {
 /**
  * 文件和文件夹快捷键 Hook
  * 桌面端：
- *   - macOS: Enter 键触发重命名，Cmd+C 复制，Cmd+V 粘贴，Cmd+X 剪切，Backspace 删除
  *   - Windows/Linux: F2 键触发重命名，Ctrl+C 复制，Ctrl+V 粘贴，Ctrl+X 剪切，Delete 删除
  * 移动端：不启用快捷键
  */
@@ -38,9 +37,7 @@ export function useFileShortcuts({
   useEffect(() => {
     try {
       const p = platform()
-      if (p === 'macos') {
-        setCurrentPlatform('macos')
-      } else if (p === 'windows') {
+      if (p === 'windows') {
         setCurrentPlatform('windows')
       } else if (p === 'linux') {
         setCurrentPlatform('linux')
@@ -52,11 +49,7 @@ export function useFileShortcuts({
 
   // 检查是否按下了正确的修饰键
   const isModKey = useCallback((e: KeyboardEvent | React.KeyboardEvent): boolean => {
-    if (currentPlatform === 'macos') {
-      return e.metaKey && !e.ctrlKey
-    } else {
-      return e.ctrlKey && !e.metaKey
-    }
+    return e.ctrlKey && !e.metaKey
   }, [currentPlatform])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -77,10 +70,8 @@ export function useFileShortcuts({
 
     const modPressed = isModKey(e)
 
-    // 重命名: macOS 使用 Enter 键，Windows/Linux 使用 F2 键
-    const isRenameKey = currentPlatform === 'macos'
-      ? e.key === 'Enter'
-      : e.key === 'F2'
+    // 重命名: F2
+    const isRenameKey = e.key === 'F2'
 
     if (isRenameKey && onStartRename) {
       e.preventDefault()
@@ -113,10 +104,8 @@ export function useFileShortcuts({
       return
     }
 
-    // 删除: macOS 使用 Backspace，Windows/Linux 使用 Delete
-    const isDeleteKey = currentPlatform === 'macos'
-      ? e.key === 'Backspace'
-      : e.key === 'Delete'
+    // 删除: Delete
+    const isDeleteKey = e.key === 'Delete'
 
     if (isDeleteKey && onDelete) {
       e.preventDefault()

@@ -28,8 +28,6 @@ export function MobileUpdateSettings() {
 
   if (!mobileUpdate || !currentPlatform) return null
 
-  const actionText = currentPlatform === 'ios' ? t('openTestFlight') : t('openDownloadPage')
-
   return (
     <>
       <section className="mobile-dock-surface overflow-hidden rounded-[1.35rem] border border-primary/20">
@@ -59,7 +57,7 @@ export function MobileUpdateSettings() {
           </Button>
           <Button size="sm" onClick={() => void handleUpdate()}>
             <ExternalLink data-icon="inline-start" />
-            {actionText}
+            {t('openDownloadPage')}
           </Button>
         </div>
       </section>

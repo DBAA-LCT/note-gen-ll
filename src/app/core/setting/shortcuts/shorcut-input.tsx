@@ -1,10 +1,9 @@
 import { useTranslations } from "next-intl";
 import { TooltipButton } from "@/components/tooltip-button";
-import { ArrowBigUpIcon, CommandIcon, OptionIcon, RotateCcw, TrashIcon } from "lucide-react";
+import { RotateCcw, TrashIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useShortcutStore from "@/stores/shortcut";
 import { Badge } from "@/components/ui/badge";
-import { platform } from "@tauri-apps/plugin-os";
 import hotkeys from 'hotkeys-js';
 import { useClickAway } from 'react-use'
 import { uniq } from "lodash-es";
@@ -70,20 +69,6 @@ export default function ShortcutsInput({
 
   // 根据系统转化 CommandOrControl
   function transformKey(key: string) {
-    if (platform() === 'macos') {
-      switch (key) {
-        case 'CommandOrControl':
-          return <CommandIcon className="size-3.5" />
-        case 'Control':
-          return 'Control'
-        case 'Shift':
-          return <ArrowBigUpIcon className="size-4" />
-        case 'Alt':
-          return <OptionIcon className="size-3.5" />
-        default:
-          return key
-      }
-    }
     switch (key) {
       case 'CommandOrControl':
         return 'Ctrl'

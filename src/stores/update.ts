@@ -6,7 +6,6 @@ import { compareVersions, extractVersionText } from '@/lib/version'
 
 export const MOBILE_UPDATE_MANIFEST_URL = 'https://download.notegen.top/updates/latest.json'
 export const ANDROID_DOWNLOAD_URL = 'https://notegen.top/download'
-export const IOS_TESTFLIGHT_URL = 'https://testflight.apple.com/join/8KjFRTCq'
 
 export interface MobileUpdateInfo {
   version: string

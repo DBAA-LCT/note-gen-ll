@@ -40,7 +40,7 @@ import { useToolbarShortcuts } from '@/hooks/use-toolbar-shortcuts'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
 import { usePathname, useRouter } from 'next/navigation'
 
-type Platform = 'macos' | 'windows' | 'linux' | 'unknown'
+type Platform = 'windows' | 'linux' | 'unknown'
 
 interface TitleBarProps {
   onSearchClick?: () => void
@@ -122,9 +122,7 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
     
     try {
       const p = platform()
-      if (p === 'macos') {
-        setCurrentPlatform('macos')
-      } else if (p === 'windows') {
+      if (p === 'windows') {
         setCurrentPlatform('windows')
       } else if (p === 'linux') {
         setCurrentPlatform('linux')
@@ -173,18 +171,10 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
     return null
   }
 
-  // macOS: 红绿灯按钮在左侧，拖拽区域需要避开
-  // Windows/Linux: 控制按钮在右侧，拖拽区域需要避开
-  const isMacOS = currentPlatform === 'macos'
-
   return (
     <TooltipProvider>
       <div
         className="fixed top-0 right-0 left-0 z-40 flex h-[36px] w-full shrink-0 flex-nowrap items-center border-b bg-background select-none"
-        style={{
-          // macOS 红绿灯按钮在左侧，需要留出空间（约 70px）
-          paddingLeft: isMacOS ? '70px' : '0',
-        }}
         data-tauri-drag-region
       >
         {/* 左侧记录工具栏按钮 */}
@@ -384,8 +374,7 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
         </div>
 
         {/* Windows 控制按钮 */}
-        {!isMacOS && (
-          <div className="flex items-center shrink-0 relative z-10">
+        <div className="flex items-center shrink-0 relative z-10">
             <Button
               variant="ghost"
               size="icon"
@@ -410,8 +399,7 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
             >
               <X className="h-4 w-4" />
             </Button>
-          </div>
-        )}
+        </div>
       </div>
     </TooltipProvider>
   )

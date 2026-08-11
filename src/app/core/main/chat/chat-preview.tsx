@@ -2,7 +2,6 @@
 
 import useSettingStore from '@/stores/setting'
 import {
-  type DragEvent,
   useCallback,
   useEffect,
   useRef,
@@ -21,11 +20,6 @@ type ChatPreviewProps = {
 
 const MIN_RENDER_INTERVAL_MS = 33
 const STREAM_BUFFER_CHARS = 2
-
-function isMacOS() {
-  if (typeof window === 'undefined') return false
-  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent)
-}
 
 export default function ChatPreview({ text, streaming = false, containerClassName }: ChatPreviewProps) {
   const { contentTextScale } = useSettingStore()
@@ -149,38 +143,6 @@ export default function ChatPreview({ text, streaming = false, containerClassNam
     }
   }, [stopAnimation])
 
-  const handleDragStart = (event: DragEvent) => {
-    if (!isMacOS()) {
-      event.preventDefault()
-      return
-    }
-
-    const selectedText = window.getSelection()?.toString().trim()
-    if (!selectedText) {
-      event.preventDefault()
-      return
-    }
-
-    event.dataTransfer.setData('text/plain', selectedText)
-    event.dataTransfer.effectAllowed = 'copy'
-
-    const dragPreview = document.createElement('div')
-    dragPreview.style.position = 'absolute'
-    dragPreview.style.left = '-9999px'
-    dragPreview.style.padding = '8px 12px'
-    dragPreview.style.backgroundColor = 'rgba(0, 0, 0, 0.8)'
-    dragPreview.style.color = 'white'
-    dragPreview.style.borderRadius = '4px'
-    dragPreview.style.fontSize = '14px'
-    dragPreview.style.maxWidth = '300px'
-    dragPreview.style.overflowWrap = 'break-word'
-    dragPreview.textContent = selectedText.length > 50 ? `${selectedText.substring(0, 50)}...` : selectedText
-
-    document.body.appendChild(dragPreview)
-    event.dataTransfer.setDragImage(dragPreview, 0, 0)
-    window.setTimeout(() => dragPreview.remove(), 0)
-  }
-
   if (!text.trim()) {
     return null
   }
@@ -189,8 +151,6 @@ export default function ChatPreview({ text, streaming = false, containerClassNam
     <div className={cn('flex-1 max-w-[calc(100vw-30px)] md:max-w-[calc(100vw-440px)]', containerClassName)}>
       <div
         className="w-full"
-        draggable={isMacOS()}
-        onDragStart={handleDragStart}
         style={{ fontSize: `${(16 * contentTextScale) / 100}px` }}
       >
         <StreamdownRenderer
