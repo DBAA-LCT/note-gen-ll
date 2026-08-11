@@ -104,6 +104,7 @@ export function buildActivityDaySummaryText(
     .replace('{record}', String(day.counts.record))
     .replace('{writing}', String(day.counts.writing))
     .replace('{chat}', String(day.counts.chat))
+    .replace('{learning}', String(day.counts.learning))
 }
 
 export function buildProfileCardData({

@@ -2,7 +2,6 @@
 import { useTranslations } from 'next-intl'
 import * as React from "react"
 import { initMarksDb } from "@/db/marks"
-import { ControlScan } from "./control-scan"
 import { ControlText } from "./control-text"
 import { ControlImage } from "./control-image"
 import { ControlFile } from "./control-file"
@@ -161,8 +160,6 @@ function SortableToolbarItem({ id }: SortableToolbarItemProps) {
         return <ControlText />
       case 'recording':
         return <ControlRecording />
-      case 'scan':
-        return <ControlScan />
       case 'image':
         return <ControlImage />
       case 'link':

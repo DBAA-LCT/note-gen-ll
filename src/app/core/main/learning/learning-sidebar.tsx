@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Brain, CalendarDays, ChartNoAxesColumnIncreasing, Clock3, FileText, Flag, GraduationCap, Link2, NotebookPen, Plus, Settings2, TimerReset } from 'lucide-react'
+import { Brain, CalendarDays, ChartNoAxesColumnIncreasing, Clock3, FileText, Flag, Link2, NotebookPen, Plus, Settings2, TimerReset } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -24,7 +24,7 @@ function compactDate(date: string) {
 }
 
 const workspaceItems = [
-  { view: 'today' as const, label: '今日学习', icon: GraduationCap },
+  { view: 'today' as const, label: '今日', icon: Flag },
   { view: 'calendar' as const, label: '日程', icon: CalendarDays },
   { view: 'goals' as const, label: '目标', icon: Flag },
   { view: 'focus' as const, label: '专注', icon: TimerReset },
@@ -91,17 +91,17 @@ export function LearningSidebar() {
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex h-11 shrink-0 items-center justify-between border-b px-3">
         <button type="button" className="min-w-0 text-left" onClick={() => void openLearningWorkspace('today')}>
-          <p className="truncate text-sm font-medium">学习中心</p>
+          <p className="truncate text-sm font-medium">目标</p>
           <p className="text-[11px] text-muted-foreground">{date ? compactDate(date) : '读取日期中…'}</p>
         </button>
-        <Button size="icon-xs" variant="ghost" title="学习设置" onClick={() => openSettings('learning')}><Settings2 /></Button>
+        <Button size="icon-xs" variant="ghost" title="目标设置" onClick={() => openSettings('learning')}><Settings2 /></Button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {error ? <div className="mb-2 rounded-md bg-destructive/10 p-2 text-xs text-destructive">{error}</div> : null}
 
         <Button className="mb-2 w-full justify-start" variant="secondary" onClick={() => void openLearningWorkspace('today')}>
-          <GraduationCap />打开学习工作区
+          <Flag />打开目标工作区
         </Button>
 
         <div className="grid grid-cols-2 gap-1 border-b pb-3">

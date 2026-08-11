@@ -11,6 +11,7 @@ interface ActivityDayDetailProps {
     records: string
     writing: string
     chats: string
+    learning: string
   }
 }
 
@@ -18,6 +19,7 @@ const badgeClassMap = {
   record: 'border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-900 dark:bg-rose-950/70 dark:text-rose-200',
   writing: 'border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/70 dark:text-emerald-200',
   chat: 'border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-900 dark:bg-sky-950/70 dark:text-sky-200',
+  learning: 'border-violet-200 bg-violet-100 text-violet-700 dark:border-violet-900 dark:bg-violet-950/70 dark:text-violet-200',
 } as const
 
 function getSourceLabel(source: ActivityEntry['source'], labels: ActivityDayDetailProps['labels']) {
@@ -25,6 +27,7 @@ function getSourceLabel(source: ActivityEntry['source'], labels: ActivityDayDeta
     record: labels.records,
     chat: labels.chats,
     writing: labels.writing,
+    learning: labels.learning,
   }[source]
 }
 
@@ -126,6 +129,9 @@ export function ActivityDayDetail({ day, compact = false, labels }: ActivityDayD
             </Badge>
             <Badge variant="outline" className={`border ${badgeClassMap.chat}`}>
               {labels.chats}: {day.counts.chat}
+            </Badge>
+            <Badge variant="outline" className={`border ${badgeClassMap.learning}`}>
+              {labels.learning}: {day.counts.learning}
             </Badge>
           </div>
         ) : null}

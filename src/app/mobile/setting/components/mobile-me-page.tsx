@@ -563,6 +563,7 @@ export function MobileMePage({
           records: tActivity('labels.record'),
           writing: tActivity('labels.writing'),
           chats: tActivity('labels.chat'),
+          learning: tActivity('labels.learning'),
         }}
       />
     </div>

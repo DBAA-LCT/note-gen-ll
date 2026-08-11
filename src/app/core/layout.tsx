@@ -217,11 +217,6 @@ export default function RootLayout({
           await showSidebarTab('notes')
           emitter.emit('toolbar-shortcut-recording')
           break
-        case 'record-screenshot':
-        case 'screenshot':
-          await showSidebarTab('notes')
-          emitter.emit('toolbar-shortcut-scan')
-          break
         case 'record-text':
         case 'text':
           await showSidebarTab('notes')

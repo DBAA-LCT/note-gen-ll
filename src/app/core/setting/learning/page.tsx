@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { GraduationCap } from 'lucide-react'
+import { Flag } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,7 +41,7 @@ export default function LearningSettingPage() {
   }
 
   return (
-    <SettingType id="learning" title="学习" icon={<GraduationCap />} desc="管理学习任务计划、目标完成规则与日报文件位置。">
+    <SettingType id="learning" title="目标" icon={<Flag />} desc="管理目标任务计划、完成规则与日报文件位置。">
       <SettingSection title="学习计划" desc="自动任务会按每日预算和目标权重分配，不会覆盖手工任务。">
         <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-2">
           <div className="space-y-2"><Label htmlFor="learning-daily-budget">每日学习预算（分钟）</Label><Input id="learning-daily-budget" type="number" min={15} max={720} value={draft.dailyStudyMinutes} onChange={event => setDraft({ ...draft, dailyStudyMinutes: Number(event.target.value) })} /></div>

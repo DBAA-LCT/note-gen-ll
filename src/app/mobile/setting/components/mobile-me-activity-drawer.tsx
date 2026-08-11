@@ -22,6 +22,7 @@ interface MobileMeActivityDrawerProps {
     records: string
     writing: string
     chats: string
+    learning: string
   }
 }
 
@@ -48,6 +49,7 @@ export function MobileMeActivityDrawer({
               records: labels.records,
               writing: labels.writing,
               chats: labels.chats,
+              learning: labels.learning,
             }}
           />
         </div>

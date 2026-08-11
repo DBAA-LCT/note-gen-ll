@@ -6,7 +6,6 @@ import { Switch } from '@/components/ui/switch'
 import {
   CopySlash,
   Mic,
-  ScanLine,
   ImagePlus,
   Link2,
   FileText,
@@ -51,11 +50,6 @@ const TOOL_CONFIGS = {
     icon: <Mic />,
     titleKey: 'record.mark.toolbar.recording',
     descKey: 'settings.record.toolbar.recordToolbar.recording.desc',
-  },
-  scan: {
-    icon: <ScanLine />,
-    titleKey: 'record.mark.toolbar.scan',
-    descKey: 'settings.record.toolbar.recordToolbar.scan.desc',
   },
   image: {
     icon: <ImagePlus />,

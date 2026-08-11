@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { CirclePause, CirclePlay, RotateCcw, Square } from 'lucide-react'
+import { ArrowLeft, CirclePause, CirclePlay, RotateCcw, Square } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,7 +39,7 @@ function formatDuration(seconds: number) {
   return [hours, minutes, rest].map(value => String(value).padStart(2, '0')).join(':')
 }
 
-export function FocusView() {
+export function FocusView({ onBack }: { onBack?: () => void }) {
   const { date, tasks, sessions, saveSession, setTaskStatus } = useLearningStore()
   const [selectedTaskId, setSelectedTaskId] = useState('free')
   const [timer, setTimer] = useState<ActiveTimer | null>(null)
@@ -141,7 +141,10 @@ export function FocusView() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-4 md:p-6">
-      <div><h1 className="text-2xl font-semibold tracking-tight">专注计时</h1><p className="text-sm text-muted-foreground">计时状态保存在本机，切换页面后仍可继续。</p></div>
+      <div className="flex items-start gap-3">
+        {onBack ? <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="返回今日"><ArrowLeft /></Button> : null}
+        <div><h1 className="text-2xl font-semibold tracking-tight">专注计时</h1><p className="text-sm text-muted-foreground">计时状态保存在本机，返回目标页后仍可继续。</p></div>
+      </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
         <Card>
           <CardHeader><CardTitle>当前专注</CardTitle><CardDescription>暂停时间不会计入有效学习时长。</CardDescription></CardHeader>

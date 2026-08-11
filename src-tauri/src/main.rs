@@ -21,7 +21,6 @@ mod notion_import;
 mod ocr_packages;
 mod printing;
 mod remote_skills;
-mod screenshot;
 mod skill_runtime;
 mod skills;
 mod system_trash;
@@ -56,7 +55,6 @@ use remote_skills::{
     cancel_remote_skill_download, inspect_remote_skill, install_remote_skill, search_remote_skills,
     RemoteSkillManager,
 };
-use screenshot::{cleanup_temp_screenshot_dir, screenshot};
 use skill_runtime::{
     cancel_skill_script, inspect_skill_python, install_skill_python_dependencies, run_skill_script,
     SkillProcessManager,
@@ -106,7 +104,6 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // 注册命令处理器
         .invoke_handler(tauri::generate_handler![
-            screenshot,
             fuzzy_search,
             fuzzy_search_parallel,
             rank_keywords,
@@ -171,13 +168,10 @@ fn main() {
         .setup(app_setup::setup_app)
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        .run(|app_handle, event| match event {
+        .run(|_app_handle, event| match event {
             #[cfg(target_os = "android")]
             tauri::RunEvent::Opened { urls } => {
-                file_open::handle_opened_urls(&app_handle, urls);
-            }
-            tauri::RunEvent::Exit => {
-                cleanup_temp_screenshot_dir(&app_handle);
+                file_open::handle_opened_urls(&_app_handle, urls);
             }
             _ => {}
         });

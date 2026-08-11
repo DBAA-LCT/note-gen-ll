@@ -1,7 +1,7 @@
 'use client'
 
 import { Tabs, TabsContent } from "@/components/ui/tabs"
-import { Files, GraduationCap, Highlighter } from "lucide-react"
+import { Files, Flag, Highlighter } from "lucide-react"
 import { FileSidebar } from "./file"
 import { NoteSidebar } from "./mark"
 import { FileActions } from "./file/file-actions"
@@ -16,7 +16,7 @@ import { LearningSidebar } from './learning/learning-sidebar'
 const SIDEBAR_TABS = [
   { title: "files", icon: Files },
   { title: "notes", icon: Highlighter },
-  { title: "learning", icon: GraduationCap },
+  { title: "learning", icon: Flag },
 ] as const
 
 export function LeftSidebar() {
@@ -36,7 +36,7 @@ export function LeftSidebar() {
   // Prepare tabs with translated titles
   const tabs = SIDEBAR_TABS.map(tab => ({
     ...tab,
-    title: tab.title === 'learning' ? '学习' : t(`navigation.${tab.title === 'notes' ? 'record' : tab.title}`),
+    title: tab.title === 'learning' ? '目标' : t(`navigation.${tab.title === 'notes' ? 'record' : tab.title}`),
   }))
 
   return (

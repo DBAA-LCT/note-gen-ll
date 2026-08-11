@@ -62,10 +62,10 @@ async function initializeAllDatabases() {
   await initTagsDb();
   await initVectorDb();
   await initMemoriesDb();
+  await initLearningDb();
   await initActivityDb();
   await initCanvasesDb();
   await initKnowledgeDb();
-  await initLearningDb();
   const { bootstrapStructuredKnowledgeRegistry } = await import('@/lib/knowledge-index');
   await bootstrapStructuredKnowledgeRegistry();
 

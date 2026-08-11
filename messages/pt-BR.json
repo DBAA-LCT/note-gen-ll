@@ -3332,7 +3332,7 @@
   },
   "activity": {
     "title": "Calendário de Atividade",
-    "description": "Veja seus registros, conversas e atividade de escrita por dia. Esta primeira versão é calculada a partir dos registros existentes, conversas do usuário e horários de modificação das notas.",
+    "description": "Veja seus registros, conversas, escrita e aprendizado por dia.",
     "drawer": {
       "title": "Atividade",
       "description": "Veja rapidamente o status de hoje e a tendência recente da sua atividade.",
@@ -3346,12 +3346,14 @@
       "activeDays": "Dias Ativos",
       "records": "Registros",
       "chats": "Conversas",
-      "writing": "Escrita"
+      "writing": "Escrita",
+      "learning": "Aprendizado"
     },
     "labels": {
       "record": "Registro",
       "writing": "Escrita",
-      "chat": "Conversa"
+      "chat": "Conversa",
+      "learning": "Aprendizado"
     },
     "heatmap": {
       "title": "Últimas 26 Semanas",
@@ -3894,7 +3896,7 @@
         "range": "Últimas {count} semanas",
         "rangePlaceholder": "Últimas 16 semanas",
         "drawerEmpty": "Escolha um dia para ver os detalhes da atividade.",
-        "drawerSummary": "Houve {total} atividades nesse dia, incluindo {record} registros, {writing} escritas e {chat} conversas."
+        "drawerSummary": "Houve {total} atividades nesse dia, incluindo {record} registros, {writing} escritas, {chat} conversas e {learning} aprendizados."
       },
       "sync": {
         "title": "Sincronização",

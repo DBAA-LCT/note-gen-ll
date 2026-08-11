@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { platform } from '@tauri-apps/plugin-os'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isMobileDevice } from '@/lib/check'
-import { Search, Settings, Minus, Square, X, PanelLeft, PanelRight, SquarePen, Cog, CalendarDays, GraduationCap } from 'lucide-react'
+import { Search, Settings, Minus, Square, X, PanelLeft, PanelRight, SquarePen, Cog, CalendarDays, Flag } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useSidebarStore } from '@/stores/sidebar'
 import { PinToggle } from './pin-toggle'
@@ -17,7 +17,6 @@ import useUpdateStore from '@/stores/update'
 import React from 'react'
 import { ControlText } from '@/app/core/main/mark/control-text'
 import { ControlRecording } from '@/app/core/main/mark/control-recording'
-import { ControlScan } from '@/app/core/main/mark/control-scan'
 import { ControlImage } from '@/app/core/main/mark/control-image'
 import { ControlLink } from '@/app/core/main/mark/control-link'
 import { ControlFile } from '@/app/core/main/mark/control-file'
@@ -200,8 +199,6 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
                             return <ControlText />
                           case 'recording':
                             return <ControlRecording />
-                          case 'scan':
-                            return <ControlScan />
                           case 'image':
                             return <ControlImage />
                           case 'link':
@@ -261,10 +258,10 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
                   void showCenterPanel()
                 }}
               >
-                <GraduationCap className="h-4 w-4" />
+                <Flag className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom"><p>{leftSidebarTab === 'learning' ? '返回文件' : '学习'}</p></TooltipContent>
+            <TooltipContent side="bottom"><p>{leftSidebarTab === 'learning' ? '返回文件' : '目标'}</p></TooltipContent>
           </Tooltip>
           {/* 左侧边栏切换按钮 */}
           <Tooltip>

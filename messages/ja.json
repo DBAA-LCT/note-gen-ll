@@ -3321,7 +3321,7 @@
   },
   "activity": {
     "title": "アクティビティカレンダー",
-    "description": "記録、対話、執筆の活動を日ごとに確認できます。初版では既存の記録、ユーザー対話、ノート更新時刻をもとに集計します。",
+    "description": "記録、対話、執筆、学習の活動を日ごとに確認できます。",
     "drawer": {
       "title": "アクティビティ",
       "description": "今日の状態と最近の活動傾向をすばやく確認できます。",
@@ -3335,12 +3335,14 @@
       "activeDays": "活動日数",
       "records": "記録回数",
       "chats": "対話回数",
-      "writing": "執筆活動"
+      "writing": "執筆活動",
+      "learning": "学習活動"
     },
     "labels": {
       "record": "記録",
       "writing": "執筆",
-      "chat": "対話"
+      "chat": "対話",
+      "learning": "学習"
     },
     "heatmap": {
       "title": "直近 26 週間",
@@ -3910,7 +3912,7 @@
         "range": "直近 {count} 週間",
         "rangePlaceholder": "直近 16 週間",
         "drawerEmpty": "日付を選択すると、その日の活動詳細を確認できます。",
-        "drawerSummary": "この日は合計 {total} 件の活動があり、記録 {record} 件、執筆 {writing} 件、対話 {chat} 件です。"
+        "drawerSummary": "この日は合計 {total} 件の活動があり、記録 {record} 件、執筆 {writing} 件、対話 {chat} 件、学習 {learning} 件です。"
       },
       "sync": {
         "title": "同期",

@@ -1,5 +1,4 @@
 use crate::file_open;
-use crate::screenshot::cleanup_temp_screenshot_dir;
 use crate::tray::create_tray;
 use crate::web_clipper;
 use crate::window;
@@ -9,8 +8,6 @@ use tauri::Manager;
 
 pub fn setup_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle = app.handle();
-
-    cleanup_temp_screenshot_dir(&app_handle);
 
     // 在 Windows 上明确禁用窗口装饰
     #[cfg(target_os = "windows")]

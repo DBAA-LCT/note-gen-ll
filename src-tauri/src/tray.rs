@@ -12,7 +12,6 @@ pub const ID_NEW_NOTE: &str = "new-note";
 pub const ID_NEW_FOLDER: &str = "new-folder";
 pub const ID_RECORD_TEXT: &str = "record-text";
 pub const ID_RECORD_AUDIO: &str = "record-audio";
-pub const ID_RECORD_SCREENSHOT: &str = "record-screenshot";
 pub const ID_RECORD_IMAGE: &str = "record-image";
 pub const ID_RECORD_LINK: &str = "record-link";
 pub const ID_RECORD_FILE: &str = "record-file";
@@ -23,7 +22,7 @@ pub const ID_SETTINGS: &str = "settings";
 pub const ID_QUIT: &str = "quit";
 
 const DEFAULT_RECORD_TOOL_ORDER: &[&str] =
-    &["text", "recording", "scan", "image", "link", "file", "todo"];
+    &["text", "recording", "image", "link", "file", "todo"];
 const QUICK_RECORD_VISIBLE_LIMIT: usize = 4;
 
 #[derive(Clone, serde::Deserialize)]
@@ -255,7 +254,6 @@ fn record_tool_menu_id(id: &str) -> Option<&'static str> {
     match id {
         "text" => Some(ID_RECORD_TEXT),
         "recording" => Some(ID_RECORD_AUDIO),
-        "scan" => Some(ID_RECORD_SCREENSHOT),
         "image" => Some(ID_RECORD_IMAGE),
         "link" => Some(ID_RECORD_LINK),
         "file" => Some(ID_RECORD_FILE),
@@ -268,7 +266,6 @@ fn default_record_tool_label(id: &str) -> &'static str {
     match id {
         "text" => "Text",
         "recording" => "Recording",
-        "scan" => "Screenshot",
         "image" => "Image",
         "link" => "Link",
         "file" => "File",

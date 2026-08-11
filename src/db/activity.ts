@@ -4,7 +4,7 @@ import { getAllMarks } from './marks'
 import { getAllMarkdownFiles } from '@/lib/files'
 import { shouldCreateWritingSession, truncateActivityText } from '@/lib/activity/events'
 
-export type ActivityEventSource = 'record' | 'chat' | 'writing'
+export type ActivityEventSource = 'record' | 'chat' | 'writing' | 'learning'
 
 export interface ActivityEvent {
   id: number
@@ -181,5 +181,77 @@ async function backfillActivityEvents() {
       dedupeKey: `writing-backfill:${file.relativePath}:${modifiedAt}`,
       createdAt: modifiedAt,
     })
+  }
+
+  await backfillLearningActivityEvents()
+}
+
+async function backfillLearningActivityEvents() {
+  const db = await getDb()
+  try {
+    const [goals, tasks, sessions, reports] = await Promise.all([
+      db.select<Array<{ id: string; title: string; description: string; createdAt: number }>>(
+        "select id,title,description,createdAt from learning_goals where status != 'deleted'",
+      ),
+      db.select<Array<{ id: string; title: string; description: string; notePath: string | null; goalTitle: string | null; updatedAt: number }>>(`
+        select t.id,t.title,t.description,t.notePath,g.title as goalTitle,t.updatedAt
+        from learning_tasks t left join learning_goals g on g.id=t.goalId
+        where t.status='done'
+      `),
+      db.select<Array<{ id: string; effectiveSeconds: number; endedAt: number | null; updatedAt: number; taskTitle: string | null; goalTitle: string | null; notePath: string | null }>>(`
+        select s.id,s.effectiveSeconds,s.endedAt,s.updatedAt,t.title as taskTitle,g.title as goalTitle,t.notePath
+        from focus_sessions s
+        left join learning_tasks t on t.id=s.taskId
+        left join learning_goals g on g.id=s.goalId
+        where s.status='completed' and s.effectiveSeconds>0
+      `),
+      db.select<Array<{ localDate: string; overall: string; markdownPath: string | null; version: number; updatedAt: number }>>(
+        'select localDate,overall,markdownPath,version,updatedAt from daily_reports',
+      ),
+    ])
+
+    for (const goal of goals) {
+      await insertActivityEvent({
+        source: 'learning',
+        title: `创建目标：${truncateActivityText(goal.title, 52)}`,
+        description: truncateActivityText(goal.description, 140),
+        dedupeKey: `learning-goal:${goal.id}`,
+        createdAt: goal.createdAt,
+      })
+    }
+    for (const task of tasks) {
+      await insertActivityEvent({
+        source: 'learning',
+        title: `完成任务：${truncateActivityText(task.title, 52)}`,
+        description: truncateActivityText(task.goalTitle ? `${task.goalTitle} · ${task.description || '目标任务'}` : task.description || '目标任务', 140),
+        path: task.notePath,
+        dedupeKey: `learning-task:${task.id}`,
+        createdAt: task.updatedAt,
+      })
+    }
+    for (const session of sessions) {
+      const minutes = Math.max(1, Math.round(session.effectiveSeconds / 60))
+      const target = session.taskTitle || session.goalTitle || '自由专注'
+      await insertActivityEvent({
+        source: 'learning',
+        title: `专注 ${minutes} 分钟`,
+        description: truncateActivityText(target, 140),
+        path: session.notePath,
+        dedupeKey: `learning-focus:${session.id}`,
+        createdAt: session.endedAt || session.updatedAt,
+      })
+    }
+    for (const report of reports) {
+      await insertActivityEvent({
+        source: 'learning',
+        title: `完成复盘：${report.localDate}`,
+        description: truncateActivityText(report.overall || '已保存当日复盘', 140),
+        path: report.markdownPath,
+        dedupeKey: `learning-report:${report.localDate}`,
+        createdAt: report.updatedAt,
+      })
+    }
+  } catch {
+    // Fresh databases may initialize activity before optional feature tables exist.
   }
 }

@@ -1,4 +1,4 @@
-export type ActivitySource = 'record' | 'chat' | 'writing'
+export type ActivitySource = 'record' | 'chat' | 'writing' | 'learning'
 
 export interface ActivityEntry {
   id: string
@@ -33,6 +33,7 @@ export interface ActivityCalendarData {
     recordCount: number
     chatCount: number
     writingCount: number
+    learningCount: number
   }
   days: ActivityDaySummary[]
   weeks: ActivityHeatmapWeek[]

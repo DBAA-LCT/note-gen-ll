@@ -21,23 +21,10 @@ const defaultShortcuts: Shortcut[] = [
     value: "CommandOrControl+Shift+W"
   },
   {
-    key: 'screenshotRecord',
-    value: 'CommandOrControl+Shift+S'
-  },
-  {
     key: 'quickRecordText',
     value: 'CommandOrControl+Shift+T'
   }
 ]
-
-function emitShortcutEvent(key: string) {
-  if (key === 'screenshotRecord') {
-    emitter.emit('toolbar-shortcut-scan')
-    return
-  }
-
-  emitter.emit(key)
-}
 
 async function bindShortcuts(shortcuts: Shortcut[]) {
   await unregisterAll()
@@ -49,7 +36,7 @@ async function bindShortcuts(shortcuts: Shortcut[]) {
       if (shortcut.value && !registeredValues.has(shortcut.value)) {
         await register(shortcut.value, (event) => {
         if (event.state === 'Pressed') {
-            emitShortcutEvent(shortcut.key)
+            emitter.emit(shortcut.key)
         }
       });
         registeredValues.add(shortcut.value)

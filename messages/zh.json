@@ -3521,7 +3521,7 @@
   },
   "activity": {
     "title": "活跃度日历",
-    "description": "按天查看你的记录、对话和写作活跃情况。第一版基于现有记录、用户对话和笔记修改时间进行统计。",
+    "description": "按天查看你的记录、对话、写作和学习活跃情况。",
     "drawer": {
       "title": "活跃度",
       "description": "快速查看今天状态和最近一段时间的活跃趋势。",
@@ -3535,12 +3535,14 @@
       "activeDays": "活跃天数",
       "records": "记录次数",
       "chats": "对话次数",
-      "writing": "写作活跃"
+      "writing": "写作活跃",
+      "learning": "学习活动"
     },
     "labels": {
       "record": "记录",
       "writing": "写作",
-      "chat": "对话"
+      "chat": "对话",
+      "learning": "学习"
     },
     "heatmap": {
       "title": "最近 26 周热力图",
@@ -4083,7 +4085,7 @@
         "range": "最近 {count} 周",
         "rangePlaceholder": "最近 16 周",
         "drawerEmpty": "选择一个日期查看当天的活动详情。",
-        "drawerSummary": "当天共 {total} 条活动，含 {record} 条记录、{writing} 条写作、{chat} 条对话。"
+        "drawerSummary": "当天共 {total} 条活动，含 {record} 条记录、{writing} 条写作、{chat} 条对话、{learning} 条学习。"
       },
       "sync": {
         "title": "同步",

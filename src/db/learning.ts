@@ -1,4 +1,6 @@
 import { getDb } from './index'
+import { insertActivityEvent } from './activity'
+import { truncateActivityText } from '@/lib/activity/events'
 import type {
   CreateLearningGoalInput,
   DailyReport,
@@ -259,6 +261,13 @@ export async function createLearningGoal(input: CreateLearningGoalInput): Promis
       JSON.stringify(goal.weeklyDays), goal.timeWeight, goal.color, goal.note, goal.status,
       goal.progressPercent, goal.createdAt, goal.updatedAt, goal.deletedAt],
   )
+  await insertActivityEvent({
+    source: 'learning',
+    title: `创建目标：${truncateActivityText(goal.title, 52)}`,
+    description: truncateActivityText(goal.description, 140),
+    dedupeKey: `learning-goal:${goal.id}`,
+    createdAt: now,
+  })
   return goal
 }
 
@@ -346,7 +355,25 @@ export async function createManualLearningTask(input: {
 
 export async function setLearningTaskStatus(id: string, status: LearningTaskStatus): Promise<void> {
   const db = await getDb()
-  await db.execute('update learning_tasks set status=$1, updatedAt=$2 where id=$3', [status, Date.now(), id])
+  const now = Date.now()
+  await db.execute('update learning_tasks set status=$1, updatedAt=$2 where id=$3', [status, now, id])
+  if (status === 'done') {
+    const task = (await db.select<Array<{ title: string; description: string; notePath: string | null; goalTitle: string | null }>>(`
+      select t.title,t.description,t.notePath,g.title as goalTitle
+      from learning_tasks t left join learning_goals g on g.id=t.goalId
+      where t.id=$1 limit 1
+    `, [id]))[0]
+    if (task) {
+      await insertActivityEvent({
+        source: 'learning',
+        title: `完成任务：${truncateActivityText(task.title, 52)}`,
+        description: truncateActivityText(task.goalTitle ? `${task.goalTitle} · ${task.description || '目标任务'}` : task.description || '目标任务', 140),
+        path: task.notePath,
+        dedupeKey: `learning-task:${id}`,
+        createdAt: now,
+      })
+    }
+  }
 }
 
 export async function saveFocusSession(session: FocusSession): Promise<void> {
@@ -360,6 +387,24 @@ export async function saveFocusSession(session: FocusSession): Promise<void> {
     [session.id, session.taskId, session.goalId, session.localDate, session.startedAt, session.endedAt,
       session.effectiveSeconds, session.status, session.createdAt, session.updatedAt],
   )
+  if (session.status === 'completed' && session.effectiveSeconds > 0) {
+    const target = (await db.select<Array<{ taskTitle: string | null; goalTitle: string | null; notePath: string | null }>>(`
+      select t.title as taskTitle,g.title as goalTitle,t.notePath
+      from focus_sessions s
+      left join learning_tasks t on t.id=s.taskId
+      left join learning_goals g on g.id=s.goalId
+      where s.id=$1 limit 1
+    `, [session.id]))[0]
+    const minutes = Math.max(1, Math.round(session.effectiveSeconds / 60))
+    await insertActivityEvent({
+      source: 'learning',
+      title: `专注 ${minutes} 分钟`,
+      description: truncateActivityText(target?.taskTitle || target?.goalTitle || '自由专注', 140),
+      path: target?.notePath,
+      dedupeKey: `learning-focus:${session.id}`,
+      createdAt: session.endedAt || session.updatedAt,
+    })
+  }
 }
 
 export async function listFocusSessions(date: string): Promise<FocusSession[]> {
@@ -536,6 +581,14 @@ export async function saveDailyReport(input: SaveDailyReportInput): Promise<Dail
       [entry.progressPercent, now, entry.goalId],
     )
   }
+  await insertActivityEvent({
+    source: 'learning',
+    title: `完成复盘：${input.localDate}`,
+    description: truncateActivityText(input.overall || '已保存当日复盘', 140),
+    path: input.markdownPath || existing?.markdownPath || null,
+    dedupeKey: `learning-report:${input.localDate}`,
+    createdAt: now,
+  })
   return (await getDailyReport(input.localDate))!
 }
 

@@ -40,7 +40,7 @@ export function LearningWorkspace() {
     return (
       <div className="flex h-full flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
         <LoaderCircle className="size-4 animate-spin" />
-        正在初始化学习中心…
+        正在初始化目标数据…
       </div>
     )
   }
@@ -49,7 +49,7 @@ export function LearningWorkspace() {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/15">
       {error ? (
         <Alert variant="destructive" className="mx-4 mt-4 shrink-0">
-          <AlertTitle>学习模块加载失败</AlertTitle>
+          <AlertTitle>目标模块加载失败</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}

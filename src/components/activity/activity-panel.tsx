@@ -36,6 +36,8 @@ export function ActivityPanel({
     recordBadge: t('labels.record'),
     writingBadge: t('labels.writing'),
     chatBadge: t('labels.chat'),
+    learning: t('summary.learning'),
+    learningBadge: t('labels.learning'),
   }), [t])
 
   if (loading && !data) {
@@ -85,7 +87,7 @@ export function ActivityPanel({
                 <p className="mt-1 text-lg font-semibold">{data.totals.activeDays}</p>
               </div>
             </div>
-            <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className="rounded-xl bg-background/80 p-3">
                 <p className="text-xs text-muted-foreground">{summaryLabels.records}</p>
                 <p className="mt-1 text-lg font-semibold">{data.totals.recordCount}</p>
@@ -97,6 +99,10 @@ export function ActivityPanel({
               <div className="rounded-xl bg-background/80 p-3">
                 <p className="text-xs text-muted-foreground">{summaryLabels.chats}</p>
                 <p className="mt-1 text-lg font-semibold">{data.totals.chatCount}</p>
+              </div>
+              <div className="rounded-xl bg-background/80 p-3">
+                <p className="text-xs text-muted-foreground">{summaryLabels.learning}</p>
+                <p className="mt-1 text-lg font-semibold">{data.totals.learningCount}</p>
               </div>
             </div>
           </div>
@@ -133,6 +139,7 @@ export function ActivityPanel({
           records: summaryLabels.recordBadge,
           writing: summaryLabels.writingBadge,
           chats: summaryLabels.chatBadge,
+          learning: summaryLabels.learningBadge,
         }}
       />
     </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { GraduationCap, Highlighter, MessageSquare, Plus, Square, SquarePen } from 'lucide-react'
+import { Flag, Highlighter, MessageSquare, Plus, Square, SquarePen } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Store } from '@tauri-apps/plugin-store'
@@ -93,9 +93,9 @@ export function AppFootbar() {
     },
     {
       id: 'learning',
-      label: '学习',
+      label: '目标',
       url: '/mobile/learning',
-      icon: GraduationCap,
+      icon: Flag,
     },
   ]
 

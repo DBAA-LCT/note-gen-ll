@@ -39,6 +39,7 @@ function buildTotals(days: ActivityDaySummary[]) {
     totals.recordCount += day.counts.record
     totals.chatCount += day.counts.chat
     totals.writingCount += day.counts.writing
+    totals.learningCount += day.counts.learning
     if (day.totalCount > 0) {
       totals.activeDays += 1
     }
@@ -49,6 +50,7 @@ function buildTotals(days: ActivityDaySummary[]) {
     recordCount: 0,
     chatCount: 0,
     writingCount: 0,
+    learningCount: 0,
   })
 }
 

@@ -3501,7 +3501,7 @@
   },
   "activity": {
     "title": "Activity Calendar",
-    "description": "Review your daily records, chats, and writing activity in one place. This first version is derived from existing records, user chats, and note modification times.",
+    "description": "Review your daily records, chats, writing, and learning activity in one place.",
     "drawer": {
       "title": "Activity",
       "description": "Quickly review today's status and your recent activity trend.",
@@ -3515,12 +3515,14 @@
       "activeDays": "Active Days",
       "records": "Records",
       "chats": "Chats",
-      "writing": "Writing"
+      "writing": "Writing",
+      "learning": "Learning"
     },
     "labels": {
       "record": "Record",
       "writing": "Writing",
-      "chat": "Chat"
+      "chat": "Chat",
+      "learning": "Learning"
     },
     "heatmap": {
       "title": "Last 26 Weeks",
@@ -4063,7 +4065,7 @@
         "range": "Last {count} weeks",
         "rangePlaceholder": "Last 16 weeks",
         "drawerEmpty": "Choose a day to inspect its activity details.",
-        "drawerSummary": "{total} activities that day, including {record} records, {writing} writing events, and {chat} chats."
+        "drawerSummary": "{total} activities that day, including {record} records, {writing} writing events, {chat} chats, and {learning} learning events."
       },
       "sync": {
         "title": "Sync",

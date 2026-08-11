@@ -36,7 +36,6 @@ interface Events {
   'toolbar-shortcut-todo': unknown;
   'editor-ai-streaming': { isStreaming: boolean; targetFilePath?: string; terminate?: () => void };
   'toolbar-shortcut-recording': unknown;
-  'toolbar-shortcut-scan': unknown;
   'toolbar-shortcut-text': unknown;
   'toolbar-shortcut-link': unknown;
   'latest-commit-info': {
@@ -76,7 +75,6 @@ interface Events {
   'toolbar-question': unknown;
   'toolbar-translation': unknown;
   'toolbar-organize': unknown;
-  'screenshot-shortcut-register': unknown;
   'text-shortcut-register': unknown;
   'window-pin-register': unknown;
   'window-pin-changed': boolean;

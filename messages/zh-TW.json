@@ -3338,7 +3338,7 @@
   },
   "activity": {
     "title": "活躍度日曆",
-    "description": "按天查看你的記錄、對話與寫作活躍情況。第一版基於現有記錄、使用者對話與筆記修改時間進行統計。",
+    "description": "按天查看你的記錄、對話、寫作與學習活躍情況。",
     "drawer": {
       "title": "活躍度",
       "description": "快速查看今天狀態和最近一段時間的活躍趨勢。",
@@ -3352,12 +3352,14 @@
       "activeDays": "活躍天數",
       "records": "記錄次數",
       "chats": "對話次數",
-      "writing": "寫作活躍"
+      "writing": "寫作活躍",
+      "learning": "學習活動"
     },
     "labels": {
       "record": "記錄",
       "writing": "寫作",
-      "chat": "對話"
+      "chat": "對話",
+      "learning": "學習"
     },
     "heatmap": {
       "title": "最近 26 週熱力圖",
@@ -3900,7 +3902,7 @@
         "range": "最近 {count} 週",
         "rangePlaceholder": "最近 16 週",
         "drawerEmpty": "選擇一個日期查看當天的活動詳情。",
-        "drawerSummary": "當天共 {total} 條活動，含 {record} 條記錄、{writing} 條寫作、{chat} 條對話。"
+        "drawerSummary": "當天共 {total} 條活動，含 {record} 條記錄、{writing} 條寫作、{chat} 條對話、{learning} 條學習。"
       },
       "sync": {
         "title": "同步",

@@ -21,7 +21,7 @@ export async function openLearningWorkspace(view: LearningWorkspaceView = 'today
   await articleStore.addTab({
     id: `learning-${Date.now()}`,
     path: LEARNING_WORKSPACE_PATH,
-    name: '学习中心',
+    name: '目标',
     isFolder: false,
     kind: 'learning',
   })
