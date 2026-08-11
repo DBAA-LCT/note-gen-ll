@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-08-04T00:00:00Z",
+  "configs": {
+    "providerTemplates": {
+      "versionCode": 104,
+      "versionName": "1.0.4",
+      "url": "https://download.notegen.top/config/v1/provider-templates.json"
+    },
+    "providerTemplatesChina": {
+      "versionCode": 104,
+      "versionName": "1.0.4-cn",
+      "url": "https://download.notegen.top/config/v1/provider-templates-cn.json"
+    },
+    "noteGenDefaultModels": {
+      "versionCode": 103,
+      "versionName": "1.0.3",
+      "url": "https://download.notegen.top/config/v1/notegen-default-models.json"
+    }
+  }
+}
