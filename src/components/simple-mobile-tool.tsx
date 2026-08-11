@@ -1,7 +1,7 @@
 'use client'
 
 import { Button } from "@/components/ui/button"
-import { CheckSquare, ChevronRight, ImagePlus, Link, Mic, Paperclip, Sparkles, SquarePen, Type } from "lucide-react"
+import { CheckSquare, ChevronRight, ImagePlus, Link, Mic, Sparkles, SquarePen, Type } from "lucide-react"
 import { useTranslations } from "next-intl"
 import { cn } from "@/lib/utils"
 
@@ -26,8 +26,6 @@ export function SimpleMobileTool({ toolId, onToolClick, featured = false, label,
         return { icon: <ImagePlus className="size-4" />, label: t('record.mark.type.image') }
       case 'link':
         return { icon: <Link className="size-4" />, label: t('record.mark.type.link') }
-      case 'file':
-        return { icon: <Paperclip className="size-4" />, label: t('record.mark.type.file') }
       case 'todo':
         return { icon: <CheckSquare className="size-4" />, label: t('record.mark.type.todo') }
       case 'write':

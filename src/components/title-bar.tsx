@@ -4,10 +4,9 @@ import { useEffect, useState } from 'react'
 import { platform } from '@tauri-apps/plugin-os'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { isMobileDevice } from '@/lib/check'
-import { Search, Settings, Minus, Square, X, PanelLeft, PanelRight, SquarePen, Cog, CalendarDays, Flag } from 'lucide-react'
+import { Search, Settings, Minus, Square, Copy, X, PanelLeft, PanelRight, SquarePen, Cog, CalendarDays } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useSidebarStore } from '@/stores/sidebar'
-import { PinToggle } from './pin-toggle'
 import AppStatus from './app-status'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
@@ -19,7 +18,6 @@ import { ControlText } from '@/app/core/main/mark/control-text'
 import { ControlRecording } from '@/app/core/main/mark/control-recording'
 import { ControlImage } from '@/app/core/main/mark/control-image'
 import { ControlLink } from '@/app/core/main/mark/control-link'
-import { ControlFile } from '@/app/core/main/mark/control-file'
 import { ControlTodo } from '@/app/core/main/mark/control-todo'
 import {
   DndContext,
@@ -37,7 +35,6 @@ import {
 import { DraggableToolbarItem } from './draggable-toolbar-item'
 import { useToolbarShortcuts } from '@/hooks/use-toolbar-shortcuts'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
-import { usePathname, useRouter } from 'next/navigation'
 
 type Platform = 'windows' | 'linux' | 'unknown'
 
@@ -50,10 +47,9 @@ interface TitleBarProps {
 export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false }: TitleBarProps) {
   const [currentPlatform, setCurrentPlatform] = useState<Platform>('unknown')
   const [isMobile, setIsMobile] = useState(true)
+  const [isMaximized, setIsMaximized] = useState(false)
   const { open: settingsOpen, openSettings, closeSettings } = useSettingsDialogStore()
-  const pathname = usePathname()
-  const router = useRouter()
-  const { leftSidebarVisible, centerPanelVisible, rightSidebarVisible, leftSidebarTab, setLeftSidebarTab, showCenterPanel, toggleLeftSidebar, toggleCenterPanel, toggleRightSidebar } = useSidebarStore()
+  const { leftSidebarVisible, centerPanelVisible, rightSidebarVisible, toggleLeftSidebar, toggleCenterPanel, toggleRightSidebar } = useSidebarStore()
   
   // 检查关闭面板后是否会导致"仅左"状态或无面板状态
   const wouldCauseLeftOnly = (currentVisible: boolean, panel: 'left' | 'center' | 'right') => {
@@ -131,6 +127,45 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
     }
   }, [])
 
+  useEffect(() => {
+    if (currentPlatform === 'unknown') return
+
+    const appWindow = getCurrentWindow()
+    let disposed = false
+    let unlisten: (() => void) | undefined
+
+    const syncMaximizedState = async () => {
+      try {
+        const maximized = await appWindow.isMaximized()
+        if (!disposed) setIsMaximized(maximized)
+      } catch (error) {
+        console.error('Error checking maximized state:', error)
+      }
+    }
+
+    const listenForWindowResize = async () => {
+      await syncMaximizedState()
+      const stopListening = await appWindow.onResized(() => {
+        void syncMaximizedState()
+      })
+
+      if (disposed) {
+        stopListening()
+      } else {
+        unlisten = stopListening
+      }
+    }
+
+    void listenForWindowResize().catch((error) => {
+      console.error('Error listening for window resize:', error)
+    })
+
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [currentPlatform])
+
 
 
   const handleMinimize = async () => {
@@ -203,8 +238,6 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
                             return <ControlImage />
                           case 'link':
                             return <ControlLink />
-                          case 'file':
-                            return <ControlFile />
                           case 'todo':
                             return <ControlTodo />
                           default:
@@ -245,24 +278,6 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
 
         {/* 右侧按钮 */}
         <div className="flex items-center gap-0.5 px-2 shrink-0" data-tauri-drag-region="false">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-8 w-8 ${pathname === '/core/main' && leftSidebarTab === 'learning' ? 'bg-primary/10 text-primary hover:bg-primary/15' : ''}`}
-                onClick={() => {
-                  if (pathname !== '/core/main') router.push('/core/main')
-                  void setLeftSidebarTab(leftSidebarTab === 'learning' ? 'files' : 'learning')
-                  if (!leftSidebarVisible) void toggleLeftSidebar()
-                  void showCenterPanel()
-                }}
-              >
-                <Flag className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom"><p>{leftSidebarTab === 'learning' ? '返回文件' : '目标'}</p></TooltipContent>
-          </Tooltip>
           {/* 左侧边栏切换按钮 */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -341,8 +356,6 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
               <p>{t('navigation.activity')}</p>
             </TooltipContent>
           </Tooltip>
-
-          <PinToggle />
           
           <Tooltip>
             <TooltipTrigger asChild>
@@ -385,8 +398,14 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
               size="icon"
               className="h-9 w-12 rounded-none hover:bg-accent"
               onClick={handleMaximize}
+              aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
+              title={isMaximized ? 'Restore window' : 'Maximize window'}
             >
-              <Square className="h-3.5 w-3.5" />
+              {isMaximized ? (
+                <Copy className="h-3.5 w-3.5" />
+              ) : (
+                <Square className="h-3.5 w-3.5" />
+              )}
             </Button>
             <Button
               variant="ghost"

@@ -8,7 +8,6 @@ import {
   Mic,
   ImagePlus,
   Link2,
-  FileText,
   CheckSquare,
   GripVertical
 } from 'lucide-react'
@@ -60,11 +59,6 @@ const TOOL_CONFIGS = {
     icon: <Link2 />,
     titleKey: 'record.mark.toolbar.link',
     descKey: 'settings.record.toolbar.recordToolbar.link.desc',
-  },
-  file: {
-    icon: <FileText />,
-    titleKey: 'record.mark.toolbar.file',
-    descKey: 'settings.record.toolbar.recordToolbar.file.desc',
   },
   todo: {
     icon: <CheckSquare />,

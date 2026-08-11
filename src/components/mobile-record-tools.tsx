@@ -27,7 +27,6 @@ export function MobileRecordTools({ onClose, onOrganize }: MobileRecordToolsProp
     { id: 'recording' },
     { id: 'image' },
     { id: 'link' },
-    { id: 'file' },
     { id: 'todo' },
   ]
 

@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "NoteGen",
+    "title": "NoteGoal",
     "description": "まず記録、整理はあとで。"
   },
   "tray": {
@@ -12,9 +12,8 @@
     "newFolder": "新規フォルダー",
     "settings": "設定",
     "window": "ウィンドウ",
-    "pinToggle": "ピン留め/解除",
     "hideWindow": "トレイに隠す",
-    "quit": "NoteGenを終了"
+    "quit": "NoteGoalを終了"
   },
   "settings": {
     "defaultModels": {
@@ -1006,7 +1005,7 @@
       "resourcesTitle": "リソースとサポート",
       "resourcesDesc": "ドキュメント、リリースノート、コミュニティでのフィードバックを確認できます。",
       "licenseText": "オープンソース · GitHub · GPL-3.0",
-      "version": "NoteGen v{version}",
+      "version": "NoteGoal v{version}",
       "checkReleases": "過去のバージョンを確認",
       "language": "言語",
       "checkUpdate": "アップデートを確認",

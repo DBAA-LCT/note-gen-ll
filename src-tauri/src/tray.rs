@@ -14,15 +14,13 @@ pub const ID_RECORD_TEXT: &str = "record-text";
 pub const ID_RECORD_AUDIO: &str = "record-audio";
 pub const ID_RECORD_IMAGE: &str = "record-image";
 pub const ID_RECORD_LINK: &str = "record-link";
-pub const ID_RECORD_FILE: &str = "record-file";
 pub const ID_RECORD_TODO: &str = "record-todo";
-pub const ID_PIN_WINDOW: &str = "pin-window";
 pub const ID_HIDE_WINDOW: &str = "hide-window";
 pub const ID_SETTINGS: &str = "settings";
 pub const ID_QUIT: &str = "quit";
 
 const DEFAULT_RECORD_TOOL_ORDER: &[&str] =
-    &["text", "recording", "image", "link", "file", "todo"];
+    &["text", "recording", "image", "link", "todo"];
 const QUICK_RECORD_VISIBLE_LIMIT: usize = 4;
 
 #[derive(Clone, serde::Deserialize)]
@@ -44,7 +42,6 @@ pub struct TrayMenuLabels {
     new_folder: String,
     settings: String,
     window: String,
-    pin_toggle: String,
     hide_window: String,
     quit: String,
 }
@@ -56,7 +53,7 @@ pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::tray:
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .menu(&menu)
-        .tooltip("NoteGen")
+        .tooltip("NoteGoal")
         .on_menu_event(move |app, event| {
             handle_menu_event(app, event.id.0.as_str());
         })
@@ -132,7 +129,6 @@ fn build_tray_menu<R: Runtime>(
 
     let window_section =
         MenuItem::with_id(app, "section-window", &labels.window, false, None::<&str>)?;
-    let pin_window = MenuItem::with_id(app, ID_PIN_WINDOW, &labels.pin_toggle, true, None::<&str>)?;
     let hide_window =
         MenuItem::with_id(app, ID_HIDE_WINDOW, &labels.hide_window, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, ID_QUIT, &labels.quit, true, None::<&str>)?;
@@ -161,7 +157,6 @@ fn build_tray_menu<R: Runtime>(
         &settings,
         &separator_2,
         &window_section,
-        &pin_window,
         &hide_window,
         &separator_3,
         &quit,
@@ -180,9 +175,8 @@ fn default_tray_menu_labels() -> TrayMenuLabels {
         new_folder: "New Folder".to_string(),
         settings: "Settings".to_string(),
         window: "Window".to_string(),
-        pin_toggle: "Pin/Unpin".to_string(),
         hide_window: "Hide to Tray".to_string(),
-        quit: "Quit NoteGen".to_string(),
+        quit: "Quit NoteGoal".to_string(),
     }
 }
 
@@ -256,7 +250,6 @@ fn record_tool_menu_id(id: &str) -> Option<&'static str> {
         "recording" => Some(ID_RECORD_AUDIO),
         "image" => Some(ID_RECORD_IMAGE),
         "link" => Some(ID_RECORD_LINK),
-        "file" => Some(ID_RECORD_FILE),
         "todo" => Some(ID_RECORD_TODO),
         _ => None,
     }
@@ -268,7 +261,6 @@ fn default_record_tool_label(id: &str) -> &'static str {
         "recording" => "Recording",
         "image" => "Image",
         "link" => "Link",
-        "file" => "File",
         "todo" => "Todo",
         _ => "",
     }

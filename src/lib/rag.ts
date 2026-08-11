@@ -882,21 +882,23 @@ export async function processAllMarkdownFiles(onProgress?: (current: number, tot
  */
 async function getFilePath(item: DirTree): Promise<string> {
   const workspace = await getWorkspacePath();
-  let path = item.name;
+  const pathSegments = [item.name];
   let parent = item.parent;
-  
-  // 构建相对路径
+
+  // 保留每一级目录为独立路径段，避免在 Windows verbatim 路径中混入正斜杠
   while (parent) {
-    path = `${parent.name}/${path}`;
+    pathSegments.unshift(parent.name);
     parent = parent.parent;
   }
-  
-  // 转换为完整路径
+
   if (workspace.isCustom) {
-    return await join(workspace.path, path);
-  } else {
-    return path; // 返回相对于AppData/article的路径
+    const filePath = await join(workspace.path, ...pathSegments);
+    return filePath.startsWith('\\\\?\\')
+      ? filePath.replace(/\//g, '\\')
+      : filePath;
   }
+
+  return pathSegments.join('/'); // 返回相对于AppData/article的路径
 }
 
 /**

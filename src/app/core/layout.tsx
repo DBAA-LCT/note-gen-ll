@@ -131,7 +131,6 @@ export default function RootLayout({
       scan: t('record.mark.type.screenshot'),
       image: t('record.mark.type.image'),
       link: t('record.mark.type.link'),
-      file: t('record.mark.type.file'),
       todo: t('record.mark.type.todo'),
     }
 
@@ -149,7 +148,6 @@ export default function RootLayout({
         newFolder: t('tray.newFolder'),
         settings: t('tray.settings'),
         window: t('tray.window'),
-        pinToggle: t('tray.pinToggle'),
         hideWindow: t('tray.hideWindow'),
         quit: t('tray.quit'),
       },
@@ -181,17 +179,6 @@ export default function RootLayout({
         await sidebar.toggleLeftSidebar()
       }
       await useSidebarStore.getState().setLeftSidebarTab(tab)
-    }
-
-    const togglePin = async () => {
-      const store = await Store.load('store.json')
-      const currentPin = await store.get<boolean>('pin')
-      const nextPin = !currentPin
-
-      await getCurrentWindow().setAlwaysOnTop(nextPin)
-      await store.set('pin', nextPin)
-      await store.save()
-      emitter.emit('window-pin-changed', nextPin)
     }
 
     const ensureFileTreeLoaded = async () => {
@@ -231,17 +218,9 @@ export default function RootLayout({
           await showSidebarTab('notes')
           emitter.emit('toolbar-shortcut-image')
           break
-        case 'record-file':
-          await showSidebarTab('notes')
-          emitter.emit('toolbar-shortcut-file')
-          break
         case 'record-todo':
           await showSidebarTab('notes')
           emitter.emit('toolbar-shortcut-todo')
-          break
-        case 'pin-window':
-        case 'pin':
-          await togglePin()
           break
         default:
           break

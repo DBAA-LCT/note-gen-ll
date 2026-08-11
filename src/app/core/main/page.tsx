@@ -68,6 +68,7 @@ function ResizableWrapper() {
   const MIN_LEFT_SIDEBAR_WIDTH_PX = 320
   const MIN_RIGHT_SIDEBAR_WIDTH_PX = 280
   const MIN_EDITOR_WIDTH_PX = 400
+  const MAX_TOTAL_MIN_SIZE = 95
   const [minLeftSidebarSize, setMinLeftSidebarSize] = useState(24)
   const [minRightSidebarSize, setMinRightSidebarSize] = useState(20)
   const [minEditorSize, setMinEditorSize] = useState(30)
@@ -84,12 +85,18 @@ function ResizableWrapper() {
   
   const calculateMinSizes = () => {
     const windowWidth = window.innerWidth
-    const minLeftSidebarPercent = Math.max(18, (MIN_LEFT_SIDEBAR_WIDTH_PX / windowWidth) * 100)
-    const minRightSidebarPercent = Math.max(15, (MIN_RIGHT_SIDEBAR_WIDTH_PX / windowWidth) * 100)
-    const minEditorPercent = Math.max(25, (MIN_EDITOR_WIDTH_PX / windowWidth) * 100)
-    setMinLeftSidebarSize(Math.min(minLeftSidebarPercent, 40))
-    setMinRightSidebarSize(Math.min(minRightSidebarPercent, 40))
-    setMinEditorSize(Math.min(minEditorPercent, 50))
+    const desiredLeftSize = Math.min(Math.max(18, (MIN_LEFT_SIDEBAR_WIDTH_PX / windowWidth) * 100), 40)
+    const desiredRightSize = Math.min(Math.max(15, (MIN_RIGHT_SIDEBAR_WIDTH_PX / windowWidth) * 100), 40)
+    const desiredEditorSize = Math.min(Math.max(25, (MIN_EDITOR_WIDTH_PX / windowWidth) * 100), 50)
+    const totalDesiredSize = desiredLeftSize + desiredRightSize + desiredEditorSize
+    const scale = totalDesiredSize > MAX_TOTAL_MIN_SIZE
+      ? MAX_TOTAL_MIN_SIZE / totalDesiredSize
+      : 1
+
+    // 窄窗口下按比例缩小三栏最小值，避免约束总和超过 100% 导致折叠命令失效
+    setMinLeftSidebarSize(desiredLeftSize * scale)
+    setMinRightSidebarSize(desiredRightSize * scale)
+    setMinEditorSize(desiredEditorSize * scale)
   }
 
   // 初始化侧边栏状态
@@ -101,7 +108,7 @@ function ResizableWrapper() {
     return () => window.removeEventListener('resize', calculateMinSizes)
   }, [])
 
-  // 当面板可见性变化时，控制面板的折叠和展开
+  // 当面板可见性变化时，立即控制面板的折叠和展开，避免 resize 时延迟任务互相覆盖
   useEffect(() => {
     const expandPanel = (panel: PanelImperativeHandle, fallbackSize: number) => {
       panel.expand()
@@ -110,35 +117,29 @@ function ResizableWrapper() {
       }
     }
 
-    const timer = setTimeout(() => {
-      // 左侧面板
-      if (leftPanelRef.current) {
-        if (leftSidebarVisible) {
-          expandPanel(leftPanelRef.current, minLeftSidebarSize)
-        } else {
-          leftPanelRef.current.collapse()
-        }
+    if (leftPanelRef.current) {
+      if (leftSidebarVisible) {
+        expandPanel(leftPanelRef.current, minLeftSidebarSize)
+      } else {
+        leftPanelRef.current.collapse()
       }
-      
-      // 中间面板
-      if (centerPanelRef.current) {
-        if (centerPanelVisible) {
-          expandPanel(centerPanelRef.current, minEditorSize)
-        } else {
-          centerPanelRef.current.collapse()
-        }
+    }
+
+    if (centerPanelRef.current) {
+      if (centerPanelVisible) {
+        expandPanel(centerPanelRef.current, minEditorSize)
+      } else {
+        centerPanelRef.current.collapse()
       }
-      
-      // 右侧面板
-      if (rightPanelRef.current) {
-        if (rightSidebarVisible) {
-          expandPanel(rightPanelRef.current, minRightSidebarSize)
-        } else {
-          rightPanelRef.current.collapse()
-        }
+    }
+
+    if (rightPanelRef.current) {
+      if (rightSidebarVisible) {
+        expandPanel(rightPanelRef.current, minRightSidebarSize)
+      } else {
+        rightPanelRef.current.collapse()
       }
-    }, 100)
-    return () => clearTimeout(timer)
+    }
   }, [leftSidebarVisible, centerPanelVisible, rightSidebarVisible, minEditorSize, minLeftSidebarSize, minRightSidebarSize])
 
   // 根据面板可见性渲染布局

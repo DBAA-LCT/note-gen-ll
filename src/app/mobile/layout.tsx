@@ -62,10 +62,6 @@ const ControlLink = dynamic(
   () => import('@/app/core/main/mark/control-link').then(module => module.ControlLink),
   { ssr: false },
 )
-const ControlFile = dynamic(
-  () => import('@/app/core/main/mark/control-file').then(module => module.ControlFile),
-  { ssr: false },
-)
 const ControlTodo = dynamic(
   () => import('@/app/core/main/mark/control-todo').then(module => module.ControlTodo),
   { ssr: false },
@@ -223,7 +219,6 @@ export default function RootLayout({
                 <ControlRecording />
                 <ControlImage />
                 <ControlLink />
-                <ControlFile />
                 <ControlTodo />
               </div>
             ) : null}

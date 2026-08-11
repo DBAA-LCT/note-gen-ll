@@ -34,8 +34,8 @@ export function MobileUpdateSettings() {
         <div className="flex items-center gap-3 p-4">
           <Image
             src="/app-icon.png"
-            alt="NoteGen logo"
-            className="size-12 shrink-0 rounded-xl dark:invert"
+            alt="NoteGoal logo"
+            className="size-12 shrink-0 rounded-xl"
             width={48}
             height={48}
           />

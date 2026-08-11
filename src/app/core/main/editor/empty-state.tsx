@@ -198,7 +198,7 @@ export function EmptyState({
           <div className="flex items-center justify-center gap-3 mb-2">
             <Image 
               src="/app-icon.png" 
-              alt="NoteGen" 
+              alt="NoteGoal" 
               width={60}
               height={60}
               className="w-10 h-10 dark:invert"

@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "NoteGen",
+    "title": "NoteGoal",
     "description": "Capture first. Organize later."
   },
   "tray": {
@@ -12,9 +12,8 @@
     "newFolder": "New Folder",
     "settings": "Settings",
     "window": "Window",
-    "pinToggle": "Pin/Unpin",
     "hideWindow": "Hide to Tray",
-    "quit": "Quit NoteGen"
+    "quit": "Quit NoteGoal"
   },
   "settings": {
     "defaultModels": {
@@ -890,7 +889,7 @@
       "resourcesTitle": "Resources and support",
       "resourcesDesc": "Open docs, release notes, or community channels for feedback.",
       "licenseText": "Open source · GitHub · GPL-3.0",
-      "version": "NoteGen v{version}",
+      "version": "NoteGoal v{version}",
       "checkReleases": "Check Release History",
       "language": "Language",
       "checkUpdate": "Check for Updates",

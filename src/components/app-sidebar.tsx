@@ -14,7 +14,6 @@ import {
 import { usePathname, useRouter } from 'next/navigation'
 import AppStatus from "./app-status"
 import { Store } from "@tauri-apps/plugin-store"
-import { PinToggle } from "./pin-toggle"
 import { useTranslations } from 'next-intl'
 import { useEffect, useState } from "react"
 import useImageStore from "@/stores/imageHosting"
@@ -112,7 +111,6 @@ export function AppSidebar({ onSearchClick }: AppSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <PinToggle />
         <SidebarMenuButton 
           isActive={settingsOpen}
           className="md:h-8 md:p-0"

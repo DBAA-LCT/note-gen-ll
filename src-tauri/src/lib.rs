@@ -10,6 +10,7 @@ mod cloud_folder_sync;
 mod database_recovery;
 mod device;
 mod fonts;
+mod maimemo;
 mod mcp;
 mod mcp_runtime;
 #[cfg(target_os = "android")]
@@ -94,6 +95,7 @@ pub fn run() {
             install_mcp_runtime,
             cancel_mcp_runtime_install,
             get_device_id,
+            maimemo::maimemo_request,
             list_system_fonts,
             analytics::track_analytics_event,
             export_app_data,

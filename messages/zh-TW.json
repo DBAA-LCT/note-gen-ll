@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "NoteGen",
+    "title": "NoteGoal",
     "description": "先記錄，再整理。"
   },
   "tray": {
@@ -12,9 +12,8 @@
     "newFolder": "新建資料夾",
     "settings": "設置",
     "window": "視窗",
-    "pinToggle": "置頂/取消置頂",
     "hideWindow": "隱藏到托盤",
-    "quit": "退出 NoteGen"
+    "quit": "退出 NoteGoal"
   },
   "settings": {
     "defaultModels": {
@@ -1006,7 +1005,7 @@
       "resourcesTitle": "資源與支援",
       "resourcesDesc": "查看文件、版本記錄，或進入社群回饋問題。",
       "licenseText": "開源專案 · GitHub · GPL-3.0",
-      "version": "NoteGen v{version}",
+      "version": "NoteGoal v{version}",
       "checkReleases": "查詢歷史版本",
       "language": "語言",
       "checkUpdate": "檢查更新",

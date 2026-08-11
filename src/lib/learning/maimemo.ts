@@ -47,22 +47,51 @@ export async function saveMaimemoToken(token: string): Promise<void> {
   else window.localStorage.removeItem(TOKEN_KEY)
 }
 
+async function describeMaimemoError(status: number, detail: string): Promise<Error> {
+  let message = detail.slice(0, 160)
+  try {
+    const payload = JSON.parse(detail) as { errors?: Array<{ code?: string; msg?: string }> }
+    const error = payload.errors?.[0]
+    if (error?.msg || error?.code) message = [error.msg, error.code].filter(Boolean).join('（') + (error.msg && error.code ? '）' : '')
+  } catch { /* Keep the response text when it is not JSON. */ }
+  return new Error(`墨墨 API 请求失败（${status}）${message ? `：${message}` : ''}`)
+}
+
+type MaimemoEnvelope<T> = { data?: T; errors?: Array<{ code?: string; msg?: string }>; success?: boolean }
+type NativeMaimemoResponse = { status: number; body: string }
+
 async function maimemoRequest<T>(path: string, body?: Record<string, unknown>, token?: string, method?: 'GET' | 'POST'): Promise<T> {
   const accessToken = token?.trim() || await getMaimemoToken()
   if (!accessToken) throw new Error('尚未配置墨墨开放 API Token')
-  const request = isTauriRuntime()
-    ? (await import('@tauri-apps/plugin-http')).fetch
-    : globalThis.fetch
-  const response = await request(`${API_BASE}${path}`, {
-    method: method || (body ? 'POST' : 'GET'),
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '')
-    throw new Error(`墨墨 API 请求失败（${response.status}）${detail ? `：${detail.slice(0, 160)}` : ''}`)
+
+  const resolvedMethod = method || (body ? 'POST' : 'GET')
+  let status: number
+  let responseText: string
+  if (isTauriRuntime()) {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const response = await invoke<NativeMaimemoResponse>('maimemo_request', {
+      path,
+      method: resolvedMethod,
+      body: body || null,
+      token: accessToken,
+    })
+    status = response.status
+    responseText = response.body
+  } else {
+    const response = await globalThis.fetch(`${API_BASE}${path}`, {
+      method: resolvedMethod,
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    status = response.status
+    responseText = await response.text()
   }
-  const payload = await response.json() as T & { data?: T }
+
+  if (status < 200 || status >= 300) throw await describeMaimemoError(status, responseText)
+  const payload = JSON.parse(responseText) as T & MaimemoEnvelope<T>
+  if (payload && typeof payload === 'object' && payload.success === false) {
+    throw await describeMaimemoError(status, responseText)
+  }
   return payload && typeof payload === 'object' && payload.data ? payload.data : payload
 }
 

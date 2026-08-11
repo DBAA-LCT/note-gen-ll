@@ -32,7 +32,6 @@ interface Events {
     articlePath: string;
   };
   'toolbar-shortcut-image': unknown;
-  'toolbar-shortcut-file': unknown;
   'toolbar-shortcut-todo': unknown;
   'editor-ai-streaming': { isStreaming: boolean; targetFilePath?: string; terminate?: () => void };
   'toolbar-shortcut-recording': unknown;
@@ -76,8 +75,6 @@ interface Events {
   'toolbar-translation': unknown;
   'toolbar-organize': unknown;
   'text-shortcut-register': unknown;
-  'window-pin-register': unknown;
-  'window-pin-changed': boolean;
   'link-shortcut-register': unknown;
   'refresh-marks': unknown;
   'open-new-record-tag': void;

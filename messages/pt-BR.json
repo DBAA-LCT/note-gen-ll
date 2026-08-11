@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "NoteGen",
+    "title": "NoteGoal",
     "description": "Registre primeiro. Organize depois."
   },
   "tray": {
@@ -12,9 +12,8 @@
     "newFolder": "Nova pasta",
     "settings": "Configurações",
     "window": "Janela",
-    "pinToggle": "Fixar/Desafixar",
     "hideWindow": "Ocultar na bandeja",
-    "quit": "Sair do NoteGen"
+    "quit": "Sair do NoteGoal"
   },
   "settings": {
     "defaultModels": {
@@ -827,7 +826,7 @@
       "resourcesTitle": "Recursos e suporte",
       "resourcesDesc": "Abra documentos, notas de versão ou canais da comunidade para feedback.",
       "licenseText": "Código aberto · GitHub · GPL-3.0",
-      "version": "NoteGen v{version}",
+      "version": "NoteGoal v{version}",
       "checkReleases": "Verificar Histórico de Lançamentos",
       "language": "Idioma",
       "checkUpdate": "Verificar Atualizações",

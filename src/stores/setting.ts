@@ -919,7 +919,9 @@ const useSettingStore = create<SettingState>((set, get) => ({
           hydratedSettings[key] = res as AiConfig[]
         } else if (key === 'recordToolbarConfig') {
           // 确保包含所有工具，如果缺少新工具则自动添加
-          const storedConfig = (res as RecordToolbarItem[]).filter(item => item.id !== 'scan')
+          const storedConfig = (res as RecordToolbarItem[]).filter(
+            item => item.id !== 'scan' && item.id !== 'file'
+          )
           const defaultConfig = value as RecordToolbarItem[]
 
           // 检查是否有缺失的工具
@@ -1657,11 +1659,10 @@ const useSettingStore = create<SettingState>((set, get) => ({
     { id: 'recording', enabled: true, order: 1 },
     { id: 'image', enabled: true, order: 2 },
     { id: 'link', enabled: true, order: 3 },
-    { id: 'file', enabled: true, order: 4 },
-    { id: 'todo', enabled: true, order: 5 },
+    { id: 'todo', enabled: true, order: 4 },
   ],
   setRecordToolbarConfig: async (config: RecordToolbarItem[]) => {
-    const nextConfig = config.filter(item => item.id !== 'scan')
+    const nextConfig = config.filter(item => item.id !== 'scan' && item.id !== 'file')
     set({ recordToolbarConfig: nextConfig })
     const store = await Store.load('store.json');
     await store.set('recordToolbarConfig', nextConfig)

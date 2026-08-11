@@ -4,7 +4,6 @@ import * as React from "react"
 import { initMarksDb } from "@/db/marks"
 import { ControlText } from "./control-text"
 import { ControlImage } from "./control-image"
-import { ControlFile } from "./control-file"
 import { ControlLink } from "./control-link"
 import { ControlRecording } from "./control-recording"
 import { ControlTodo } from "./control-todo"
@@ -164,8 +163,6 @@ function SortableToolbarItem({ id }: SortableToolbarItemProps) {
         return <ControlImage />
       case 'link':
         return <ControlLink />
-      case 'file':
-        return <ControlFile />
       case 'todo':
         return <ControlTodo />
       default:
