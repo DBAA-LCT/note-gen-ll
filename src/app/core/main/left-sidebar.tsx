@@ -1,7 +1,7 @@
 'use client'
 
 import { Tabs, TabsContent } from "@/components/ui/tabs"
-import { Files, Highlighter, Palette } from "lucide-react"
+import { Files, GraduationCap, Highlighter } from "lucide-react"
 import { FileSidebar } from "./file"
 import { NoteSidebar } from "./mark"
 import { FileActions } from "./file/file-actions"
@@ -11,12 +11,12 @@ import { useSidebarStore } from "@/stores/sidebar"
 import { ExpandableTabs } from "@/components/ui/expandable-tabs"
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
-import { CanvasActions, CanvasSidebar } from './canvas/canvas-sidebar'
+import { LearningSidebar } from './learning/learning-sidebar'
 
 const SIDEBAR_TABS = [
   { title: "files", icon: Files },
   { title: "notes", icon: Highlighter },
-  { title: "canvases", icon: Palette },
+  { title: "learning", icon: GraduationCap },
 ] as const
 
 export function LeftSidebar() {
@@ -36,7 +36,7 @@ export function LeftSidebar() {
   // Prepare tabs with translated titles
   const tabs = SIDEBAR_TABS.map(tab => ({
     ...tab,
-    title: t(`navigation.${tab.title === 'notes' ? 'record' : tab.title}`),
+    title: tab.title === 'learning' ? '学习' : t(`navigation.${tab.title === 'notes' ? 'record' : tab.title}`),
   }))
 
   return (
@@ -76,19 +76,6 @@ export function LeftSidebar() {
             >
               <MarkActions />
             </motion.div>
-            <motion.div
-              initial={false}
-              animate={leftSidebarTab === "canvases"
-                ? { opacity: 1, x: 0 }
-                : { opacity: 0, x: 10 }}
-              transition={{ duration: 0.2 }}
-              className={cn(
-                "col-start-1 row-start-1",
-                leftSidebarTab !== "canvases" && "pointer-events-none"
-              )}
-            >
-              <CanvasActions />
-            </motion.div>
           </div>
         </div>
         <div className="relative min-h-0 flex-1">
@@ -108,10 +95,10 @@ export function LeftSidebar() {
           </TabsContent>
           <TabsContent
             forceMount
-            value="canvases"
+            value="learning"
             className="absolute inset-0 m-0 overflow-hidden data-[state=inactive]:hidden"
           >
-            <CanvasSidebar />
+            <LearningSidebar />
           </TabsContent>
         </div>
       </Tabs>

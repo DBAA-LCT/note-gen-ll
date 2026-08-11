@@ -44,9 +44,9 @@ import { readMarksTool, createMarkTool, updateMarkTool, deleteMarkTool } from '.
 import { saveMemoryTool, listMemoriesTool, deleteMemoryTool, clearMemoriesTool } from './tools/memory-tools'
 import { attachmentTools } from './tools/attachment-tools'
 import { imageTools } from './tools/image-tools'
-import { canvasTools } from './tools/canvas-tools'
 import { webTools } from './tools/web-tools'
 import { knowledgeTools } from './tools/knowledge-tools'
+import { learningTools } from './tools/learning-tools'
 import {
   executeRegisteredSkillScript,
   executeSkillScriptTool,
@@ -1955,6 +1955,7 @@ function buildTools(): AgentTool[] {
       execute: executeReadFilesBatch,
     }),
     ...knowledgeTools,
+    ...learningTools,
     dateDifferenceTool,
     adaptLegacyTool({
       name: 'note_create_file',
@@ -2180,7 +2181,6 @@ function buildTools(): AgentTool[] {
     buildMcpListResourceTemplatesTool(),
     buildMcpReadResourceTool(),
     buildMcpCallTool(),
-    ...canvasTools,
     ...attachmentTools,
     ...imageTools,
     ...webTools,

@@ -13,7 +13,6 @@ import {
   Languages,
   ListTree,
   Package,
-  Palette,
   Search,
   FilePlus2,
   WandSparkles,
@@ -30,9 +29,7 @@ import { Button } from "@/components/ui/button"
 import { getAllMarks, type Mark } from "@/db/marks"
 import { getAllMarkdownFiles, type MarkdownFile } from "@/lib/files"
 import { cn } from "@/lib/utils"
-import useCanvasStore from "@/stores/canvas"
 import { useSkillsStore } from "@/stores/skills"
-import type { CanvasProject } from "@/types/canvas"
 import type { SkillMetadata } from "@/lib/skills/types"
 
 export type ComposerMenuMode = "command" | "resource"
@@ -49,7 +46,6 @@ interface ChatComposerMenuProps {
   onCommandSelect: (prompt: string) => void
   onFileSelect: (file: MarkdownFile) => void
   onRecordSelect: (mark: Mark) => void
-  onCanvasSelect: (project: CanvasProject) => void
   onSkillSelect: (skill: SkillMetadata) => void
 }
 
@@ -91,12 +87,9 @@ export const ChatComposerMenu = forwardRef<
   onCommandSelect,
   onFileSelect,
   onRecordSelect,
-  onCanvasSelect,
   onSkillSelect,
 }, ref) {
   const t = useTranslations("record.chat.input.composerMenu")
-  const projects = useCanvasStore(state => state.projects)
-  const loadProjects = useCanvasStore(state => state.loadProjects)
   const skillsEnabled = useSkillsStore(state => state.enabled)
   const skills = useSkillsStore(state => state.skills)
   const skillsInitialized = useSkillsStore(state => state.initialized)
@@ -124,16 +117,14 @@ export const ChatComposerMenu = forwardRef<
       if (!active) return
       setRecords(nextRecords.filter(record => record.deleted === 0).slice(0, 200))
     })
-    const canvasTask = projects.length === 0 ? loadProjects() : Promise.resolve()
-
-    void Promise.allSettled([fileTask, recordTask, canvasTask]).then(() => {
+    void Promise.allSettled([fileTask, recordTask]).then(() => {
       if (active) setLoading(false)
     })
 
     return () => {
       active = false
     }
-  }, [loadProjects, mode, projects.length])
+  }, [mode])
 
   useEffect(() => {
     if (mode !== "command") return
@@ -190,27 +181,14 @@ export const ChatComposerMenu = forwardRef<
           onSelect: () => onRecordSelect(record),
         }
       }),
-      ...projects.map(project => ({
-        key: `canvas:${project.id}`,
-        group: t("resources.canvases"),
-        label: project.title,
-        description: t("resources.canvasSummary", {
-          nodes: project.document.nodes.length,
-          edges: project.document.edges.length,
-        }),
-        icon: Palette,
-        onSelect: () => onCanvasSelect(project),
-      })),
     ]
   }, [
     files,
     mode,
-    onCanvasSelect,
     onCommandSelect,
     onFileSelect,
     onRecordSelect,
     onSkillSelect,
-    projects,
     records,
     skills,
     skillsEnabled,

@@ -43,7 +43,7 @@ export const DEFAULT_RAG_SETTINGS: RagSettings = {
   similarityThreshold: 0.25,
   rerankThreshold: 0.1,
   excludedPaths: DEFAULT_EXCLUDED_RAG_PATHS,
-  enabledSourceTypes: ['article', 'record', 'canvas'],
+  enabledSourceTypes: ['article', 'record'],
   globalSemanticSearchEnabled: true,
   indexPaused: false,
 };
@@ -86,7 +86,12 @@ const useRagSettingsStore = create<RagSettingsState>((set, get) => ({
       const similarityThreshold = await store.get<number>('ragSimilarityThreshold') ?? DEFAULT_RAG_SETTINGS.similarityThreshold;
       const rerankThreshold = await store.get<number>('ragRerankThreshold') ?? DEFAULT_RAG_SETTINGS.rerankThreshold;
       const excludedPaths = await store.get<string[]>('ragExcludedPaths') ?? DEFAULT_RAG_SETTINGS.excludedPaths;
-      const enabledSourceTypes = await store.get<KnowledgeSourceType[]>('ragEnabledSourceTypes') ?? DEFAULT_RAG_SETTINGS.enabledSourceTypes;
+      const storedSourceTypes = await store.get<KnowledgeSourceType[]>('ragEnabledSourceTypes');
+      const enabledSourceTypes = (storedSourceTypes ?? DEFAULT_RAG_SETTINGS.enabledSourceTypes)
+        .filter(sourceType => sourceType === 'article' || sourceType === 'record');
+      if (storedSourceTypes?.includes('canvas')) {
+        await store.set('ragEnabledSourceTypes', enabledSourceTypes);
+      }
       const globalSemanticSearchEnabled = await store.get<boolean>('ragGlobalSemanticSearchEnabled') ?? DEFAULT_RAG_SETTINGS.globalSemanticSearchEnabled;
       const indexPaused = await store.get<boolean>('ragKnowledgeIndexPaused') ?? DEFAULT_RAG_SETTINGS.indexPaused;
       const indexNeedsRebuild = await store.get<boolean>('ragIndexNeedsRebuild') ?? false;
@@ -121,6 +126,10 @@ const useRagSettingsStore = create<RagSettingsState>((set, get) => ({
         resolvedValue = Array.from(new Set(
           (value as string[]).map(path => path.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '').trim()).filter(Boolean)
         )) as RagSettings[K];
+      }
+      if (key === 'enabledSourceTypes') {
+        resolvedValue = (value as KnowledgeSourceType[])
+          .filter(sourceType => sourceType === 'article' || sourceType === 'record') as RagSettings[K];
       }
 
       // 更新本地状态

@@ -356,7 +356,7 @@ export interface EditorViewState {
   scrollTop: number
 }
 
-export type EditorTabKind = 'file' | 'record' | 'canvas'
+export type EditorTabKind = 'file' | 'record' | 'canvas' | 'learning'
 
 export interface OpenTabInfo {
   id: string
@@ -379,12 +379,16 @@ function isCanvasOpenTabPath(path: string): boolean {
   return path.startsWith('canvas://project/')
 }
 
+function isLearningOpenTabPath(path: string): boolean {
+  return path.startsWith('learning://')
+}
+
 function isRecordOpenTab(tab?: OpenTabInfo | null): boolean {
   return !!tab && (tab.kind === 'record' || isRecordOpenTabPath(tab.path))
 }
 
 function getActiveFilePathForTab(tab?: OpenTabInfo | null): string {
-  return tab && !isRecordOpenTab(tab) && !isCanvasOpenTabPath(tab.path) ? tab.path : ''
+  return tab && !isRecordOpenTab(tab) && !isCanvasOpenTabPath(tab.path) && !isLearningOpenTabPath(tab.path) ? tab.path : ''
 }
 
 // 查找文件夹节点

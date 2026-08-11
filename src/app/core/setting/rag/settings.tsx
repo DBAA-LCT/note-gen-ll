@@ -18,7 +18,6 @@ import {
   Shield,
   Sparkles,
   StickyNote,
-  Palette,
   Pause,
   Play,
   Target,
@@ -377,7 +376,6 @@ export function Settings() {
           {([
             ['article', BookOpen],
             ['record', StickyNote],
-            ['canvas', Palette],
           ] as const).map(([sourceType, Icon]) => (
             <Item key={sourceType} variant="outline">
               <ItemMedia variant="icon"><Icon /></ItemMedia>
@@ -455,7 +453,7 @@ export function Settings() {
             <ItemContent>
               <ItemTitle>{t('structuredIndexTitle')}</ItemTitle>
               <ItemDescription>
-                {(['article', 'record', 'canvas'] as KnowledgeSourceType[]).map(type => (
+                {(['article', 'record'] as KnowledgeSourceType[]).map(type => (
                   <span key={type} className="mr-3 inline-block">
                     {t(`sourceTypes.${type}.title`)}: {knowledgeStats[type].ready}/{Object.values(knowledgeStats[type]).reduce((sum, value) => sum + value, 0)}
                     {knowledgeStats[type].failed > 0 ? ` · ${t('failedCount', { count: knowledgeStats[type].failed })}` : ''}

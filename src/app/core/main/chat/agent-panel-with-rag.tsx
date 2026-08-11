@@ -1,13 +1,11 @@
 "use client"
 import * as React from "react"
 import { AgentPlan } from "@/components/ui/agent-plan"
-import { FileText, ChevronRight, Database, ExternalLink, NotebookPen, PanelsTopLeft } from "lucide-react"
+import { FileText, ChevronRight, Database, ExternalLink, NotebookPen } from "lucide-react"
 import { useLocale, useTranslations } from "next-intl"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
-import { createCanvasTab } from "@/app/core/main/canvas/canvas-tab"
 import useArticleStore from "@/stores/article"
-import useCanvasStore from "@/stores/canvas"
 import useMarkStore from "@/stores/mark"
 import { useSidebarStore } from "@/stores/sidebar"
 import useTagStore from "@/stores/tag"
@@ -152,13 +150,12 @@ export function AgentPanelWithRag({
     const counts = { article: 0, record: 0, canvas: 0, unknown: 0 }
     ragSources.forEach((source) => {
       const sourceType = detailMap.get(source)?.sourceType
-      if (sourceType) counts[sourceType] += 1
+      if (sourceType === 'article' || sourceType === 'record') counts[sourceType] += 1
       else counts.unknown += 1
     })
     const parts = [
       counts.article ? t('record.chat.ragSources.articleCount', { count: counts.article }) : '',
       counts.record ? t('record.chat.ragSources.recordCount', { count: counts.record }) : '',
-      counts.canvas ? t('record.chat.ragSources.canvasCount', { count: counts.canvas }) : '',
       counts.unknown ? t('record.chat.ragSources.sourceCount', { count: counts.unknown }) : '',
     ].filter(Boolean)
     return new Intl.ListFormat(locale, { style: 'short', type: 'conjunction' }).format(parts)
@@ -175,19 +172,6 @@ export function AgentPanelWithRag({
       if (pathname.startsWith('/mobile')) router.push('/mobile/record')
       return
     }
-    if (detail.sourceType === 'canvas' && detail.locator?.canvasId) {
-      const canvasId = detail.locator.canvasId
-      useCanvasStore.getState().setPendingFocus({ canvasId, nodeIds: detail.locator.nodeIds || [] })
-      const project = await useCanvasStore.getState().openProject(canvasId)
-      if (!project) return
-      if (pathname.startsWith('/mobile')) {
-        router.push(`/mobile/canvas/editor?id=${encodeURIComponent(canvasId)}`)
-        return
-      }
-      await useArticleStore.getState().addTab(createCanvasTab(project))
-      await useSidebarStore.getState().setLeftSidebarTab('canvases')
-      return
-    }
     const filepath = detail.locator?.filePath || detail.filepath
     if (!filepath) return
     setActiveFilePath(filepath)
@@ -196,13 +180,11 @@ export function AgentPanelWithRag({
 
   const sourceIcon = (sourceType?: RagSourceDetail['sourceType']) => {
     if (sourceType === 'record') return <NotebookPen className="size-4 text-muted-foreground" />
-    if (sourceType === 'canvas') return <PanelsTopLeft className="size-4 text-muted-foreground" />
     return <FileText className="size-4 text-muted-foreground" />
   }
 
   const openSourceLabel = (sourceType?: RagSourceDetail['sourceType']) => {
     if (sourceType === 'record') return t('record.chat.ragSources.openRecord')
-    if (sourceType === 'canvas') return t('record.chat.ragSources.openCanvas')
     if (sourceType === 'article') return t('record.chat.ragSources.openArticle')
     return t('record.chat.ragSources.openSource')
   }

@@ -5,7 +5,6 @@ import useSettingStore from "@/stores/setting"
 import { Textarea } from "@/components/ui/textarea"
 import useChatStore from "@/stores/chat"
 import useArticleStore from "@/stores/article"
-import useCanvasStore from "@/stores/canvas"
 import { useTranslations } from 'next-intl'
 import { useLocalStorage } from 'react-use';
 import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace"
@@ -48,9 +47,7 @@ import {
 } from './chat-context-strip'
 import { getMarkListItemContent } from '@/app/core/main/mark/mark-list-item-content'
 import { getRecordIdFromTabPath } from '@/app/core/main/mark/mark-record-tab'
-import { getCanvasIdFromTabPath } from '@/app/core/main/canvas/canvas-tab'
 import { getMarkById, type Mark } from '@/db/marks'
-import type { CanvasProject, CanvasSelectionContext } from '@/types/canvas'
 import type { SkillMetadata } from '@/lib/skills/types'
 
 const MAX_IMAGE_ATTACHMENTS = 6
@@ -127,12 +124,17 @@ export const ChatInput = React.memo(function ChatInput() {
     currentArticle,
     openTabs,
   } = useArticleStore()
-  const activeTabPath = React.useMemo(
-    () => openTabs.find(tab => tab.id === activeTabId)?.path || activeFilePath,
-    [activeFilePath, activeTabId, openTabs]
-  )
-  const canvasSelectionContext = useCanvasStore(state => state.selectionContext)
-  const setCanvasSelectionContext = useCanvasStore(state => state.setSelectionContext)
+  const activeTabPath = React.useMemo(() => {
+    const activeTab = openTabs.find(tab => tab.id === activeTabId)
+
+    // System workspaces are editor surfaces, not files or folders. Never pass
+    // their protocol paths to workspace directory scanning or AI attachments.
+    if (activeTab?.kind === 'learning' || activeTab?.path.startsWith('learning://')) {
+      return ''
+    }
+
+    return activeTab?.path || activeFilePath
+  }, [activeFilePath, activeTabId, openTabs])
   const [isComposing, setIsComposing] = useState(false)
   const t = useTranslations()
   const defaultPlaceholder = t('record.chat.input.placeholder.default')
@@ -193,11 +195,10 @@ export const ChatInput = React.memo(function ChatInput() {
       if (context.kind === 'record') {
         return activeQuote?.articlePath !== context.record.articlePath
       }
-      return canvasSelectionContext?.canvasId !== context.canvas.canvasId
+      return true
     }),
     [
       activeQuote?.articlePath,
-      canvasSelectionContext?.canvasId,
       linkedResource,
       mentionedContexts,
       visibleActiveTabContext,
@@ -242,22 +243,16 @@ export const ChatInput = React.memo(function ChatInput() {
       : '',
     activeQuote?.fullContent,
     contextUsageAgentRuntime,
-    canvasSelectionContext ? JSON.stringify(canvasSelectionContext) : '',
     visibleActiveTabContext
       ? visibleActiveTabContext.kind === 'record'
         ? visibleActiveTabContext.record.fullContent
-        : visibleActiveTabContext.kind === 'canvas'
-          ? JSON.stringify(visibleActiveTabContext.canvas)
-          : `${visibleActiveTabContext.file.name}\n${visibleActiveTabContext.file.relativePath}`
+        : `${visibleActiveTabContext.file.name}\n${visibleActiveTabContext.file.relativePath}`
       : '',
     ...visibleMentionedContexts.map(context => {
       if (context.kind === 'file') {
         return `${context.file.name}\n${context.file.relativePath}`
       }
-      if (context.kind === 'record') {
-        return context.record.fullContent
-      }
-      return JSON.stringify(context.canvas)
+      return context.record.fullContent
     }),
     ...fileAttachments.map(attachment => attachment.preview || ''),
   ].filter(Boolean).join('\n\n'), [
@@ -265,7 +260,6 @@ export const ChatInput = React.memo(function ChatInput() {
     activeFilePath,
     currentArticle,
     contextUsageAgentRuntime,
-    canvasSelectionContext,
     fileAttachments,
     contextUsageLinkedContent,
     linkedResource,
@@ -400,31 +394,6 @@ export const ChatInput = React.memo(function ChatInput() {
       to: -1,
       articlePath: `record:${mark.id}`,
       markType: mark.type,
-    }
-  }
-
-  function createCanvasContext(project: CanvasProject): CanvasSelectionContext {
-    return {
-      canvasId: project.id,
-      canvasTitle: project.title,
-      scope: 'canvas',
-      nodes: project.document.nodes.map(node => ({
-        id: node.id,
-        type: node.type,
-        label: String(node.data.label || node.data.description || node.type),
-        description: node.data.description,
-        filePath: node.data.filePath,
-        recordId: node.data.recordId,
-        url: node.data.url,
-        checked: node.data.checked,
-        chart: node.data.chart,
-      })),
-      edges: project.document.edges.map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        label: edge.label,
-      })),
     }
   }
 
@@ -1108,28 +1077,6 @@ ${previewLines.join('\n')}
         return
       }
 
-      const canvasId = getCanvasIdFromTabPath(activeTabPath)
-      if (canvasId !== null) {
-        const canvasStore = useCanvasStore.getState()
-        const project = canvasStore.projects.find(item => item.id === canvasId)
-          || await canvasStore.openProject(canvasId)
-        if (cancelled) return
-        const latestDocument = useCanvasStore.getState().documents[canvasId]
-        setActiveTabContext(project
-          ? {
-              kind: 'canvas',
-              canvas: createCanvasContext({
-                ...project,
-                document: latestDocument || project.document,
-              }),
-            }
-          : null)
-        setLinkedResource(null)
-        setChatLinkedResource(null)
-        setLinkedResourcePreview(null)
-        return
-      }
-
       const workspace = await getWorkspacePath()
       if (cancelled) return
 
@@ -1289,13 +1236,11 @@ ${previewLines.join('\n')}
           linkedResource={linkedResource}
           activeTabContext={visibleActiveTabContext}
           quoteData={activeQuote}
-          canvasContext={canvasSelectionContext}
           selectedSkills={selectedSkills}
           mentionedContexts={visibleMentionedContexts}
           onRemoveLinkedResource={removeLinkedFile}
           onRemoveActiveTabContext={() => setActiveTabContext(null)}
           onRemoveQuote={removeQuote}
-          onRemoveCanvas={() => setCanvasSelectionContext(null)}
           onRemoveSkill={skillId => {
             setSelectedSkills(current => current.filter(skill => skill.id !== skillId))
           }}
@@ -1421,7 +1366,6 @@ ${previewLines.join('\n')}
               attachedImages={attachedImages}
               fileAttachments={fileAttachments}
               quoteData={activeQuote}
-              canvasSelectionContext={canvasSelectionContext}
               selectedSkillIds={selectedSkills.map(skill => skill.id)}
               mentionedFiles={[
                 ...(visibleActiveTabContext ? [visibleActiveTabContext] : []),
@@ -1434,12 +1378,6 @@ ${previewLines.join('\n')}
                 ...visibleMentionedContexts,
               ].flatMap(context =>
                 context.kind === 'record' ? [context.record] : []
-              )}
-              mentionedCanvases={[
-                ...(visibleActiveTabContext ? [visibleActiveTabContext] : []),
-                ...visibleMentionedContexts,
-              ].flatMap(context =>
-                context.kind === 'canvas' ? [context.canvas] : []
               )}
               dockStyle={isMobile}
               ref={chatSendRef}
@@ -1475,19 +1413,6 @@ ${previewLines.join('\n')}
           const record = createRecordQuote(mark)
           if (activeQuote?.articlePath !== record.articlePath) {
             const context: MentionedContext = { kind: 'record', record }
-            const key = getMentionedContextKey(context)
-            setMentionedContexts(current =>
-              current.some(selected => getMentionedContextKey(selected) === key)
-                ? current
-                : [...current, context]
-            )
-          }
-          replaceComposerMenuToken()
-        }}
-        onCanvasSelect={project => {
-          const canvas = createCanvasContext(project)
-          if (canvasSelectionContext?.canvasId !== canvas.canvasId) {
-            const context: MentionedContext = { kind: 'canvas', canvas }
             const key = getMentionedContextKey(context)
             setMentionedContexts(current =>
               current.some(selected => getMentionedContextKey(selected) === key)

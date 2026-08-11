@@ -18,7 +18,7 @@ import {
   PenTool,
   Brain,
   Globe2,
-  Palette,
+  GraduationCap,
 } from "lucide-react"
 import type { ReactNode } from 'react'
 import type { SettingSection } from '@/stores/settings-dialog'
@@ -58,8 +58,8 @@ const baseConfig: SettingNavigationItem[] = [
     anchor: 'editor',
   },
   {
-    icon: <Palette className="size-4" />,
-    anchor: 'canvas',
+    icon: <GraduationCap className="size-4" />,
+    anchor: 'learning',
   },
   {
     icon: <KeyboardIcon className="size-4" />,

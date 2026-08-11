@@ -27,7 +27,7 @@ const knowledgeSearchTool: AgentTool = {
       mode: { type: 'string', enum: ['rag', 'keyword'] },
       sourceTypes: {
         type: 'array',
-        items: { type: 'string', enum: ['article', 'record', 'canvas'] },
+        items: { type: 'string', enum: ['article', 'record'] },
         description: 'Sources explicitly preferred or restricted by the user.',
       },
       sourceMode: { type: 'string', enum: ['prefer', 'only'] },
@@ -40,12 +40,13 @@ const knowledgeSearchTool: AgentTool = {
   execute: async input => {
     const query = typeof input.query === 'string' ? input.query.trim() : ''
     if (!query) return { ok: false, message: 'query 不能为空。', error: 'EMPTY_QUERY' }
-    const sourceTypes = strings(input.sourceTypes).filter(isKnowledgeSourceType)
-    const sourceMode = input.sourceMode === 'only' ? 'only' : input.sourceMode === 'prefer' ? 'prefer' : undefined
+    const sourceTypes = strings(input.sourceTypes)
+      .filter(isKnowledgeSourceType)
+      .filter(sourceType => sourceType !== 'canvas')
     const results = await searchKnowledge(query, {
       mode: input.mode === 'keyword' ? 'keyword' : 'rag',
-      sourceTypes: sourceTypes.length ? sourceTypes : undefined,
-      sourceMode,
+      sourceTypes: sourceTypes.length ? sourceTypes : ['article', 'record'],
+      sourceMode: 'only',
       folderPath: typeof input.folderPath === 'string' && input.folderPath.trim()
         ? input.folderPath.trim()
         : undefined,

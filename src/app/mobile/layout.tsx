@@ -11,18 +11,16 @@ import dayjs from "dayjs"
 import zh from "dayjs/locale/zh-cn";
 import en from "dayjs/locale/en";
 import { useI18n } from "@/hooks/useI18n"
-import useVectorStore from "@/stores/vector"
 import { TooltipProvider } from "@/components/ui/tooltip";
 import './mobile-styles.css'
-import useImageStore from "@/stores/imageHosting";
 import { AppFootbar } from "@/components/app-footbar"
 import { MobileStatusBar } from "@/components/mobile-statusbar"
 import { TextSizeProvider } from "@/contexts/text-size-context"
 import { MobileViewport } from "@/components/mobile-viewport"
-import useArticleStore from "@/stores/article"
 import { MobileModeProvider } from "@/hooks/use-mobile"
 import { Skeleton } from "@/components/ui/skeleton"
 import AppStatus from "@/components/app-status"
+import { isTauriRuntime } from '@/lib/check'
 
 const WritingScreen = dynamic(
   () => import('./writing/writing-screen').then(module => module.WritingScreen),
@@ -79,12 +77,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname()
-  const isWritingRoute = pathname === '/mobile/writing'
+  const nativeRuntime = isTauriRuntime()
+  const isWritingRoute = nativeRuntime && pathname === '/mobile/writing'
   const [hasWritingCache, setHasWritingCache] = useState(isWritingRoute)
   const { initSettingData, customThemeColors, appFontFamily } = useSettingStore()
-  const { initMainHosting } = useImageStore()
-  const { initCollapsibleList } = useArticleStore()
-  const { initVectorDb } = useVectorStore()
   const { currentLocale } = useI18n()
   useEffect(() => {
     if (isWritingRoute) {
@@ -107,10 +103,13 @@ export default function RootLayout({
   useEffect(() => {
     let cancelled = false
 
-    void import('@/lib/event-report').then(({ reportAppStart }) => reportAppStart())
+    if (isTauriRuntime()) {
+      void import('@/lib/event-report').then(({ reportAppStart }) => reportAppStart())
+    }
 
     const initializeApp = async () => {
       try {
+        if (!isTauriRuntime()) return
         const [
           { initAllDatabases },
           { initAutoDataSyncRuntime },
@@ -133,7 +132,8 @@ export default function RootLayout({
         }
         await initSettingData()
         getSyncPushQueue()
-        initMainHosting()
+        const useImageStore = (await import('@/stores/imageHosting')).default
+        useImageStore.getState().initMainHosting()
         await initAllDatabases()
         if (cancelled) return
         const { runMemoryMaintenance } = await import('@/lib/memory/auto-memory')
@@ -144,11 +144,13 @@ export default function RootLayout({
         } = await import('@/db/memories')
         await reconcileMemoryEmbeddingModel()
         void reindexPendingMemories()
-        await initCollapsibleList()
+        const useArticleStore = (await import('@/stores/article')).default
+        await useArticleStore.getState().initCollapsibleList()
         if (cancelled) return
         await initAutoDataSyncRuntime()
         if (cancelled) return
-        await initVectorDb()
+        const useVectorStore = (await import('@/stores/vector')).default
+        await useVectorStore.getState().initVectorDb()
         if (cancelled) return
         await useArticleStore.getState().initVectorIndexedFiles()
         if (cancelled) return
@@ -191,7 +193,6 @@ export default function RootLayout({
   const hideFootbar =
     pathname.startsWith('/mobile/setting/pages')
     || pathname === '/mobile/record/detail'
-    || pathname === '/mobile/canvas/editor'
 
   return (
     <MobileModeProvider mobile>
@@ -204,7 +205,7 @@ export default function RootLayout({
         <TextSizeProvider>
           <MobileViewport />
           <MobileStatusBar />
-          <AppStatus />
+          {nativeRuntime ? <AppStatus /> : null}
           <TooltipProvider>
             <div className="mobile-app-shell flex flex-col">
               <main className="mobile-app-main flex flex-1 w-full overflow-hidden">
@@ -225,18 +226,20 @@ export default function RootLayout({
               ) : null}
             </div>
             {/* 隐藏的记录工具组件，用于监听事件 */}
-            <div className="absolute opacity-0 pointer-events-none -z-50">
-              <ControlText />
-              <ControlRecording />
-              <ControlImage />
-              <ControlLink />
-              <ControlFile />
-              <ControlTodo />
-            </div>
+            {nativeRuntime ? (
+              <div className="absolute opacity-0 pointer-events-none -z-50">
+                <ControlText />
+                <ControlRecording />
+                <ControlImage />
+                <ControlLink />
+                <ControlFile />
+                <ControlTodo />
+              </div>
+            ) : null}
           </TooltipProvider>
-          <SyncConfirmDialog />
-          <MobileUpdateChecker />
-          <MemoryAutoNotifications />
+          {nativeRuntime ? <SyncConfirmDialog /> : null}
+          {nativeRuntime ? <MobileUpdateChecker /> : null}
+          {nativeRuntime ? <MemoryAutoNotifications /> : null}
         </TextSizeProvider>
       </ThemeProvider>
     </MobileModeProvider>

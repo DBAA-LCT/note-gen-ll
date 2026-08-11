@@ -5,7 +5,6 @@ export type SettingSection =
   | 'general'
   | 'record'
   | 'editor'
-  | 'canvas'
   | 'sync'
   | 'backup'
   | 'imageHosting'
@@ -21,13 +20,14 @@ export type SettingSection =
   | 'shortcuts'
   | 'imageMethod'
   | 'audio'
+  | 'learning'
 
 export const settingSections: SettingSection[] = [
   'about',
   'general',
   'record',
   'editor',
-  'canvas',
+  'learning',
   'shortcuts',
   'imageMethod',
   'audio',

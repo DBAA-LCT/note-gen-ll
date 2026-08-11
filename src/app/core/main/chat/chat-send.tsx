@@ -36,57 +36,6 @@ import {
   parseContextOverflowError,
   reduceLearnedContextWindow,
 } from '@/lib/ai/model-capacity'
-import type { CanvasSelectionContext } from '@/types/canvas'
-
-function buildCanvasSelectionContext(context: CanvasSelectionContext | null) {
-  if (!context) return ''
-  const nodeLabels = new Map(context.nodes.map(node => [node.id, node.label]))
-  const nodes = context.nodes.length > 0
-    ? context.nodes.map(node => {
-        const details = [
-          `id=${node.id}`,
-          `type=${node.type}`,
-          `label=${JSON.stringify(node.label)}`,
-          node.description ? `description=${JSON.stringify(node.description)}` : '',
-          node.filePath ? `filePath=${JSON.stringify(node.filePath)}` : '',
-          node.recordId !== undefined ? `recordId=${node.recordId}` : '',
-          node.url ? `url=${JSON.stringify(node.url)}` : '',
-          node.checked !== undefined ? `checked=${node.checked}` : '',
-          node.chart ? `chartData=${JSON.stringify({
-            title: node.chart.title,
-            type: node.chart.type,
-            categoryLabel: node.chart.categoryLabel,
-            series: node.chart.series,
-            data: node.chart.data,
-            primarySeriesId: node.chart.primarySeriesId,
-            sourceFormat: node.chart.sourceFormat,
-          })}` : '',
-        ].filter(Boolean)
-        return `- ${details.join('; ')}`
-      }).join('\n')
-    : '- 无'
-  const edges = context.edges.length > 0
-    ? context.edges.map(edge => (
-        `- id=${edge.id}; source=${edge.source}${nodeLabels.has(edge.source) ? ` (${JSON.stringify(nodeLabels.get(edge.source))})` : ''}; target=${edge.target}${nodeLabels.has(edge.target) ? ` (${JSON.stringify(nodeLabels.get(edge.target))})` : ''}${edge.label ? `; label=${JSON.stringify(edge.label)}` : ''}`
-      )).join('\n')
-    : '- 无'
-  const selectionGuidance = context.scope === 'selection'
-    ? '以下节点是用户为本次对话明确选中的操作对象；连线包含用户选中的连线，以及所选节点之间已有的关联。回答或调用画布工具时优先使用这些精确 ID；除非用户明确要求，不要修改未选中的元素。'
-    : '以下是用户关联的整个画布。回答时请结合节点内容与连线关系；调用画布工具时使用这里提供的精确 ID。'
-  return [
-    context.scope === 'selection' ? '## 用户选择的画布节点与关系' : '## 用户关联的画布',
-    `画布：${context.canvasTitle}（ID: ${context.canvasId}）`,
-    selectionGuidance,
-    '',
-    '节点：',
-    nodes,
-    '',
-    '连线：',
-    edges,
-    '',
-  ].join('\n')
-}
-
 function getLastDisplayableAgentContent(
   liveContent: string | undefined,
   traceEvents: AgentTraceEvent[]
@@ -139,11 +88,9 @@ interface ChatSendProps {
   attachedImages?: ImageAttachment[];
   fileAttachments?: RuntimeChatAttachment[];
   quoteData?: QuoteData | null;
-  canvasSelectionContext?: CanvasSelectionContext | null;
   selectedSkillIds?: string[];
   mentionedFiles?: MarkdownFile[];
   mentionedRecords?: QuoteData[];
-  mentionedCanvases?: CanvasSelectionContext[];
   dockStyle?: boolean;
 }
 
@@ -154,11 +101,9 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
   attachedImages = [],
   fileAttachments = [],
   quoteData = null,
-  canvasSelectionContext = null,
   selectedSkillIds = [],
   mentionedFiles = [],
   mentionedRecords = [],
-  mentionedCanvases = [],
   dockStyle = false,
 }, ref) => {
   const { primaryModel, agentPermissionMode } = useSettingStore()
@@ -265,7 +210,6 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       context += `## 用户引用内容\n文件: ${quoteData.fileName}\n范围: ${quoteData.from}-${quoteData.to}\n\n${quoteData.fullContent}\n\n`
     }
 
-    context += buildCanvasSelectionContext(canvasSelectionContext)
     context += await buildMentionedContext()
 
     return context
@@ -302,10 +246,6 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
         record.fullContent,
         '',
       ].join('\n')
-    }
-
-    for (const canvas of mentionedCanvases) {
-      context += buildCanvasSelectionContext(canvas)
     }
 
     return context
@@ -475,8 +415,6 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
 
     const useArticleStore = (await import('@/stores/article')).default
     const articleStore = useArticleStore.getState()
-    const useCanvasStore = (await import('@/stores/canvas')).default
-    const canvasStore = useCanvasStore.getState()
     let pendingCapacityProbe: { contextWindow: number } | undefined
     let deferredOverflowError: string | undefined
     let contextCapacityProbeActive = false
@@ -558,7 +496,6 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       workspaceId: useSettingStore.getState().workspacePath.trim().replace(/\\/g, '/').replace(/\/+$/, '') || 'default',
       useMemories: !useChatStore.getState().isTemporaryConversation,
       activeFilePath: articleStore.activeFilePath,
-      activeCanvasId: canvasStore.activeCanvasId || undefined,
       permissionMode: agentPermissionMode,
       requestConfirmation,
       currentQuote: quoteData
@@ -826,6 +763,11 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
         injectedByRuntimeSnapshot: Boolean(articleStore.activeFilePath),
         preview: previewText(articleStore.currentArticle || ''),
       })
+      const activeEditorTab = articleStore.openTabs.find(tab => tab.id === articleStore.activeTabId)
+      if (activeEditorTab?.kind === 'learning' || activeEditorTab?.path.startsWith('learning://')) {
+        const { buildLearningWorkspaceContext } = await import('@/lib/learning/ai-context')
+        context += `\n${await buildLearningWorkspaceContext()}\n`
+      }
       // 3. 关联文件夹作为 Agent 自动检索时的优先范围，不在发送前预先检索。
       if (linkedResource && isLinkedFolder(linkedResource)) {
         context += [
@@ -969,7 +911,6 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
         })
       }
 
-      context += buildCanvasSelectionContext(canvasSelectionContext)
       context += await buildMentionedContext()
 
       // 6. 构建消息数组：较早回合使用会话级锚定摘要，最近完整回合保留原文

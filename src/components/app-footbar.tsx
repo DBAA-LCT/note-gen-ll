@@ -1,6 +1,6 @@
 'use client'
 
-import { Highlighter, MessageSquare, Palette, Plus, Square, SquarePen } from 'lucide-react'
+import { GraduationCap, Highlighter, MessageSquare, Plus, Square, SquarePen } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Store } from '@tauri-apps/plugin-store'
@@ -17,12 +17,16 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from '@/components/ui/drawer'
-import { MobileRecordTools } from '@/components/mobile-record-tools'
 import useRecordingStore from '@/stores/recording'
 import emitter from '@/lib/emitter'
+import { isTauriRuntime } from '@/lib/check'
 
 const OrganizeNotes = dynamic(
   () => import('@/app/core/main/mark/organize-notes').then(module => module.OrganizeNotes),
+  { ssr: false },
+)
+const MobileRecordTools = dynamic(
+  () => import('@/components/mobile-record-tools').then(module => module.MobileRecordTools),
   { ssr: false },
 )
 
@@ -52,6 +56,7 @@ export function AppFootbar() {
   const [quickActionOpen, setQuickActionOpen] = useState(false)
   const organizeRef = useRef<{ openOrganize: () => void }>(null)
   const { isRecording, recordingDuration } = useRecordingStore()
+  const nativeRuntime = isTauriRuntime()
 
   const items: FootbarItem[] = [
     {
@@ -59,12 +64,14 @@ export function AppFootbar() {
       label: t('navigation.mobileDock.chat'),
       url: '/mobile/chat',
       icon: MessageSquare,
+      disabled: !nativeRuntime,
     },
     {
       id: 'writing',
       label: t('navigation.mobileDock.write'),
       url: '/mobile/writing',
       icon: SquarePen,
+      disabled: !nativeRuntime,
     },
     {
       id: 'quick-action',
@@ -75,18 +82,20 @@ export function AppFootbar() {
       icon: Plus,
       iconElement: isRecording ? <RecordingDockIcon /> : undefined,
       isQuickAction: true,
+      disabled: !nativeRuntime,
     },
     {
       id: 'record',
       label: t('navigation.mobileDock.record'),
       url: '/mobile/record',
       icon: Highlighter,
+      disabled: !nativeRuntime,
     },
     {
-      id: 'canvas',
-      label: t('navigation.mobileDock.canvas'),
-      url: '/mobile/canvas',
-      icon: Palette,
+      id: 'learning',
+      label: '学习',
+      url: '/mobile/learning',
+      icon: GraduationCap,
     },
   ]
 
@@ -113,8 +122,10 @@ export function AppFootbar() {
 
     setQuickActionOpen(false)
     router.push(item.url)
-    const store = await Store.load('store.json')
-    await store.set('currentPage', item.url)
+    if (nativeRuntime) {
+      const store = await Store.load('store.json')
+      await store.set('currentPage', item.url)
+    }
   }
 
   function handleMobileOrganize() {
@@ -143,14 +154,16 @@ export function AppFootbar() {
             <DrawerTitle>{t('navigation.mobileDock.quickRecord')}</DrawerTitle>
           </DrawerHeader>
           <div className="px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-            <MobileRecordTools
-              onClose={() => setQuickActionOpen(false)}
-              onOrganize={handleMobileOrganize}
-            />
+            {nativeRuntime ? (
+              <MobileRecordTools
+                onClose={() => setQuickActionOpen(false)}
+                onOrganize={handleMobileOrganize}
+              />
+            ) : null}
           </div>
         </DrawerContent>
       </Drawer>
-      <OrganizeNotes ref={organizeRef} />
+      {nativeRuntime ? <OrganizeNotes ref={organizeRef} /> : null}
     </div>
   )
 }

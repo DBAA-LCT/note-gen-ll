@@ -4,11 +4,21 @@ import { platform } from "@tauri-apps/plugin-os";
 let cachedResult: boolean | null = null;
 let cachedTauriResult: boolean | null = null;
 
+export function isTauriRuntime(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
 // 异步检查是否为移动设备的函数
 export function isMobileDevice() {
   // 如果已经检测过，直接返回缓存结果
   if (cachedResult !== null) {
     return cachedResult;
+  }
+
+  if (!isTauriRuntime()) {
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent.toLowerCase() : ''
+    cachedResult = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent)
+    return cachedResult
   }
 
   try {
@@ -35,13 +45,6 @@ export function checkIsTauri(): boolean {
     return cachedTauriResult;
   }
 
-  try {
-    // 尝试调用 Tauri API，如果成功则说明在 Tauri 环境中
-    platform();
-    cachedTauriResult = true;
-    return true;
-  } catch {
-    cachedTauriResult = false;
-    return false;
-  }
+  cachedTauriResult = isTauriRuntime();
+  return cachedTauriResult;
 }

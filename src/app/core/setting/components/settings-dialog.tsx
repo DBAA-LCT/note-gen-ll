@@ -18,7 +18,6 @@ import {
 import AboutPage from '../about/page'
 import AiPage from '../ai/page'
 import AudioPage from '../audio/page'
-import CanvasSettingPage from '../canvas/page'
 import EditorSettingPage from '../editor/page'
 import SettingFilePage from '../file/page'
 import GeneralSettingsPage from '../general/page'
@@ -35,6 +34,7 @@ import SyncPage from '../sync/page'
 import BackupPage from '../backup/page'
 import TemplatePage from '../template/page'
 import WebSearchSettingPage from '../webSearch/page'
+import LearningSettingPage from '../learning/page'
 import { SettingTab } from './setting-tab'
 
 const settingPages: Record<SettingSection, ComponentType> = {
@@ -42,7 +42,6 @@ const settingPages: Record<SettingSection, ComponentType> = {
   general: GeneralSettingsPage,
   record: RecordSettingPage,
   editor: EditorSettingPage,
-  canvas: CanvasSettingPage,
   sync: SyncPage,
   backup: BackupPage,
   imageHosting: ImageHostingPage,
@@ -58,6 +57,7 @@ const settingPages: Record<SettingSection, ComponentType> = {
   shortcuts: ShortcutsPage,
   imageMethod: ImageMethodPage,
   audio: AudioPage,
+  learning: LearningSettingPage,
 }
 
 export function SettingsDialog() {

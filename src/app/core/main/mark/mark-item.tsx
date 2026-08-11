@@ -46,7 +46,6 @@ import useArticleStore from "@/stores/article";
 import { createRecordTab } from "./mark-record-tab";
 import { getImageRecordDisplayText, getImageRecordStatus, type ImageRecordStatusLabels, isImageRecord } from "./image-record-status";
 import { useSettingsDialogStore } from "@/stores/settings-dialog";
-import { CANVAS_MARK_DRAG_TYPE } from "@/lib/canvas/drag-data";
 
 dayjs.extend(relativeTime)
 
@@ -773,7 +772,6 @@ export const MarkItem = React.memo(({
     const markdownContent = markToMarkdown(mark);
     e.dataTransfer.setData('text/plain', markdownContent);
     e.dataTransfer.setData('application/json', JSON.stringify(mark));
-    e.dataTransfer.setData(CANVAS_MARK_DRAG_TYPE, JSON.stringify(mark));
     e.dataTransfer.effectAllowed = 'copy';
 
     // 添加拖拽时的视觉反馈

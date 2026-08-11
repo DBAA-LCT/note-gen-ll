@@ -55,7 +55,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { isMobileDevice } from '@/lib/check'
+import { isMobileDevice, isTauriRuntime } from '@/lib/check'
 
 type RecoveryAction =
   | 'exit'
@@ -152,6 +152,10 @@ export function ErrorRecovery({
     async function resolveRecoveryContext() {
       const nextDiagnosticContext: DiagnosticContext = {
         page: `${window.location.pathname}${window.location.search}`,
+      }
+      if (!isTauriRuntime()) {
+        if (!cancelled) setDiagnosticContext(nextDiagnosticContext)
+        return
       }
       try {
         nextDiagnosticContext.appVersion = await getVersion()

@@ -199,7 +199,10 @@ export async function loadProviderTemplates(builtinTemplates: AiConfig[]): Promi
       return enforceStorefrontPolicy(mapRemoteTemplates(matchingCache.content), configKey)
     }
   } catch (error) {
-    console.error('[provider-templates] failed to fetch config center templates', error)
+    console.warn(
+      '[provider-templates] remote config unavailable; using cached or built-in templates:',
+      error instanceof Error ? error.message : String(error),
+    )
   }
 
   if (matchingCache?.content?.providers?.length) {

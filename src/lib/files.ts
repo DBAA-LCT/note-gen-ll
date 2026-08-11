@@ -36,6 +36,13 @@ export function isLinkedFolder(resource: LinkedResource): resource is LinkedFold
 
 // 收集文件夹下的所有 Markdown 文件
 export async function collectMarkdownFiles(folderPath: string): Promise<Array<{path: string, name: string}>> {
+  // Editor system tabs use protocol-style identifiers (for example
+  // learning://workspace). They are not workspace directories and must never
+  // reach Tauri's filesystem APIs.
+  if (folderPath.includes('://')) {
+    return [];
+  }
+
   const files: Array<{path: string, name: string}> = [];
   
   const processDirectory = async (dirPath: string) => {

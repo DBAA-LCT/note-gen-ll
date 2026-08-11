@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import dynamic from 'next/dynamic'
 import useArticleStore, { findFolderInTree } from '@/stores/article'
 import useMarkStore from '@/stores/mark'
 import emitter from '@/lib/emitter'
@@ -27,9 +26,8 @@ import { FolderView } from './folder'
 import { UnsupportedFile } from './unsupported-file'
 import { useShallow } from 'zustand/react/shallow'
 import { MarkDetailPanel } from '../mark/mark-detail-panel'
+import { LearningWorkspace } from '@/features/learning/learning-workspace'
 import { getRecordIdFromTabPath, isRecordTabPath } from '../mark/mark-record-tab'
-import { getCanvasIdFromTabPath, isCanvasTabPath } from '../canvas/canvas-tab'
-import useCanvasStore from '@/stores/canvas'
 import {
   createDefaultOnboardingProgress,
   getCompletionFeedbackMode,
@@ -56,11 +54,6 @@ const MARKDOWN_EXTENSIONS = new Set([
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'])
 const ONBOARDING_PROGRESS_STORE_KEY = 'desktopOnboardingProgress'
-const CanvasEditor = dynamic(
-  () => import('../canvas/canvas-editor').then(module => module.CanvasEditor),
-  { ssr: false }
-)
-
 export function EditorLayout() {
   const {
     activeFilePath,
@@ -91,7 +84,6 @@ export function EditorLayout() {
   const { setOnboardingPromptDraft } = useChatStore()
   const setActiveMarkId = useMarkStore((state) => state.setActiveMarkId)
   const clearActiveMark = useMarkStore((state) => state.clearActiveMark)
-  const setActiveCanvasId = useCanvasStore((state) => state.setActiveCanvasId)
   const tOnboarding = useTranslations('article.emptyState.onboarding')
 
   const tabContentsRef = useRef<Record<string, string>>({})
@@ -289,10 +281,6 @@ export function EditorLayout() {
     return tab.kind === 'record' || isRecordTabPath(tab.path)
   }, [])
 
-  const isCanvasEditorTab = useCallback((tab: TabInfo): boolean => {
-    return tab.kind === 'canvas' || isCanvasTabPath(tab.path)
-  }, [])
-
   const getRecordIdForTab = useCallback((tab: TabInfo): number | null => {
     return tab.markId ?? getRecordIdFromTabPath(tab.path)
   }, [])
@@ -306,15 +294,14 @@ export function EditorLayout() {
       let hasInvalid = false
 
       for (const tab of tabs) {
+        if (tab.kind === 'learning' || tab.path.startsWith('learning://')) {
+          validTabs.push(tab)
+          continue
+        }
         if (isRecordEditorTab(tab)) {
           validTabs.push(tab)
           continue
         }
-        if (isCanvasEditorTab(tab)) {
-          validTabs.push(tab)
-          continue
-        }
-
         if (tab.isFolder) {
           // Check if folder exists in fileTree
           if (isFolderInTree(tab.path)) {
@@ -340,7 +327,7 @@ export function EditorLayout() {
     }
 
     cleanupTabs()
-  }, [fileTree, tabs.length, isFolderInTree, isFileInTree, checkPathExists, isRecordEditorTab, isCanvasEditorTab, setOpenTabs])
+  }, [fileTree, tabs.length, isFolderInTree, isFileInTree, checkPathExists, isRecordEditorTab, setOpenTabs])
 
   // Initialize and update tabs when active path changes
   useEffect(() => {
@@ -373,7 +360,6 @@ export function EditorLayout() {
   const activateTab = useCallback((tab?: TabInfo | null) => {
     if (!tab) {
       clearActiveMark()
-      setActiveCanvasId(null)
       setActiveTabId('')
       setActiveFilePath('')
       return
@@ -381,34 +367,22 @@ export function EditorLayout() {
 
     setActiveTabId(tab.id)
 
-    if (isRecordEditorTab(tab)) {
-      const markId = getRecordIdForTab(tab)
-      setActiveMarkId(markId)
-      setActiveCanvasId(null)
+    if (tab.kind === 'learning' || tab.path.startsWith('learning://')) {
+      clearActiveMark()
       setActiveFilePath('')
       return
     }
 
-    if (isCanvasEditorTab(tab)) {
-      clearActiveMark()
-      setActiveCanvasId(getCanvasIdFromTabPath(tab.path))
+    if (isRecordEditorTab(tab)) {
+      const markId = getRecordIdForTab(tab)
+      setActiveMarkId(markId)
       setActiveFilePath('')
       return
     }
 
     clearActiveMark()
-    setActiveCanvasId(null)
     setActiveFilePath(tab.path)
-  }, [clearActiveMark, getRecordIdForTab, isCanvasEditorTab, isRecordEditorTab, setActiveCanvasId, setActiveFilePath, setActiveMarkId, setActiveTabId])
-
-  useEffect(() => {
-    const restoredActiveTab = openTabs.find(tab => tab.id === activeTabId)
-    setActiveCanvasId(
-      restoredActiveTab && isCanvasEditorTab(restoredActiveTab)
-        ? getCanvasIdFromTabPath(restoredActiveTab.path)
-        : null
-    )
-  }, [activeTabId, isCanvasEditorTab, openTabs, setActiveCanvasId])
+  }, [clearActiveMark, getRecordIdForTab, isRecordEditorTab, setActiveFilePath, setActiveMarkId, setActiveTabId])
 
   // Handle tab switch
   const handleTabSwitch = useCallback((path: string) => {
@@ -425,8 +399,7 @@ export function EditorLayout() {
       setActiveTabId(''),
     ])
     clearActiveMark()
-    setActiveCanvasId(null)
-  }, [clearActiveMark, setActiveCanvasId, setActiveFilePath, setActiveTabId])
+  }, [clearActiveMark, setActiveFilePath, setActiveTabId])
 
   // Handle close tab
   const handleCloseTab = useCallback((closedPath: string) => {
@@ -627,6 +600,18 @@ export function EditorLayout() {
 
   // Render content panel for a tab
   const renderContentPanel = useCallback((tab: TabInfo, isActive: boolean) => {
+    if (tab.kind === 'learning' || tab.path.startsWith('learning://')) {
+      return (
+        <div
+          key={tab.id}
+          className="flex min-h-0 flex-1 overflow-hidden"
+          style={{ display: isActive ? 'flex' : 'none' }}
+        >
+          <LearningWorkspace />
+        </div>
+      )
+    }
+
     if (isRecordEditorTab(tab)) {
       const markId = getRecordIdForTab(tab)
 
@@ -641,19 +626,6 @@ export function EditorLayout() {
           ) : (
             <UnsupportedFile filePath={tab.path} />
           )}
-        </div>
-      )
-    }
-
-    if (isCanvasEditorTab(tab)) {
-      const canvasId = tab.canvasId || getCanvasIdFromTabPath(tab.path)
-      return (
-        <div
-          key={tab.id}
-          className="flex min-h-0 flex-1 overflow-hidden"
-          style={{ display: isActive ? 'flex' : 'none' }}
-        >
-          {canvasId ? <CanvasEditor canvasId={canvasId} /> : <UnsupportedFile filePath={tab.path} />}
         </div>
       )
     }
@@ -685,7 +657,7 @@ export function EditorLayout() {
         )}
       </div>
     )
-  }, [getItemType, getRecordIdForTab, handleCloseTab, isCanvasEditorTab, isRecordEditorTab])
+  }, [getItemType, getRecordIdForTab, handleCloseTab, isRecordEditorTab])
 
   // No tabs or no active tab - show empty state
   if (tabs.length === 0 || !activeTabId) {

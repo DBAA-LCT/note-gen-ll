@@ -166,7 +166,10 @@ export async function loadNoteGenDefaultConfig(builtinConfig: AiConfig): Promise
       return mergeNoteGenDefaultModels(builtinConfig, normalizeNoteGenDefaultModelsPayload(cached.content))
     }
   } catch (error) {
-    console.error('[notegen-default-models] failed to fetch config center models', error)
+    console.warn(
+      '[notegen-default-models] remote config unavailable; using cached or built-in models:',
+      error instanceof Error ? error.message : String(error),
+    )
   }
 
   if (cached?.content?.models?.length) {

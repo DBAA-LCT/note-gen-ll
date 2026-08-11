@@ -16,8 +16,8 @@ export interface SidebarState {
   showCenterPanel: () => Promise<void>
   rightSidebarVisible: boolean
   toggleRightSidebar: () => Promise<void>
-  leftSidebarTab: 'files' | 'notes' | 'canvases'
-  setLeftSidebarTab: (tab: 'files' | 'notes' | 'canvases') => Promise<void>
+  leftSidebarTab: 'files' | 'notes' | 'learning'
+  setLeftSidebarTab: (tab: 'files' | 'notes' | 'learning') => Promise<void>
   initSidebarState: () => Promise<void>
 }
 
@@ -148,7 +148,7 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     await store.save()
   },
   leftSidebarTab: 'files',
-  setLeftSidebarTab: async (tab: 'files' | 'notes' | 'canvases') => {
+  setLeftSidebarTab: async (tab: 'files' | 'notes' | 'learning') => {
     set({ leftSidebarTab: tab })
     localStorage.setItem('leftSidebarTab', tab)
     const store = await Store.load('store.json')
@@ -160,7 +160,9 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     const leftState = await store.get<boolean>('leftSidebarVisible')
     const centerState = await store.get<boolean>('centerPanelVisible')
     const rightState = await store.get<boolean>('rightSidebarVisible')
-    const leftTab = await store.get<'files' | 'notes' | 'canvases'>('leftSidebarTab')
+    const storedLeftTab = await store.get<string>('leftSidebarTab')
+    const leftTab: 'files' | 'notes' | 'learning' | undefined =
+      storedLeftTab === 'notes' || storedLeftTab === 'learning' ? storedLeftTab : storedLeftTab ? 'files' : undefined
     
     if (leftState !== null && leftState !== undefined) {
       set({ leftSidebarVisible: leftState })

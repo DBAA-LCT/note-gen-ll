@@ -1,28 +1,17 @@
 "use client"
 
 import {
-  ChartArea,
-  ChartColumn,
-  ChartLine,
-  ChartNoAxesCombined,
-  ChartPie,
   FileText,
   FolderOpen,
-  Gauge,
   Package,
-  Palette,
-  Radar,
   TextSelect,
-  Waypoints,
   X,
 } from "lucide-react"
-import { useTranslations } from "next-intl"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { isLinkedFolder, type LinkedResource } from "@/lib/files"
 import type { PendingQuote } from "@/stores/chat"
-import type { CanvasSelectionContext } from "@/types/canvas"
 import type { SkillMetadata } from "@/lib/skills/types"
 import type { MarkdownFile } from "@/lib/files"
 import type { Mark } from "@/db/marks"
@@ -38,25 +27,21 @@ export interface MentionedRecord extends PendingQuote {
 export type MentionedContext =
   | { kind: "file"; file: MarkdownFile }
   | { kind: "record"; record: MentionedRecord }
-  | { kind: "canvas"; canvas: CanvasSelectionContext }
 
 export function getMentionedContextKey(context: MentionedContext) {
   if (context.kind === "file") return `file:${context.file.path}`
-  if (context.kind === "record") return `record:${context.record.articlePath}`
-  return `canvas:${context.canvas.canvasId}`
+  return `record:${context.record.articlePath}`
 }
 
 interface ChatContextStripProps {
   linkedResource: LinkedResource | null
   activeTabContext: MentionedContext | null
   quoteData: PendingQuote | null
-  canvasContext: CanvasSelectionContext | null
   selectedSkills: SkillMetadata[]
   mentionedContexts: MentionedContext[]
   onRemoveLinkedResource: () => void
   onRemoveActiveTabContext: () => void
   onRemoveQuote: () => void
-  onRemoveCanvas: () => void
   onRemoveSkill: (skillId: string) => void
   onRemoveMentionedContext: (key: string) => void
 }
@@ -111,77 +96,6 @@ function getQuoteLabel(quote: PendingQuote) {
   return selectedText ? `${selectedLines} · ${selectedText}` : selectedLines
 }
 
-function getCanvasContextLabel(
-  context: CanvasSelectionContext,
-  formatNodes: (nodes: number) => string,
-  formatNodesAndRelations: (nodes: number, relations: number) => string
-) {
-  if (context.scope === "canvas" || context.nodes.length === 0) {
-    return context.canvasTitle
-  }
-
-  const nodeLabels = new Map(
-    context.nodes.map(node => [node.id, node.label.replace(/\s+/g, " ").trim() || node.id])
-  )
-  const selectedNodes = [...nodeLabels.values()]
-  if (selectedNodes.length === 1) {
-    return selectedNodes[0]
-  }
-
-  const relationshipCount = context.edges.filter(edge => (
-    nodeLabels.has(edge.source) && nodeLabels.has(edge.target)
-  )).length
-
-  return relationshipCount > 0
-    ? formatNodesAndRelations(selectedNodes.length, relationshipCount)
-    : formatNodes(selectedNodes.length)
-}
-
-function getCanvasContextIcon(context: CanvasSelectionContext) {
-  if (context.scope === "canvas") return <Palette />
-  if (context.nodes.length !== 1 || context.nodes[0].type !== "chart") return <Waypoints />
-
-  switch (context.nodes[0].chart?.type) {
-    case "area":
-      return <ChartArea />
-    case "bar":
-      return <ChartColumn />
-    case "line":
-      return <ChartLine />
-    case "pie":
-      return <ChartPie />
-    case "radar":
-      return <Radar />
-    case "radial":
-      return <Gauge />
-    default:
-      return <ChartNoAxesCombined />
-  }
-}
-
-function CanvasContextBadge({
-  context,
-  onRemove,
-}: {
-  context: CanvasSelectionContext
-  onRemove: () => void
-}) {
-  const t = useTranslations("canvas.selection")
-  const label = getCanvasContextLabel(
-    context,
-    nodes => t("chatContextNodes", { nodes }),
-    (nodes, relations) => t("chatContextNodesAndRelations", { nodes, relations })
-  )
-
-  return (
-    <ContextBadge
-      icon={getCanvasContextIcon(context)}
-      label={label}
-      onRemove={onRemove}
-    />
-  )
-}
-
 function MentionedContextBadge({
   context,
   onRemove,
@@ -202,20 +116,17 @@ function MentionedContextBadge({
       />
     )
   }
-  return <CanvasContextBadge context={context.canvas} onRemove={onRemove} />
 }
 
 export function ChatContextStrip({
   linkedResource,
   activeTabContext,
   quoteData,
-  canvasContext,
   selectedSkills,
   mentionedContexts,
   onRemoveLinkedResource,
   onRemoveActiveTabContext,
   onRemoveQuote,
-  onRemoveCanvas,
   onRemoveSkill,
   onRemoveMentionedContext,
 }: ChatContextStripProps) {
@@ -223,7 +134,6 @@ export function ChatContextStrip({
     !linkedResource
     && !activeTabContext
     && !quoteData
-    && !canvasContext
     && selectedSkills.length === 0
     && mentionedContexts.length === 0
   ) return null
@@ -249,9 +159,6 @@ export function ChatContextStrip({
           label={getQuoteLabel(quoteData)}
           onRemove={onRemoveQuote}
         />
-      ) : null}
-      {canvasContext ? (
-        <CanvasContextBadge context={canvasContext} onRemove={onRemoveCanvas} />
       ) : null}
       {mentionedContexts.map(context => {
         const key = getMentionedContextKey(context)

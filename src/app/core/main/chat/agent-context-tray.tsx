@@ -9,12 +9,9 @@ import {
   FileText,
   MoreHorizontal,
   NotebookPen,
-  PanelsTopLeft,
   Sparkles,
 } from "lucide-react"
-import { createCanvasTab } from "@/app/core/main/canvas/canvas-tab"
 import useArticleStore from "@/stores/article"
-import useCanvasStore from "@/stores/canvas"
 import useMarkStore from "@/stores/mark"
 import { useSidebarStore } from "@/stores/sidebar"
 import useTagStore from "@/stores/tag"
@@ -68,13 +65,12 @@ export function AgentContextTray({
     const counts = { article: 0, record: 0, canvas: 0, unknown: 0 }
     ragSources.forEach((source) => {
       const sourceType = detailMap.get(source)?.sourceType
-      if (sourceType) counts[sourceType] += 1
+      if (sourceType === 'article' || sourceType === 'record') counts[sourceType] += 1
       else counts.unknown += 1
     })
     const parts = [
       counts.article ? t('articleCount', { count: counts.article }) : '',
       counts.record ? t('recordCount', { count: counts.record }) : '',
-      counts.canvas ? t('canvasCount', { count: counts.canvas }) : '',
       counts.unknown ? t('sourceCount', { count: counts.unknown }) : '',
     ].filter(Boolean)
     return new Intl.ListFormat(locale, { style: 'short', type: 'conjunction' }).format(parts)
@@ -93,23 +89,6 @@ export function AgentContextTray({
       return
     }
 
-    if (detail.sourceType === 'canvas' && detail.locator?.canvasId) {
-      const canvasId = detail.locator.canvasId
-      useCanvasStore.getState().setPendingFocus({
-        canvasId,
-        nodeIds: detail.locator.nodeIds || [],
-      })
-      const project = await useCanvasStore.getState().openProject(canvasId)
-      if (!project) return
-      if (pathname.startsWith('/mobile')) {
-        router.push(`/mobile/canvas/editor?id=${encodeURIComponent(canvasId)}`)
-        return
-      }
-      await useArticleStore.getState().addTab(createCanvasTab(project))
-      await useSidebarStore.getState().setLeftSidebarTab('canvases')
-      return
-    }
-
     const filepath = detail.locator?.filePath || detail.filepath
     if (!filepath) return
     setActiveFilePath(filepath)
@@ -118,20 +97,17 @@ export function AgentContextTray({
 
   const sourceIcon = (sourceType?: RagSourceDetail['sourceType']) => {
     if (sourceType === 'record') return <NotebookPen />
-    if (sourceType === 'canvas') return <PanelsTopLeft />
     return <FileText />
   }
 
   const sourceTypeLabel = (sourceType?: RagSourceDetail['sourceType']) => {
     if (sourceType === 'record') return t('typeRecord')
-    if (sourceType === 'canvas') return t('typeCanvas')
     if (sourceType === 'article') return t('typeArticle')
     return t('typeSource')
   }
 
   const openSourceLabel = (sourceType?: RagSourceDetail['sourceType']) => {
     if (sourceType === 'record') return t('openRecord')
-    if (sourceType === 'canvas') return t('openCanvas')
     if (sourceType === 'article') return t('openArticle')
     return t('openSource')
   }

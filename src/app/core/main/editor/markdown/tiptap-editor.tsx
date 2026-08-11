@@ -36,7 +36,7 @@ import { openPath, openUrl } from '@tauri-apps/plugin-opener'
 import { open } from '@tauri-apps/plugin-dialog'
 import { BaseDirectory, readFile } from '@tauri-apps/plugin-fs'
 import { appDataDir, join } from '@tauri-apps/api/path'
-import { handleImageUpload, saveImageToWorkspace } from '@/lib/image-handler'
+import { handleImageUpload } from '@/lib/image-handler'
 import useArticleStore from '@/stores/article'
 import { cn, convertImage, convertImageByWorkspace } from '@/lib/utils'
 import { resolveImagePathFromMarkdown } from '@/lib/markdown-image-path'
@@ -85,13 +85,7 @@ import {
   getEditorContentContainerClass,
   type EditorViewMode,
 } from '@/lib/editor-layout-styles'
-import { getCanvasDragId, hasCanvasDragData } from '@/lib/canvas/canvas-dnd'
-import { canvasDocumentToPngFile } from '@/lib/canvas/static-export'
 import { isRecordTabPath } from '@/app/core/main/mark/mark-record-tab'
-import { getCanvasProject } from '@/db/canvases'
-import useCanvasStore from '@/stores/canvas'
-import { useSidebarStore } from '@/stores/sidebar'
-import { createCanvasTab } from '../../canvas/canvas-tab'
 import { getResultIndexToFocus } from './search-navigation'
 import {
   DEFAULT_OUTLINE_WIDTH,
@@ -1320,8 +1314,6 @@ export function TipTapEditor({
   const [imageSrcDraft, setImageSrcDraft] = useState('')
   const [imageAltDraft, setImageAltDraft] = useState('')
   const [customAiInstruction, setCustomAiInstruction] = useState('')
-  const [isCanvasDragOver, setIsCanvasDragOver] = useState(false)
-  const [isCanvasDropPending, setIsCanvasDropPending] = useState(false)
   const aiActionHandlersRef = useRef({
     polish: async () => {},
     concise: async () => {},
@@ -3065,9 +3057,7 @@ export function TipTapEditor({
       const dataTransfer = event.dataTransfer
       if (!dataTransfer) return
 
-      const hasCanvas = hasCanvasDragData(dataTransfer)
       const hasDroppedFiles =
-        hasCanvas ||
         hasFileManagerDragData(dataTransfer) ||
         dataTransfer.files.length > 0 ||
         getFileUrlsFromDataTransfer(dataTransfer).length > 0
@@ -3085,38 +3075,7 @@ export function TipTapEditor({
       const pos = editor.view.posAtCoords({ left: event.clientX, top: event.clientY })
       const insertPos = pos?.pos || editor.state.selection.from
 
-      if (hasCanvas) {
-        setIsCanvasDragOver(false)
-        setIsCanvasDropPending(true)
-      }
-
       void (async () => {
-        if (hasCanvas) {
-          const canvasId = getCanvasDragId(dataTransfer)
-          const project = canvasId ? await getCanvasProject(canvasId) : null
-          const activeFilePath = activeFilePathRef.current
-          if (!project || !activeFilePath) throw new Error('无法读取画布或当前 Markdown 文件')
-          const safeTitle = project.title.replace(/[\\/:*?"<>|]/g, '-').trim() || 'NoteGen-Canvas'
-          const imageFile = await canvasDocumentToPngFile(project.document, `${safeTitle}.png`)
-          const result = await saveImageToWorkspace(imageFile, activeFilePath)
-          editor.chain()
-            .focus()
-            .insertContentAt(insertPos, {
-              type: 'image',
-              attrs: {
-                src: result.src,
-                alt: project.title,
-                relativeSrc: result.relativePath,
-              },
-            })
-            .run()
-          toast({
-            title: t('canvasDrop.success'),
-            description: t('canvasDrop.successDescription', { path: result.relativePath }),
-          })
-          return
-        }
-
         if (droppedImageFiles.length > 0 && droppedImageFiles.length === droppedFiles.length) {
           const uploadedImages = await Promise.all(
             droppedImageFiles.map(async file => ({
@@ -3176,16 +3135,12 @@ export function TipTapEditor({
           .run()
       })().catch(error => {
         toast({
-          title: hasCanvas
-            ? t('canvasDrop.failed')
-            : droppedImageFiles.length > 0
+          title: droppedImageFiles.length > 0
               ? tImage('failed')
               : '插入文件链接失败',
           description: error instanceof Error ? error.message : undefined,
           variant: 'destructive',
         })
-      }).finally(() => {
-        if (hasCanvas) setIsCanvasDropPending(false)
       })
     }
 
@@ -4465,9 +4420,6 @@ export function TipTapEditor({
 
   // Handle drag and drop from marks
   const handleEditorDrop = useCallback((e: React.DragEvent) => {
-    if (hasCanvasDragData(e.dataTransfer)) {
-      setIsCanvasDragOver(false)
-    }
     const markData = e.dataTransfer.getData('application/json')
     if (markData) {
       e.preventDefault()
@@ -4578,19 +4530,6 @@ export function TipTapEditor({
       document.removeEventListener('tiptap-insert-block-math', handleInsertBlockMath)
     }
   }, [editor])
-
-  const handleEditorDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    if (!hasCanvasDragData(event.dataTransfer)) return
-    event.dataTransfer.dropEffect = 'copy'
-    setIsCanvasDragOver(true)
-  }, [])
-
-  const handleEditorDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    const nextTarget = event.relatedTarget
-    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return
-    setIsCanvasDragOver(false)
-  }, [])
 
   // Handle math dialog insert
   const handleMathInsert = useCallback((latex: string, type: 'inline' | 'block') => {
@@ -5144,28 +5083,6 @@ export function TipTapEditor({
     })
   }
 
-  const handleCreateCanvasFromSelection = async (type: 'flowchart' | 'mindmap' | 'timeline' | 'tasks') => {
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to, '\n', '\n').trim()
-    if (!selectedText) return
-    const labels = {
-      flowchart: t('bubbleMenu.canvasFlowchart'),
-      mindmap: t('bubbleMenu.canvasMindmap'),
-      timeline: t('bubbleMenu.canvasTimeline'),
-      tasks: t('bubbleMenu.canvasTasks'),
-    }
-    const titleSource = selectedText.split('\n').find(Boolean)?.slice(0, 32) || labels[type]
-    const project = await useCanvasStore.getState().createProject('blank', titleSource)
-    if (!project) return
-    await useArticleStore.getState().addTab(createCanvasTab(project))
-    await useSidebarStore.getState().setLeftSidebarTab('canvases')
-    if (!useSidebarStore.getState().rightSidebarVisible) await useSidebarStore.getState().toggleRightSidebar()
-    const instruction = t(`bubbleMenu.canvasPrompts.${type}`)
-    useChatStore.getState().setOnboardingPromptDraft(
-      `${instruction}\n\n${t('bubbleMenu.canvasSource')}\n---\n${selectedText.slice(0, 12000)}\n---\n${t('bubbleMenu.canvasPromptSuffix')}`
-    )
-  }
-
   return (
     <div
       ref={editorContainerRef}
@@ -5207,22 +5124,8 @@ export function TipTapEditor({
           )}
           onMouseDownCapture={handleEditorMouseDownCapture}
           onScroll={handleEditorScroll}
-          onDragEnter={effectiveViewMode === 'visual' ? handleEditorDragOver : undefined}
-          onDragOver={effectiveViewMode === 'visual' ? handleEditorDragOver : undefined}
-          onDragLeave={effectiveViewMode === 'visual' ? handleEditorDragLeave : undefined}
           onDropCapture={effectiveViewMode === 'visual' ? handleEditorDrop : undefined}
         >
-        {(isCanvasDragOver || isCanvasDropPending) && (
-          <div className={cn(
-            'pointer-events-none absolute inset-0 z-40 flex items-center justify-center border-2 border-primary/60 bg-primary/5 transition-colors duration-150',
-            isCanvasDropPending && 'border-transparent bg-transparent'
-          )}>
-            <div className="flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-sm text-foreground shadow-md backdrop-blur">
-              {isCanvasDropPending && <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />}
-              <span>{t(isCanvasDropPending ? 'canvasDrop.generating' : 'canvasDrop.hint')}</span>
-            </div>
-          </div>
-        )}
         <div
           className={cn(
             getEditorContentContainerClass({
@@ -5346,7 +5249,6 @@ export function TipTapEditor({
                   onAIConcise={handleAIConcise}
                   onAIExpand={handleAIExpand}
                   onAITranslate={handleAITranslate}
-                  onCreateCanvas={type => void handleCreateCanvasFromSelection(type)}
                   openAiMenuSignal={openAiMenuSignal}
                   openTranslateMenuSignal={openTranslateMenuSignal}
                   openLinkInputSignal={openLinkInputSignal}
