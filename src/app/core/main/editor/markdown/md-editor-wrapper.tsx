@@ -4,7 +4,9 @@ import useArticleStore from '@/stores/article'
 import { useEffect, useState, useCallback, useRef, RefObject } from 'react'
 import { TipTapEditor } from './tiptap-editor'
 import { Outline } from './outline'
-import { Loader2, Download } from 'lucide-react'
+import { Archive, Download, Loader2, LockKeyhole } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { useTranslations } from 'next-intl'
 import emitter from '@/lib/emitter'
 import {
@@ -15,6 +17,8 @@ import {
 import { Store } from '@tauri-apps/plugin-store'
 import { useShallow } from 'zustand/react/shallow'
 import useSettingStore from '@/stores/setting'
+import { getDailyReportDateFromPath, isLearningReportMarkdown, removeLearningReportMarkdown } from '@/lib/learning/report'
+import useLearningStore from '@/stores/learning'
 
 interface MdEditorProps {
   tabContentsRef: RefObject<Record<string, string>>
@@ -72,6 +76,23 @@ export function MdEditor({ tabContentsRef, filePath, isActive }: MdEditorProps) 
   // AI streaming state
   const [aiStreaming, setAiStreaming] = useState(false)
   const terminateRef = useRef<(() => void) | undefined>(undefined)
+  const learningReportReadOnly = isLearningReportMarkdown(initialContent || '', filePath)
+  const learningReportDate = getDailyReportDateFromPath(filePath)
+
+  const handleArchiveLearningReport = useCallback(async () => {
+    if (!learningReportDate || !window.confirm(`确定归档 ${learningReportDate} 的日报吗？系统会先生成或更新所属规划周报，再隐藏该日报。`)) return
+    try {
+      const weeklyReport = await useLearningStore.getState().archiveReport(learningReportDate)
+      await removeLearningReportMarkdown(filePath)
+      const articleStore = useArticleStore.getState()
+      await articleStore.cleanTabsByDeletedFile(filePath)
+      articleStore.removeLocalEntry(filePath)
+      await articleStore.loadFileTree({ skipRemoteSync: true })
+      toast.success('日报已归档并汇总进规划周报', { description: weeklyReport.title })
+    } catch (error) {
+      toast.error('归档日报失败', { description: error instanceof Error ? error.message : String(error) })
+    }
+  }, [filePath, learningReportDate])
 
   // Bug fix: Listen for file close events to clean up loaded state
   useEffect(() => {
@@ -397,6 +418,15 @@ export function MdEditor({ tabContentsRef, filePath, isActive }: MdEditorProps) 
 
   return (
     <div id="onboarding-target-editor-content" className="flex-1 relative w-full h-full">
+      {learningReportReadOnly ? (
+        <div className="absolute right-4 top-3 z-30 flex items-center gap-2 rounded-lg border bg-background/95 p-1.5 shadow-sm backdrop-blur">
+          <div className="flex items-center gap-1.5 px-2 text-xs font-medium text-muted-foreground" title="该文档由规划表单生成，不能直接编辑">
+            <LockKeyhole className="size-3.5" />
+            规划报告 · 只读
+          </div>
+          {learningReportDate ? <Button size="sm" variant="ghost" onClick={() => void handleArchiveLearningReport()}><Archive />归档</Button> : null}
+        </div>
+      ) : null}
       {/* Pull loading overlay */}
       {isPulling && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
@@ -425,7 +455,7 @@ export function MdEditor({ tabContentsRef, filePath, isActive }: MdEditorProps) 
         outlineWidth={outlineWidth}
         onToggleOutline={handleToggleOutline}
         applyLayoutPreferences
-        editable={!isPulling && !aiStreaming}
+        editable={!isPulling && !aiStreaming && !learningReportReadOnly}
         autoScroll={aiStreaming}
         showOverlay={aiStreaming}
         onTerminate={() => {

@@ -115,7 +115,11 @@ export const useSkillsStore = create<SkillsState>((set, get) => ({
       const autoMatch = await store.get<boolean>('skills.autoMatch')
 
       set({
-        enabled: enabled ?? false,
+        // Keep the same default as initial startup. Previously, the second
+        // initSkills() call silently flipped Skills off when this key had not
+        // been persisted yet, making the Agent "forget" its Skills after a
+        // couple of conversations.
+        enabled: enabled ?? true,
         autoMatch: autoMatch ?? true,
       })
     } catch (error) {

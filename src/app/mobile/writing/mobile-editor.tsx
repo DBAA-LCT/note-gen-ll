@@ -4,10 +4,11 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { TipTapEditor } from '@/app/core/main/editor/markdown/tiptap-editor'
 import type { Editor } from '@tiptap/react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, LockKeyhole } from 'lucide-react'
 import useArticleStore from '@/stores/article'
 import { exists, readTextFile } from '@tauri-apps/plugin-fs'
 import { getFilePathOptions, getWorkspacePath } from '@/lib/workspace'
+import { isLearningReportMarkdown } from '@/lib/learning/report'
 
 interface MobileEditorProps {
   onEditorReady?: (editor: Editor | null) => void
@@ -20,6 +21,7 @@ export function MobileEditor({ onEditorReady }: MobileEditorProps) {
   const [content, setContent] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isEditorReady, setIsEditorReady] = useState(false)
+  const learningReportReadOnly = isLearningReportMarkdown(content, activeFilePath)
 
   const activePathRef = useRef<string>('')
   const contentRef = useRef<string>('')
@@ -131,6 +133,7 @@ export function MobileEditor({ onEditorReady }: MobileEditorProps) {
 
   return (
     <div className="flex-1 relative w-full h-full flex flex-col">
+      {learningReportReadOnly ? <div className="absolute right-3 top-3 z-30 flex items-center gap-1.5 rounded-md border bg-background/95 px-2.5 py-1.5 text-xs font-medium text-muted-foreground shadow-sm"><LockKeyhole className="size-3.5" />规划报告 · 只读</div> : null}
       <TipTapEditor
         initialContent={content}
         onChange={handleContentChange}
@@ -140,6 +143,7 @@ export function MobileEditor({ onEditorReady }: MobileEditorProps) {
         onEditorReady={onEditorReady}
         mobileMode
         applyLayoutPreferences
+        editable={!learningReportReadOnly}
       />
     </div>
   )

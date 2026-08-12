@@ -27,6 +27,7 @@ import { UnsupportedFile } from './unsupported-file'
 import { useShallow } from 'zustand/react/shallow'
 import { MarkDetailPanel } from '../mark/mark-detail-panel'
 import { LearningWorkspace } from '@/features/learning/learning-workspace'
+import { GlobalScheduleWorkspace } from '@/features/schedule/global-schedule-workspace'
 import { getRecordIdFromTabPath, isRecordTabPath } from '../mark/mark-record-tab'
 import {
   createDefaultOnboardingProgress,
@@ -294,7 +295,7 @@ export function EditorLayout() {
       let hasInvalid = false
 
       for (const tab of tabs) {
-        if (tab.kind === 'learning' || tab.path.startsWith('learning://')) {
+        if (tab.kind === 'learning' || tab.path.startsWith('learning://') || tab.kind === 'schedule' || tab.path.startsWith('schedule://')) {
           validTabs.push(tab)
           continue
         }
@@ -367,7 +368,7 @@ export function EditorLayout() {
 
     setActiveTabId(tab.id)
 
-    if (tab.kind === 'learning' || tab.path.startsWith('learning://')) {
+    if (tab.kind === 'learning' || tab.path.startsWith('learning://') || tab.kind === 'schedule' || tab.path.startsWith('schedule://')) {
       clearActiveMark()
       setActiveFilePath('')
       return
@@ -600,6 +601,13 @@ export function EditorLayout() {
 
   // Render content panel for a tab
   const renderContentPanel = useCallback((tab: TabInfo, isActive: boolean) => {
+    if (tab.kind === 'schedule' || tab.path.startsWith('schedule://')) {
+      return (
+        <div key={tab.id} className="flex min-h-0 flex-1 overflow-hidden" style={{ display: isActive ? 'flex' : 'none' }}>
+          <GlobalScheduleWorkspace />
+        </div>
+      )
+    }
     if (tab.kind === 'learning' || tab.path.startsWith('learning://')) {
       return (
         <div

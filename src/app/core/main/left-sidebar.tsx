@@ -11,7 +11,7 @@ import { useSidebarStore } from "@/stores/sidebar"
 import { ExpandableTabs } from "@/components/ui/expandable-tabs"
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
-import { LearningSidebar } from './learning/learning-sidebar'
+import { LearningSidebar, PlanningActions } from './learning/learning-sidebar'
 
 const SIDEBAR_TABS = [
   { title: "files", icon: Files },
@@ -36,7 +36,7 @@ export function LeftSidebar() {
   // Prepare tabs with translated titles
   const tabs = SIDEBAR_TABS.map(tab => ({
     ...tab,
-    title: tab.title === 'learning' ? '目标' : t(`navigation.${tab.title === 'notes' ? 'record' : tab.title}`),
+    title: tab.title === 'learning' ? '规划' : t(`navigation.${tab.title === 'notes' ? 'record' : tab.title}`),
   }))
 
   return (
@@ -75,6 +75,19 @@ export function LeftSidebar() {
               )}
             >
               <MarkActions />
+            </motion.div>
+            <motion.div
+              initial={false}
+              animate={leftSidebarTab === "learning"
+                ? { opacity: 1, x: 0 }
+                : { opacity: 0, x: 10 }}
+              transition={{ duration: 0.2 }}
+              className={cn(
+                "col-start-1 row-start-1",
+                leftSidebarTab !== "learning" && "pointer-events-none"
+              )}
+            >
+              <PlanningActions />
             </motion.div>
           </div>
         </div>

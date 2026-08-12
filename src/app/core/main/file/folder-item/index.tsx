@@ -1,8 +1,8 @@
-import { ContextMenu, ContextMenuContent, ContextMenuSeparator, ContextMenuTrigger, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from "@/components/ui/enhanced-context-menu";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent } from "@/components/ui/enhanced-context-menu";
 import { Input } from "@/components/ui/input";
 import useArticleStore, { DirTree } from "@/stores/article";
 import { BaseDirectory, exists, mkdir, rename } from "@tauri-apps/plugin-fs";
-import { Folder, FolderDot, FolderOpen, FolderOpenDot, LoaderCircle, Database, Sparkles } from "lucide-react"
+import { Archive, BookLock, Folder, FolderDot, FolderLock, FolderOpen, FolderOpenDot, LoaderCircle, Database, Sparkles } from "lucide-react"
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { toast } from "@/hooks/use-toast";
 import { cloneDeep } from "lodash-es";
@@ -47,6 +47,9 @@ import { getFileTreeSyncStatus, validateFileTreeName, type FileTreeSyncStatus } 
 import { FileTreeDecorations } from "../file-tree-decorations";
 import { moveEntryToSystemTrash } from '../system-trash'
 import { rewriteWorkspaceMarkdownMediaPaths } from '@/lib/markdown-media-path'
+import { listDailyReports } from '@/lib/learning/repository'
+import { removeLearningReportMarkdown } from '@/lib/learning/report'
+import useLearningStore from '@/stores/learning'
 
 export function FolderItem({
   item,
@@ -77,6 +80,7 @@ export function FolderItem({
   const [, setIsComposing] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [dragItemCount, setDragItemCount] = useState(0)
+  const [isArchivingReports, setIsArchivingReports] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const dragExpandTimeoutRef = useRef<number | null>(null)
 
@@ -142,6 +146,62 @@ export function FolderItem({
   const { setClipboardItem, clipboardItem, clipboardItems, clipboardOperation } = useClipboardStore()
 
   const path = computedParentPath(item)
+  const normalizedFolderPath = path.replace(/\\/g, '/')
+  const isLegacyReportRoot = normalizedFolderPath === '学习报告'
+  const isLearningReportRoot = isLegacyReportRoot || normalizedFolderPath === '规划报告'
+  const isLearningReportFolder = isLearningReportRoot
+    || normalizedFolderPath.startsWith('学习报告/')
+    || normalizedFolderPath.startsWith('规划报告/')
+  const isDailyReportsFolder = /^(?:学习报告|规划报告)\/日报$/.test(normalizedFolderPath)
+
+  async function handleArchiveAllDailyReports() {
+    if (!isDailyReportsFolder || isArchivingReports) return
+    let reports: Awaited<ReturnType<typeof listDailyReports>>
+    try {
+      reports = (await listDailyReports('0000-01-01', '9999-12-31'))
+        .filter(report => Boolean(report.completedAt))
+    } catch (error) {
+      toast({
+        title: '读取日报失败',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      })
+      return
+    }
+    if (!reports.length) {
+      toast({ title: '没有可归档的日报', description: '未完成的日报需要先完成打卡。' })
+      return
+    }
+    if (!window.confirm(`确定归档全部 ${reports.length} 篇日报吗？系统会按日期汇总进对应周报，日报文件夹会保留。`)) return
+
+    setIsArchivingReports(true)
+    const failures: string[] = []
+    try {
+      for (const report of reports) {
+        try {
+          await useLearningStore.getState().archiveReport(report.localDate)
+          await removeLearningReportMarkdown(report.markdownPath)
+          if (report.markdownPath) {
+            await cleanTabsByDeletedFile(report.markdownPath)
+            useArticleStore.getState().removeLocalEntry(report.markdownPath)
+          }
+        } catch {
+          failures.push(report.localDate)
+        }
+      }
+      await loadFileTree({ skipRemoteSync: true })
+      const archivedCount = reports.length - failures.length
+      toast({
+        title: failures.length ? `已归档 ${archivedCount} 篇日报` : `已归档全部 ${archivedCount} 篇日报`,
+        description: failures.length
+          ? `${failures.join('、')} 归档失败；日报文件夹已保留。`
+          : '日报已汇总进各自所属周报，日报文件夹已保留。',
+        variant: failures.length ? 'destructive' : 'default',
+      })
+    } finally {
+      setIsArchivingReports(false)
+    }
+  }
   const cacheTree = cloneDeep(fileTree)
   const currentFolder = getCurrentFolder(path, cacheTree)
   const parentFolder = currentFolder?.parent
@@ -892,6 +952,7 @@ export function FolderItem({
           onDragLeave={(e) => handleDragleave(e)}
           onActivate={handleFolderClick}
           onContextMenu={handleFolderContextMenu}
+          className={isLearningReportFolder ? 'bg-sky-500/[0.035]' : undefined}
           onToggle={async (event) => {
             event.stopPropagation()
             if (expansionLocked) return
@@ -948,7 +1009,11 @@ export function FolderItem({
                     onDragStart={handleDragStart}
                     className="relative flex min-w-0 flex-1 cursor-default select-none items-center gap-1 overflow-hidden"
                   >
-                    {isSkillsFolder(item.name) ? (
+                    {isLearningReportRoot ? (
+                      <BookLock className={`${iconSize} shrink-0 text-sky-600 dark:text-sky-400`} />
+                    ) : isLearningReportFolder ? (
+                      <FolderLock className={`${iconSize} shrink-0 text-sky-600/80 dark:text-sky-400/80`} />
+                    ) : isSkillsFolder(item.name) ? (
                       <Sparkles className={`${iconSize} shrink-0 text-primary`} />
                     ) : collapsibleList.includes(path) ? (
                       assetsPath === item.name
@@ -959,7 +1024,24 @@ export function FolderItem({
                         ? <FolderDot className={`${iconSize} shrink-0`} />
                         : <Folder className={`${iconSize} shrink-0`} />
                     )}
-                    <span className={`text-${fileManagerTextSize} min-w-0 flex-1 truncate ${item.loading ? 'text-muted-foreground' : ''}`}>{item.name}</span>
+                    <span className={`text-${fileManagerTextSize} min-w-0 flex-1 truncate ${item.loading ? 'text-muted-foreground' : ''} ${isLearningReportFolder ? 'font-medium text-sky-700 dark:text-sky-300' : ''}`}>{isLegacyReportRoot ? '规划报告' : item.name}</span>
+                    {isLearningReportRoot ? <Badge variant="outline" className="h-4 shrink-0 border-sky-500/30 bg-sky-500/10 px-1 text-[10px] font-normal text-sky-700 dark:text-sky-300">报告</Badge> : null}
+                    {isDailyReportsFolder ? (
+                      <button
+                        type="button"
+                        disabled={isArchivingReports}
+                        className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-50"
+                        title="归档全部日报"
+                        aria-label="归档全部日报"
+                        onClick={(event) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          void handleArchiveAllDailyReports()
+                        }}
+                      >
+                        {isArchivingReports ? <LoaderCircle className="size-3.5 animate-spin" /> : <Archive className="size-3.5" />}
+                      </button>
+                    ) : null}
                   </div>
                   <FileTreeDecorations
                     iconSize={iconSize}
@@ -979,6 +1061,12 @@ export function FolderItem({
                         {t('context.viewDirectory')}
                       </MobileMenuItem>
                       <MobileSeparator />
+                      {isDailyReportsFolder ? (
+                        <MobileMenuItem disabled={isArchivingReports} onClick={() => void handleArchiveAllDailyReports()}>
+                          归档全部日报
+                        </MobileMenuItem>
+                      ) : null}
+                      {isDailyReportsFolder ? <MobileSeparator /> : null}
                       <MobileMenuItem disabled={!item.isLocale} onClick={handleCutFolder}>
                         {t('context.cut')}
                       </MobileMenuItem>
@@ -1043,6 +1131,15 @@ export function FolderItem({
             <UploadFolder item={item} />
             <DownloadFolder item={item} />
             <ContextMenuSeparator />
+            {isDailyReportsFolder ? (
+              <>
+                <ContextMenuItem inset disabled={isArchivingReports} onClick={() => void handleArchiveAllDailyReports()} menuType="file">
+                  {isArchivingReports ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Archive className="mr-2 h-4 w-4" />}
+                  归档全部日报
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+              </>
+            ) : null}
             <RenameFolder item={item} onStartRename={handleStartRename} shortcut={renameKey} />
             <DeleteFolder item={item} shortcut={deleteKey} />
           </>

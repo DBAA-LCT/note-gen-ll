@@ -3,7 +3,9 @@ import { DEFAULT_SYSTEM_PROMPT } from '@/lib/ai/system-prompt'
 import type { AgentContextSnapshot, AgentTool } from './types'
 import { estimateTokens } from '@/lib/ai/token-counter'
 
-const MAX_INLINE_EDITOR_STATE_TOKENS = 10_000
+// Keep enough headroom for the core prompt, recent history, and routed tool
+// schemas even when the provider's context window is unknown (16K fallback).
+const MAX_INLINE_EDITOR_STATE_TOKENS = 4_000
 
 export function hasInlineCurrentEditorState(context: AgentContextSnapshot) {
   return Boolean(
@@ -31,7 +33,55 @@ export function hasInlineCurrentEditorSelection(context: AgentContextSnapshot) {
 }
 
 function formatToolCatalog(tools: AgentTool[]) {
-  return tools.map((tool) => tool.name).join(', ')
+  return tools.length > 0
+    ? tools.map((tool) => tool.name).join(', ')
+    : '(none — answer directly; no app action is needed for this turn)'
+}
+
+const CAPABILITY_GROUPS = [
+  { label: 'Current note', test: (tool: AgentTool) => tool.category === 'editor' },
+  { label: 'Workspace notes and knowledge', test: (tool: AgentTool) => tool.category === 'note' || tool.category === 'folder' },
+  { label: 'Tags and quick records', test: (tool: AgentTool) => tool.category === 'tag' || tool.category === 'mark' },
+  { label: 'Long-term memory', test: (tool: AgentTool) => tool.category === 'memory' },
+  { label: 'Skills and reusable workflows', test: (tool: AgentTool) => tool.category === 'skill' },
+  { label: 'Connected external services (MCP)', test: (tool: AgentTool) => tool.category === 'mcp' },
+  { label: 'Attachments and images', test: (tool: AgentTool) => tool.category === 'attachment' || tool.category === 'image' },
+  { label: 'Web research', test: (tool: AgentTool) => tool.category === 'web' },
+  { label: 'Canvas', test: (tool: AgentTool) => tool.category === 'canvas' },
+  { label: 'Learning goals, plans and reports', test: (tool: AgentTool) => tool.name.startsWith('learning_') },
+]
+
+function formatCapabilityManifest(
+  context: AgentContextSnapshot,
+  capabilityTools: AgentTool[],
+  routedTools: AgentTool[],
+  routing?: { domains: string[]; reason: string; capabilityQuestion: boolean }
+) {
+  const availableNames = new Set(routedTools.map(tool => tool.name))
+  const groups = CAPABILITY_GROUPS.flatMap((group) => {
+    const matching = capabilityTools.filter(group.test)
+    if (matching.length === 0) return []
+    const activeCount = matching.filter(tool => availableNames.has(tool.name)).length
+    const connectionState = group.label.includes('MCP')
+      ? context.selectedMcpServerIds?.length
+        ? `; ${context.selectedMcpServerIds.length} service(s) selected`
+        : '; no service selected'
+      : ''
+    return [`- ${group.label}: supported (${activeCount}/${matching.length} tools active this turn${connectionState})`]
+  })
+
+  return [
+    '## Capability Map',
+    'You are an action-capable NoteGen assistant, not merely a chat bot. You can answer questions directly and can use the following app capabilities when the user asks for them.',
+    ...groups,
+    routing?.domains.length
+      ? `This turn is routed to: ${routing.domains.join(', ')}.`
+      : 'This turn does not require an app action; answer directly.',
+    routing ? `Routing basis: ${routing.reason}.` : '',
+    routing?.capabilityQuestion
+      ? 'The user is asking about your capabilities. Answer from this Capability Map, distinguish built-in capabilities from currently connected external MCP services, and do not claim an unavailable integration.'
+      : '',
+  ].filter(Boolean).join('\n')
 }
 
 function formatCurrentDate() {
@@ -248,12 +298,25 @@ function formatKnowledgeGuidance(tools: AgentTool[]) {
   ].join('\n')
 }
 
+function formatLearningInterviewGuidance(tools: AgentTool[]) {
+  if (!tools.some(tool => tool.name === 'learning_ask_interview_question')) return ''
+  return [
+    '## Learning Interview Protocol',
+    'When the conversation is conducting any NoteGoal learning interview (goal creation, a single-goal report, or a whole-day report), every question must be emitted through learning_ask_interview_question. Do not ask the next interview question in ordinary assistant text.',
+    'Ask one atomic question per turn and wait for the user response. Never bundle subquestions, a checklist, or several skill dimensions together.',
+    'For every question provide 2-5 options. Use answerMode="direct" for closed questions such as direction, deadline, level, or preference; these options are submitted immediately. Use answerMode="draft" for genuinely open questions; make each value a useful first-person draft that is inserted into the composer so the user can edit and manually send it.',
+    'Use facts already present in the conversation. Never require the user to restate the question or repeat an earlier answer. Once enough information is available, call the appropriate proposal tool instead of asking another question.',
+  ].join('\n')
+}
+
 export class AgentPromptAssembler {
   assemble(
     context: AgentContextSnapshot,
     tools: AgentTool[],
     userPromptExtension = '',
-    memoryContext = ''
+    memoryContext = '',
+    capabilityTools: AgentTool[] = tools,
+    routing?: { domains: string[]; reason: string; capabilityQuestion: boolean }
   ) {
     const sections = [
       DEFAULT_SYSTEM_PROMPT,
@@ -265,10 +328,12 @@ export class AgentPromptAssembler {
           ].join('\n')
         : '',
       formatCurrentDate(),
+      formatCapabilityManifest(context, capabilityTools, tools, routing),
       '',
       '## Available Tools',
       'Structured tool definitions contain the authoritative descriptions and parameters. Use these exact names:',
       formatToolCatalog(tools),
+      formatLearningInterviewGuidance(tools),
       formatKnowledgeGuidance(tools),
       formatActiveFile(context),
       formatActiveCanvas(context),

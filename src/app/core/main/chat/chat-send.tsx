@@ -126,6 +126,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
   const activeRunRef = useRef(false)
   const repeatedScriptApprovalRef = useRef<{ signature: string; count: number }>({ signature: '', count: 0 })
   const contextOverflowRetryRef = useRef(0)
+  const recentSubmissionRef = useRef<{ fingerprint: string; timestamp: number } | null>(null)
   const t = useTranslations()
   const requestText = inputValue.trim() || t('record.chat.input.addAttachment.attachmentOnlyPrompt')
 
@@ -1045,6 +1046,18 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
   // 对话（Agent 模式）
   async function handleSubmit() {
     if (!inputValue.trim() && attachedImages.length === 0 && fileAttachments.length === 0) return
+
+    const submissionFingerprint = JSON.stringify({
+      text: inputValue.trim(),
+      images: attachedImages.map(image => image.id),
+      files: fileAttachments.map(file => file.id),
+    })
+    const submissionTimestamp = Date.now()
+    if (
+      recentSubmissionRef.current?.fingerprint === submissionFingerprint
+      && submissionTimestamp - recentSubmissionRef.current.timestamp < 2000
+    ) return
+    recentSubmissionRef.current = { fingerprint: submissionFingerprint, timestamp: submissionTimestamp }
 
     if (activeRunRef.current) {
       const sequence = ++steeringSequenceRef.current

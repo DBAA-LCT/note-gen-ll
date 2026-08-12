@@ -13,6 +13,7 @@ import { skillManager } from '@/lib/skills'
 import { buildMcpAgentToolCatalog } from '@/lib/mcp/agent-tools'
 import { agentDebugLog, previewText } from './debug-log'
 import { getRagAgentPolicy } from '@/lib/rag-agent-policy'
+import { routeAgentTools, type AgentToolRoutingResult } from './tool-router'
 import type {
   AgentChange,
   AgentContextSnapshot,
@@ -740,7 +741,9 @@ export class AgentRuntime {
         && (aiConfig.enableWebSearch === true || tool.category !== 'web')
       )
     const toolMap = new Map(allTools.map((tool) => [tool.name, tool]))
-    let tools = selectToolsForContext(context, allTools, input.permissionMode)
+    const contextEligibleTools = selectToolsForContext(context, allTools, input.permissionMode)
+    let toolRouting: AgentToolRoutingResult = routeAgentTools(context, contextEligibleTools)
+    let tools = toolRouting.tools
     const customSystemPrompt = await getSystemPromptContent()
     let memoryContext = input.useMemories === false
       ? {
@@ -758,7 +761,9 @@ export class AgentRuntime {
       context,
       tools,
       customSystemPrompt,
-      memoryContextService.formatMemoryContext(memoryContext)
+      memoryContextService.formatMemoryContext(memoryContext),
+      allTools,
+      toolRouting
     )
     const baseMessages = this.contextManager.prepareMessages(input.messages || [])
       .map(normalizeBaseMessage)
@@ -773,12 +778,21 @@ export class AgentRuntime {
       ...baseMessages,
       currentUserMessage,
     ]
+    const learningInterviewActive = [...baseMessages, currentUserMessage].some(message => {
+      if (typeof message.content !== 'string') return false
+      return message.content.includes('learning_ask_interview_question')
+        || /采访我并生成.{0,40}(?:日报|学习目标)/u.test(message.content)
+        || /通过访谈帮我新建.{0,20}学习目标/u.test(message.content)
+    })
 
     agentDebugLog('context_prepared', {
       runId,
       systemPromptLength: systemPrompt.length,
       systemPromptTokens: estimateTokens(systemPrompt),
       toolCount: tools.length,
+      totalEligibleToolCount: toolRouting.totalToolCount,
+      routedDomains: toolRouting.domains,
+      routingReason: toolRouting.reason,
       rawMessageCount: input.messages?.length || 0,
       preparedMessageCount: messages.length,
       preparedMessageTextTokens: messages.reduce(
@@ -817,6 +831,7 @@ export class AgentRuntime {
       : ragAgentPolicy.strategy === 'deep' ? 5 : 3
     let directAnswerEvidenceChecked = false
     let knowledgeCitationChecked = false
+    let forceLearningInterviewQuestion = false
     const executeToolWithBudget = async (
       tool: AgentTool,
       args: Record<string, unknown>
@@ -1044,7 +1059,9 @@ export class AgentRuntime {
         ].slice(-6)
       }
       context.currentEditorState = undefined
-      tools = selectToolsForContext(context, allTools, input.permissionMode)
+      const steeredEligibleTools = selectToolsForContext(context, allTools, input.permissionMode)
+      toolRouting = routeAgentTools(context, steeredEligibleTools)
+      tools = toolRouting.tools
       editorStateReadLocked = false
       editorSelectionReadLocked = hasInlineCurrentEditorSelection(context)
       consecutiveNoProgressRounds = 0
@@ -1067,7 +1084,9 @@ export class AgentRuntime {
         context,
         tools,
         customSystemPrompt,
-        memoryContextService.formatMemoryContext(memoryContext)
+        memoryContextService.formatMemoryContext(memoryContext),
+        allTools,
+        toolRouting
       )
       messages[0] = { role: 'system', content: systemPrompt }
 
@@ -1184,10 +1203,14 @@ export class AgentRuntime {
           estimatedTextAndToolTokens: messageTextTokens + toolSchemaTokens,
           imageCount: input.imageUrls?.length || 0,
         })
+        const mustAskLearningInterviewQuestion = forceLearningInterviewQuestion
+          && offeredToolNames.has('learning_ask_interview_question')
         const toolParams = openAITools.length > 0
           ? {
               tools: openAITools,
-              tool_choice: 'auto' as const,
+              tool_choice: mustAskLearningInterviewQuestion
+                ? { type: 'function' as const, function: { name: 'learning_ask_interview_question' } }
+                : 'auto' as const,
             }
           : {}
         const stream = await this.recoveryManager.withRetry(() =>
@@ -1318,6 +1341,9 @@ export class AgentRuntime {
           }
           return rewritten
         })
+        if (toolUses.some(toolCall => toolCall.function.name === 'learning_ask_interview_question')) {
+          forceLearningInterviewQuestion = false
+        }
         if (steeringInterrupted) {
           finalizeInterruptedModelTrace('success', '模型响应已被追加信息引导', true)
           if (assistantContent) {
@@ -1376,6 +1402,36 @@ export class AgentRuntime {
           const resolvedContent = assistantContent || finalContent
           if (!resolvedContent) {
             throw new Error('AI response did not include a message')
+          }
+          const completedLearningInterviewAction = toolCalls.some(call => (
+            call.status === 'success'
+            && (
+              call.toolName === 'learning_ask_interview_question'
+              || call.toolName === 'learning_propose_goal'
+              || call.toolName === 'learning_propose_daily_report'
+            )
+          ))
+          if (
+            learningInterviewActive
+            && !completedLearningInterviewAction
+            && offeredToolNames.has('learning_ask_interview_question')
+          ) {
+            callbacks.onCandidateAnswerClear?.()
+            forceLearningInterviewQuestion = true
+            messages.push(
+              { role: 'assistant', content: resolvedContent },
+              {
+                role: 'user',
+                content: [
+                  '## App Context',
+                  'This is an active NoteGoal learning interview, but this run attempted to finish without a successful interview-question card or a proposal card.',
+                  'If more information is needed, call learning_ask_interview_question now for exactly one question. Choose direct mode for a closed choice or draft mode for an open answer.',
+                  'If enough information is already available, call the appropriate proposal tool now: learning_propose_goal or learning_propose_daily_report. Do not return an ordinary-text substitute for either card.',
+                  'Do not mention this correction to the user.',
+                ].join('\n'),
+              }
+            )
+            continue
           }
           if (
             knowledgeSearchCount > 0

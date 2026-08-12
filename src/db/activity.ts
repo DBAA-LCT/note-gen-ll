@@ -206,7 +206,7 @@ async function backfillLearningActivityEvents() {
         where s.status='completed' and s.effectiveSeconds>0
       `),
       db.select<Array<{ localDate: string; overall: string; markdownPath: string | null; version: number; updatedAt: number }>>(
-        'select localDate,overall,markdownPath,version,updatedAt from daily_reports',
+        'select localDate,overall,markdownPath,version,updatedAt from daily_reports where archivedAt is null',
       ),
     ])
 

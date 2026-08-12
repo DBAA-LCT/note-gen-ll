@@ -164,6 +164,7 @@ export const ChatInput = React.memo(function ChatInput() {
   const imageDragDepthRef = useRef(0)
   const onboardingAgentPromptArmedRef = useRef(false)
   const onboardingTypingTimerRefs = useRef<number[]>([])
+  const pendingQuickSendRef = useRef<string | null>(null)
   const maxImageSizeLabel = formatFileSize(MAX_IMAGE_ATTACHMENT_SIZE_BYTES)
   const activeQuote = pendingQuote || editorSelectionQuote
   const visibleActiveTabContext = React.useMemo(() => {
@@ -906,39 +907,57 @@ export const ChatInput = React.memo(function ChatInput() {
   }
 
   useEffect(() => {
-    emitter.on('revertChat', (event: unknown) => {
+    const handleRevertChat = (event: unknown) => {
       setText(event as string)
-    })
-    emitter.on('fileSelected', (event: unknown) => {
+    }
+    const handleFileSelected = (event: unknown) => {
       setLinkedResource(event as MarkdownFile)
       setChatLinkedResource(event as MarkdownFile)
-    })
-    emitter.on('folderSelected', (event: unknown) => {
+    }
+    const handleFolderSelected = (event: unknown) => {
       setLinkedResource(event as LinkedFolder)
       setChatLinkedResource(event as LinkedFolder)
-    })
-    emitter.on('insert-quote', (event: unknown) => {
+    }
+    const handleInsertQuote = (event: unknown) => {
       const data = event as PendingQuote
       setPendingQuote(data)
       // 延迟聚焦到输入框
       setTimeout(() => {
         textareaRef.current?.focus()
       }, 50)
-    })
-    emitter.on('quick-prompt-insert', (prompt: string) => {
+    }
+    const handleQuickPromptInsert = (prompt: string) => {
       setText(prompt)
       textareaRef.current?.focus()
-    })
+    }
+    const handleQuickPromptSend = (prompt: string) => {
+      pendingQuickSendRef.current = prompt
+      setText(prompt)
+    }
+    emitter.on('revertChat', handleRevertChat)
+    emitter.on('fileSelected', handleFileSelected)
+    emitter.on('folderSelected', handleFolderSelected)
+    emitter.on('insert-quote', handleInsertQuote)
+    emitter.on('quick-prompt-insert', handleQuickPromptInsert)
+    emitter.on('quick-prompt-send', handleQuickPromptSend)
     return () => {
       onboardingTypingTimerRefs.current.forEach((timerId) => window.clearTimeout(timerId))
       onboardingTypingTimerRefs.current = []
-      emitter.off('revertChat')
-      emitter.off('fileSelected')
-      emitter.off('folderSelected')
-      emitter.off('insert-quote')
-      emitter.off('quick-prompt-insert')
+      emitter.off('revertChat', handleRevertChat)
+      emitter.off('fileSelected', handleFileSelected)
+      emitter.off('folderSelected', handleFolderSelected)
+      emitter.off('insert-quote', handleInsertQuote)
+      emitter.off('quick-prompt-insert', handleQuickPromptInsert)
+      emitter.off('quick-prompt-send', handleQuickPromptSend)
     }
   }, [setPendingQuote])
+
+  useEffect(() => {
+    if (!pendingQuickSendRef.current || text !== pendingQuickSendRef.current) return
+    pendingQuickSendRef.current = null
+    const timerId = window.setTimeout(() => chatSendRef.current?.sendChat(), 0)
+    return () => window.clearTimeout(timerId)
+  }, [text])
 
   useEffect(() => {
     if (!onboardingPromptDraft) {

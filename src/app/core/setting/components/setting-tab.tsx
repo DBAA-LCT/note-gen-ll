@@ -40,7 +40,7 @@ export function SettingTab() {
       }
       return {
         ...item,
-        title: item.anchor === 'learning' ? '目标' : t(item.anchor === 'ai' ? 'ai.menuTitle' : `${item.anchor}.title`),
+        title: item.anchor === 'learning' ? '规划' : t(item.anchor === 'ai' ? 'ai.menuTitle' : `${item.anchor}.title`),
         searchTerms: item.anchor === 'learning'
           ? ['目标', '任务', '专注', '复盘', '日报']
           : collectSearchTerms(settingMessages?.[item.anchor]),

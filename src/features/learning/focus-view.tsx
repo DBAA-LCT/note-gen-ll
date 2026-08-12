@@ -1,13 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, CirclePause, CirclePlay, RotateCcw, Square } from 'lucide-react'
+import { ArrowLeft, CirclePause, CirclePlay, ListChecks, RotateCcw, Square } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import useLearningStore from '@/stores/learning'
 import type { FocusSession } from '@/types/learning'
 
@@ -16,6 +17,7 @@ const STORAGE_KEY = 'notegen.learning.active-focus.v1'
 interface ActiveTimer {
   id: string
   taskId: string | null
+  taskIds: string[]
   goalId: string | null
   localDate: string
   startedAt: number
@@ -41,7 +43,7 @@ function formatDuration(seconds: number) {
 
 export function FocusView({ onBack }: { onBack?: () => void }) {
   const { date, tasks, sessions, saveSession, setTaskStatus } = useLearningStore()
-  const [selectedTaskId, setSelectedTaskId] = useState('free')
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([])
   const [timer, setTimer] = useState<ActiveTimer | null>(null)
   const [now, setNow] = useState(Date.now())
   const actionableTasks = tasks.filter(task => task.status !== 'done' && task.status !== 'cancelled')
@@ -52,8 +54,9 @@ export function FocusView({ onBack }: { onBack?: () => void }) {
     try {
       const restored = JSON.parse(raw) as ActiveTimer
       if (restored.localDate === date) {
-        setTimer(restored)
-        setSelectedTaskId(restored.taskId || 'free')
+        const taskIds = restored.taskIds?.length ? restored.taskIds : restored.taskId ? [restored.taskId] : []
+        setTimer({ ...restored, taskIds })
+        setSelectedTaskIds(taskIds)
       }
     } catch {
       localStorage.removeItem(STORAGE_KEY)
@@ -81,13 +84,21 @@ export function FocusView({ onBack }: { onBack?: () => void }) {
     [sessions],
   )
 
+  const toggleTask = (taskId: string, checked: boolean) => {
+    setSelectedTaskIds(current => checked
+      ? [...current, taskId]
+      : current.filter(id => id !== taskId))
+  }
+
   const start = async () => {
-    const selected = tasks.find(task => task.id === selectedTaskId)
+    const selected = tasks.filter(task => selectedTaskIds.includes(task.id))
+    const primaryTask = selected[0]
     const timestamp = Date.now()
     const next: ActiveTimer = {
       id: uuid(),
-      taskId: selected?.id || null,
-      goalId: selected?.goalId || null,
+      taskId: primaryTask?.id || null,
+      taskIds: selected.map(task => task.id),
+      goalId: primaryTask?.goalId || null,
       localDate: date,
       startedAt: timestamp,
       runningSince: timestamp,
@@ -95,7 +106,9 @@ export function FocusView({ onBack }: { onBack?: () => void }) {
     }
     setTimer(next)
     setNow(timestamp)
-    if (selected && selected.status === 'todo') await setTaskStatus(selected.id, 'in-progress')
+    for (const task of selected) {
+      if (task.status === 'todo') await setTaskStatus(task.id, 'in-progress')
+    }
   }
 
   const pause = () => {
@@ -121,6 +134,7 @@ export function FocusView({ onBack }: { onBack?: () => void }) {
         await saveSession({
           id: timer.id,
           taskId: timer.taskId,
+          taskIds: timer.taskIds,
           goalId: timer.goalId,
           localDate: timer.localDate,
           startedAt: timer.startedAt,
@@ -147,15 +161,49 @@ export function FocusView({ onBack }: { onBack?: () => void }) {
       </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
         <Card>
-          <CardHeader><CardTitle>当前专注</CardTitle><CardDescription>暂停时间不会计入有效学习时长。</CardDescription></CardHeader>
+          <CardHeader><CardTitle>当前专注</CardTitle><CardDescription>暂停时间不会计入有效投入时长。</CardDescription></CardHeader>
           <CardContent className="flex flex-col items-center gap-6 py-8">
             <div className="font-mono text-5xl font-semibold tabular-nums sm:text-7xl">{formatDuration(elapsed)}</div>
             <div className="w-full max-w-md space-y-2">
-              <Label>关联任务</Label>
-              <Select value={selectedTaskId} onValueChange={setSelectedTaskId} disabled={Boolean(timer)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="free">自由专注（不关联任务）</SelectItem>{actionableTasks.map(task => <SelectItem key={task.id} value={task.id}>{task.title}</SelectItem>)}</SelectContent>
-              </Select>
+              <div className="flex items-center justify-between gap-3">
+                <Label>关联任务</Label>
+                <span className="text-xs text-muted-foreground">{selectedTaskIds.length ? `已选 ${selectedTaskIds.length} 项` : '自由专注'}</span>
+              </div>
+              <div className="overflow-hidden rounded-xl border bg-muted/15">
+                <label className="flex cursor-pointer items-center gap-3 border-b px-3 py-3 transition-colors hover:bg-muted/50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
+                  <Checkbox
+                    checked={selectedTaskIds.length === 0}
+                    disabled={Boolean(timer)}
+                    onCheckedChange={() => setSelectedTaskIds([])}
+                    aria-label="自由专注，不关联任务"
+                  />
+                  <span className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium"><ListChecks className="size-4 text-muted-foreground" />自由专注（不关联任务）</span>
+                </label>
+                <ScrollArea className="h-52">
+                  <div className="divide-y">
+                    {actionableTasks.map(task => {
+                      const checked = selectedTaskIds.includes(task.id)
+                      return (
+                        <label key={task.id} className="flex cursor-pointer items-start gap-3 px-3 py-3 transition-colors hover:bg-muted/50 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60">
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={checked}
+                            disabled={Boolean(timer)}
+                            onCheckedChange={value => toggleTask(task.id, value === true)}
+                            aria-label={`关联任务：${task.title}`}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{task.title}</span>
+                            {task.goalTitle ? <span className="mt-0.5 block truncate text-xs text-muted-foreground">{task.goalTitle}</span> : null}
+                          </span>
+                        </label>
+                      )
+                    })}
+                    {!actionableTasks.length ? <p className="px-3 py-6 text-center text-sm text-muted-foreground">今天没有可关联的任务</p> : null}
+                  </div>
+                </ScrollArea>
+              </div>
+              <p className="text-xs text-muted-foreground">可同时选择多个任务；计时开始后将锁定本次关联。</p>
             </div>
             <div className="flex flex-wrap justify-center gap-2">
               {!timer && <Button size="lg" onClick={() => void start()}><CirclePlay data-icon="inline-start" />开始</Button>}
@@ -171,8 +219,10 @@ export function FocusView({ onBack }: { onBack?: () => void }) {
           <CardContent className="space-y-4">
             <div><p className="text-3xl font-semibold">{Math.round(todaySeconds / 60)} 分钟</p><p className="text-xs text-muted-foreground">累计有效专注</p></div>
             <div className="space-y-2">{completedSessions.length ? completedSessions.slice().reverse().map(session => {
-              const task = tasks.find(item => item.id === session.taskId)
-              return <div key={session.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm"><span className="truncate">{task?.title || '自由专注'}</span><Badge variant="secondary">{Math.round(session.effectiveSeconds / 60)} 分钟</Badge></div>
+              const taskIds = session.taskIds?.length ? session.taskIds : session.taskId ? [session.taskId] : []
+              const taskTitles = taskIds.map(id => tasks.find(item => item.id === id)?.title).filter(Boolean)
+              const title = taskTitles.length ? taskTitles.join('、') : '自由专注'
+              return <div key={session.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm"><span className="truncate" title={title}>{title}</span><Badge variant="secondary">{Math.round(session.effectiveSeconds / 60)} 分钟</Badge></div>
             }) : <p className="text-sm text-muted-foreground">今天还没有专注记录。</p>}</div>
           </CardContent>
         </Card>

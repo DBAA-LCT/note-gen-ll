@@ -18,6 +18,10 @@ import { Button } from '@/components/ui/button'
 import { McpToolCallCard } from './mcp-tool-call'
 import { AgentExecutionStatus } from './agent-execution-status'
 import { AgentPanelWithRag } from './agent-panel-with-rag'
+import { getGoalDrafts, LearningGoalDraftCard } from './learning-goal-draft-card'
+import { DailyPlanDraftCard, DailyReportDraftCard, getDailyPlanDrafts, getDailyReportDrafts } from './learning-workflow-draft-cards'
+import { getLearningInterviewQuestions, LearningInterviewQuestionCard } from './learning-interview-question-card'
+import type { ToolCall } from '@/lib/agent/types'
 import { ChatImages } from "./chat-images"
 import {
   buildChatImageContext,
@@ -306,6 +310,44 @@ const Message = React.memo(function Message({ chat }: { chat: Chat }) {
     agentState.pendingConfirmation
   )
   const isLiveAgentVisible = isActiveAgentMessage && (agentState.isRunning || agentState.isFinalAnswerMode || hasLiveAgentTrace)
+  const historicalGoalDrafts = useMemo(() => {
+    if (!chat.agentHistory) return []
+    try {
+      const history = JSON.parse(chat.agentHistory) as { toolCalls?: ToolCall[] }
+      return getGoalDrafts(history.toolCalls || [])
+    } catch {
+      return []
+    }
+  }, [chat.agentHistory])
+  const liveGoalDrafts = useMemo(
+    () => isActiveAgentMessage ? getGoalDrafts(agentState.toolCalls) : [],
+    [agentState.toolCalls, isActiveAgentMessage],
+  )
+  const goalDrafts = liveGoalDrafts.length ? liveGoalDrafts : historicalGoalDrafts
+  const historicalWorkflowDrafts = useMemo(() => {
+    if (!chat.agentHistory) return { plans: [], reports: [] }
+    try {
+      const history = JSON.parse(chat.agentHistory) as { toolCalls?: ToolCall[] }
+      return { plans: getDailyPlanDrafts(history.toolCalls || []), reports: getDailyReportDrafts(history.toolCalls || []) }
+    } catch {
+      return { plans: [], reports: [] }
+    }
+  }, [chat.agentHistory])
+  const liveDailyPlans = isActiveAgentMessage ? getDailyPlanDrafts(agentState.toolCalls) : []
+  const liveDailyReports = isActiveAgentMessage ? getDailyReportDrafts(agentState.toolCalls) : []
+  const dailyPlanDrafts = liveDailyPlans.length ? liveDailyPlans : historicalWorkflowDrafts.plans
+  const dailyReportDrafts = liveDailyReports.length ? liveDailyReports : historicalWorkflowDrafts.reports
+  const historicalInterviewQuestions = useMemo(() => {
+    if (!chat.agentHistory) return []
+    try {
+      const history = JSON.parse(chat.agentHistory) as { toolCalls?: ToolCall[] }
+      return getLearningInterviewQuestions(history.toolCalls || [])
+    } catch {
+      return []
+    }
+  }, [chat.agentHistory])
+  const liveInterviewQuestions = isActiveAgentMessage ? getLearningInterviewQuestions(agentState.toolCalls) : []
+  const interviewQuestions = liveInterviewQuestions.length ? liveInterviewQuestions : historicalInterviewQuestions
 
   const handleRemoveClearContext = useCallback(() => {
     deleteChat(chat.id)
@@ -512,6 +554,14 @@ const Message = React.memo(function Message({ chat }: { chat: Chat }) {
               />
             )}
 
+            {interviewQuestions.map((question, index) => (
+              <LearningInterviewQuestionCard
+                key={`${question.topic}-${question.question}-${index}`}
+                question={question}
+                interactive={isLatestSystemMessage && !isGeneratingMessage}
+              />
+            ))}
+
             {isLiveAgentVisible && (
               <div className="space-y-2">
                 {(agentState.isRunning || hasLiveAgentTrace) && (
@@ -521,6 +571,17 @@ const Message = React.memo(function Message({ chat }: { chat: Chat }) {
             )}
 
             {/* MCP 工具调用展示 */}
+            {goalDrafts.length > 0 && (
+              <div className="space-y-3">
+                {goalDrafts.map((draft, index) => (
+                  <LearningGoalDraftCard key={`${draft.title}-${draft.startDate}-${index}`} draft={draft} />
+                ))}
+              </div>
+            )}
+
+            {dailyPlanDrafts.map((draft, index) => <DailyPlanDraftCard key={`${draft.date}-${index}`} draft={draft} />)}
+            {dailyReportDrafts.map((draft, index) => <DailyReportDraftCard key={`${draft.date}-${draft.scope}-${index}`} draft={draft} />)}
+
             {mcpToolCalls.length > 0 && (
               <div className="space-y-4">
                 {mcpToolCalls.map(toolCall => (

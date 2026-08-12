@@ -28,6 +28,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Command,
   CommandEmpty,
@@ -115,6 +116,15 @@ export function WorkspaceRepoMapping({
 
   function resolveRepoName(workspacePath: string, repo: string) {
     return repo.trim() || (workspacePath ? '' : defaultRepoName)
+  }
+
+  function getLocalMirrorCount(repo: string) {
+    const normalizedRepo = repo.trim().toLocaleLowerCase()
+    if (!normalizedRepo) return 0
+
+    return workspaceOptions.filter((workspacePath) => {
+      return getConfiguredRepo(workspacePath).toLocaleLowerCase() === normalizedRepo
+    }).length
   }
 
   function invalidateRequest(workspacePath: string) {
@@ -445,6 +455,7 @@ export function WorkspaceRepoMapping({
               repo => repo.toLocaleLowerCase() === normalizedRepositorySearch.toLocaleLowerCase()
             )
             const repositoryPickerOpen = repositoryPickerWorkspace === workspacePath
+            const localMirrorCount = getLocalMirrorCount(configuredRepo)
             const resultLabel = result
               ? t(`settings.sync.repositoryCheck.${result}`)
               : t('settings.sync.checkRepo')
@@ -480,6 +491,11 @@ export function WorkspaceRepoMapping({
                         )}>
                           {workspaceName}
                         </span>
+                        {localMirrorCount > 1 ? (
+                          <Badge variant="secondary" className="shrink-0 font-normal">
+                            {t('settings.sync.localMirrorCount', { count: localMirrorCount })}
+                          </Badge>
+                        ) : null}
                       </ItemTitle>
                     </ItemContent>
                   </TooltipTrigger>
@@ -581,6 +597,13 @@ export function WorkspaceRepoMapping({
                                           >
                                             <GitBranch />
                                             <span className="truncate">{repo}</span>
+                                            {getLocalMirrorCount(repo) > 0 ? (
+                                              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                                                {t('settings.sync.localMirrorCount', {
+                                                  count: getLocalMirrorCount(repo),
+                                                })}
+                                              </span>
+                                            ) : null}
                                           </CommandItem>
                                         ))}
                                       </CommandGroup>

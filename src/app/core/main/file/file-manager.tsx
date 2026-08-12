@@ -139,6 +139,7 @@ export function FileManager({ focusSidebar }: { focusSidebar: () => void }) {
   const workspacePath = useSettingStore(state => state.workspacePath)
   const t = useTranslations('article.file')
   const tRecordToolbar = useTranslations('record.mark.toolbar')
+
   const {
     configurationRevision: syncConfigurationRevision,
     refresh: refreshSyncAvailability,

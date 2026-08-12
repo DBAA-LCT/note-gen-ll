@@ -1,24 +1,42 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { platform } from '@tauri-apps/plugin-os'
-import { getCurrentWindow } from '@tauri-apps/api/window'
-import { isMobileDevice } from '@/lib/check'
-import { Search, Settings, Minus, Square, Copy, X, PanelLeft, PanelRight, SquarePen, Cog, CalendarDays } from 'lucide-react'
-import { useTranslations } from 'next-intl'
-import { useSidebarStore } from '@/stores/sidebar'
-import AppStatus from './app-status'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Button } from '@/components/ui/button'
-import useSettingStore from '@/stores/setting'
-import useArticleStore from '@/stores/article'
-import useUpdateStore from '@/stores/update'
-import React from 'react'
-import { ControlText } from '@/app/core/main/mark/control-text'
-import { ControlRecording } from '@/app/core/main/mark/control-recording'
-import { ControlImage } from '@/app/core/main/mark/control-image'
-import { ControlLink } from '@/app/core/main/mark/control-link'
-import { ControlTodo } from '@/app/core/main/mark/control-todo'
+import { useEffect, useState } from "react";
+import { platform } from "@tauri-apps/plugin-os";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isMobileDevice } from "@/lib/check";
+import {
+  Search,
+  Settings,
+  Minus,
+  Square,
+  Copy,
+  X,
+  PanelLeft,
+  PanelRight,
+  SquarePen,
+  Cog,
+  CalendarDays,
+  History,
+} from "lucide-react";
+import { useTranslations } from "next-intl";
+import { useSidebarStore } from "@/stores/sidebar";
+import AppStatus from "./app-status";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import useSettingStore from "@/stores/setting";
+import useArticleStore from "@/stores/article";
+import useUpdateStore from "@/stores/update";
+import React from "react";
+import { ControlText } from "@/app/core/main/mark/control-text";
+import { ControlRecording } from "@/app/core/main/mark/control-recording";
+import { ControlImage } from "@/app/core/main/mark/control-image";
+import { ControlLink } from "@/app/core/main/mark/control-link";
+import { ControlTodo } from "@/app/core/main/mark/control-todo";
 import {
   DndContext,
   closestCenter,
@@ -26,63 +44,87 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
-} from '@dnd-kit/core'
+} from "@dnd-kit/core";
 import {
   arrayMove,
   SortableContext,
   horizontalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { DraggableToolbarItem } from './draggable-toolbar-item'
-import { useToolbarShortcuts } from '@/hooks/use-toolbar-shortcuts'
-import { useSettingsDialogStore } from '@/stores/settings-dialog'
+} from "@dnd-kit/sortable";
+import { DraggableToolbarItem } from "./draggable-toolbar-item";
+import { useToolbarShortcuts } from "@/hooks/use-toolbar-shortcuts";
+import { useSettingsDialogStore } from "@/stores/settings-dialog";
+import { openGlobalSchedule } from "@/features/schedule/open-global-schedule";
 
-type Platform = 'windows' | 'linux' | 'unknown'
+type Platform = "windows" | "linux" | "unknown";
 
 interface TitleBarProps {
-  onSearchClick?: () => void
-  onActivityClick?: () => void
-  activityOpen?: boolean
+  onSearchClick?: () => void;
+  onActivityClick?: () => void;
+  activityOpen?: boolean;
 }
 
-export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false }: TitleBarProps) {
-  const [currentPlatform, setCurrentPlatform] = useState<Platform>('unknown')
-  const [isMobile, setIsMobile] = useState(true)
-  const [isMaximized, setIsMaximized] = useState(false)
-  const { open: settingsOpen, openSettings, closeSettings } = useSettingsDialogStore()
-  const { leftSidebarVisible, centerPanelVisible, rightSidebarVisible, toggleLeftSidebar, toggleCenterPanel, toggleRightSidebar } = useSidebarStore()
-  
+export function TitleBar({
+  onSearchClick,
+  onActivityClick,
+  activityOpen = false,
+}: TitleBarProps) {
+  const [currentPlatform, setCurrentPlatform] = useState<Platform>("unknown");
+  const [isMobile, setIsMobile] = useState(true);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const {
+    open: settingsOpen,
+    openSettings,
+    closeSettings,
+  } = useSettingsDialogStore();
+  const {
+    leftSidebarVisible,
+    centerPanelVisible,
+    rightSidebarVisible,
+    toggleLeftSidebar,
+    toggleCenterPanel,
+    toggleRightSidebar,
+  } = useSidebarStore();
+
   // 检查关闭面板后是否会导致"仅左"状态或无面板状态
-  const wouldCauseLeftOnly = (currentVisible: boolean, panel: 'left' | 'center' | 'right') => {
+  const wouldCauseLeftOnly = (
+    currentVisible: boolean,
+    panel: "left" | "center" | "right",
+  ) => {
     // 如果面板本来就不可见，不会导致问题（打开面板总是允许的）
-    if (!currentVisible) return false
-    
-    const visibleCount = [leftSidebarVisible, centerPanelVisible, rightSidebarVisible].filter(Boolean).length
-    
-    if (visibleCount === 1) return true // 不允许关闭最后一个面板
-    
+    if (!currentVisible) return false;
+
+    const visibleCount = [
+      leftSidebarVisible,
+      centerPanelVisible,
+      rightSidebarVisible,
+    ].filter(Boolean).length;
+
+    if (visibleCount === 1) return true; // 不允许关闭最后一个面板
+
     if (visibleCount === 2) {
       // 只有当关闭中间或右侧面板会导致"仅左"状态时才阻止
-      if (panel === 'center' && leftSidebarVisible && !rightSidebarVisible) return true
-      if (panel === 'right' && leftSidebarVisible && !centerPanelVisible) return true
+      if (panel === "center" && leftSidebarVisible && !rightSidebarVisible)
+        return true;
+      if (panel === "right" && leftSidebarVisible && !centerPanelVisible)
+        return true;
       // 关闭左侧面板不会导致"仅左"状态（它会变成"仅中"或"仅右"），所以允许
     }
-    
-    return false
-  }
-  const { recordToolbarConfig, setRecordToolbarConfig } = useSettingStore()
-  const { activeFilePath } = useArticleStore()
-  const { hasUpdate } = useUpdateStore()
-  const t = useTranslations()
-  const { isModifierPressed } = useToolbarShortcuts()
+
+    return false;
+  };
+  const { recordToolbarConfig, setRecordToolbarConfig } = useSettingStore();
+  const { activeFilePath } = useArticleStore();
+  const { hasUpdate } = useUpdateStore();
+  const t = useTranslations();
+  const { isModifierPressed } = useToolbarShortcuts();
 
   const getFileName = () => {
-    if (!activeFilePath) return ''
-    const parts = activeFilePath.split('/')
-    return parts[parts.length - 1]
-  }
+    if (!activeFilePath) return "";
+    const parts = activeFilePath.split("/");
+    return parts[parts.length - 1];
+  };
 
-  const searchPlaceholder = getFileName() || t('navigation.searchPlaceholder')
-
+  const searchPlaceholder = getFileName() || t("navigation.searchPlaceholder");
 
   // 拖拽传感器配置
   const sensors = useSensors(
@@ -91,118 +133,120 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
         delay: 200,
         tolerance: 5,
       },
-    })
-  )
+    }),
+  );
 
   // 处理拖拽结束
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
+    const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const oldIndex = recordToolbarConfig.findIndex((item) => item.id === active.id)
-      const newIndex = recordToolbarConfig.findIndex((item) => item.id === over.id)
-      
-      const newItems = arrayMove(recordToolbarConfig, oldIndex, newIndex)
+      const oldIndex = recordToolbarConfig.findIndex(
+        (item) => item.id === active.id,
+      );
+      const newIndex = recordToolbarConfig.findIndex(
+        (item) => item.id === over.id,
+      );
+
+      const newItems = arrayMove(recordToolbarConfig, oldIndex, newIndex);
       const updatedItems = newItems.map((item, index) => ({
         ...item,
-        order: index
-      }))
-      setRecordToolbarConfig(updatedItems)
+        order: index,
+      }));
+      setRecordToolbarConfig(updatedItems);
     }
-  }
+  };
 
   useEffect(() => {
     // 检查是否为移动设备
-    setIsMobile(isMobileDevice())
-    
+    setIsMobile(isMobileDevice());
+
     try {
-      const p = platform()
-      if (p === 'windows') {
-        setCurrentPlatform('windows')
-      } else if (p === 'linux') {
-        setCurrentPlatform('linux')
+      const p = platform();
+      if (p === "windows") {
+        setCurrentPlatform("windows");
+      } else if (p === "linux") {
+        setCurrentPlatform("linux");
       }
     } catch (error) {
-      console.error('Error detecting platform:', error)
+      console.error("Error detecting platform:", error);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
-    if (currentPlatform === 'unknown') return
+    if (currentPlatform === "unknown") return;
 
-    const appWindow = getCurrentWindow()
-    let disposed = false
-    let unlisten: (() => void) | undefined
+    const appWindow = getCurrentWindow();
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
 
     const syncMaximizedState = async () => {
       try {
-        const maximized = await appWindow.isMaximized()
-        if (!disposed) setIsMaximized(maximized)
+        const maximized = await appWindow.isMaximized();
+        if (!disposed) setIsMaximized(maximized);
       } catch (error) {
-        console.error('Error checking maximized state:', error)
+        console.error("Error checking maximized state:", error);
       }
-    }
+    };
 
     const listenForWindowResize = async () => {
-      await syncMaximizedState()
+      await syncMaximizedState();
       const stopListening = await appWindow.onResized(() => {
-        void syncMaximizedState()
-      })
+        void syncMaximizedState();
+      });
 
       if (disposed) {
-        stopListening()
+        stopListening();
       } else {
-        unlisten = stopListening
+        unlisten = stopListening;
       }
-    }
+    };
 
     void listenForWindowResize().catch((error) => {
-      console.error('Error listening for window resize:', error)
-    })
+      console.error("Error listening for window resize:", error);
+    });
 
     return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [currentPlatform])
-
-
+      disposed = true;
+      unlisten?.();
+    };
+  }, [currentPlatform]);
 
   const handleMinimize = async () => {
     try {
-      const window = getCurrentWindow()
-      await window.minimize()
+      const window = getCurrentWindow();
+      await window.minimize();
     } catch (error) {
-      console.error('Error minimizing window:', error)
+      console.error("Error minimizing window:", error);
     }
-  }
+  };
 
   const handleMaximize = async () => {
     try {
-      const window = getCurrentWindow()
-      await window.toggleMaximize()
+      const window = getCurrentWindow();
+      await window.toggleMaximize();
     } catch (error) {
-      console.error('Error maximizing window:', error)
+      console.error("Error maximizing window:", error);
     }
-  }
+  };
 
   const handleClose = async () => {
     try {
-      const window = getCurrentWindow()
-      await window.close()
+      const window = getCurrentWindow();
+      await window.close();
     } catch (error) {
-      console.error('Error closing window:', error)
+      console.error("Error closing window:", error);
     }
-  }
+  };
 
   // 移动端不显示标题栏
   if (isMobile) {
-    return null
+    return null;
   }
 
   // 平台未知时不显示
-  if (currentPlatform === 'unknown') {
-    return null
+  if (currentPlatform === "unknown") {
+    return null;
   }
 
   return (
@@ -212,7 +256,11 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
         data-tauri-drag-region
       >
         {/* 左侧记录工具栏按钮 */}
-        <div id="onboarding-target-record-toolbar" className="flex items-center gap-0.5 px-2 shrink-0" data-tauri-drag-region="false">
+        <div
+          id="onboarding-target-record-toolbar"
+          className="flex items-center gap-0.5 px-2 shrink-0"
+          data-tauri-drag-region="false"
+        >
           <TooltipProvider>
             <DndContext
               sensors={sensors}
@@ -220,31 +268,33 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={recordToolbarConfig.filter(item => item.enabled).map(item => item.id)}
+                items={recordToolbarConfig
+                  .filter((item) => item.enabled)
+                  .map((item) => item.id)}
                 strategy={horizontalListSortingStrategy}
               >
                 <div className="flex">
                   {recordToolbarConfig
-                    .filter(item => item.enabled)
+                    .filter((item) => item.enabled)
                     .sort((a, b) => a.order - b.order)
                     .map((item, index) => {
                       const renderToolbarItem = () => {
                         switch (item.id) {
-                          case 'text':
-                            return <ControlText />
-                          case 'recording':
-                            return <ControlRecording />
-                          case 'image':
-                            return <ControlImage />
-                          case 'link':
-                            return <ControlLink />
-                          case 'todo':
-                            return <ControlTodo />
+                          case "text":
+                            return <ControlText />;
+                          case "recording":
+                            return <ControlRecording />;
+                          case "image":
+                            return <ControlImage />;
+                          case "link":
+                            return <ControlLink />;
+                          case "todo":
+                            return <ControlTodo />;
                           default:
-                            return null
+                            return null;
                         }
-                      }
-                      
+                      };
+
                       return (
                         <DraggableToolbarItem
                           key={item.id}
@@ -254,17 +304,36 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
                         >
                           {renderToolbarItem()}
                         </DraggableToolbarItem>
-                      )
+                      );
                     })}
                 </div>
               </SortableContext>
             </DndContext>
           </TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => void openGlobalSchedule()}
+                aria-label="打开日程"
+              >
+                <CalendarDays className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>日程</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         {/* 中间搜索输入框 */}
-        <div className="flex-1 flex items-center justify-center px-4 min-w-[200px] max-w-[600px] mx-auto" data-tauri-drag-region>
-          <div 
+        <div
+          className="flex-1 flex items-center justify-center px-4 min-w-[200px] max-w-[600px] mx-auto"
+          data-tauri-drag-region
+        >
+          <div
             className="relative w-full h-6 max-w-md group cursor-pointer flex justify-center items-center border rounded-sm"
             onClick={() => onSearchClick?.()}
             data-tauri-drag-region="false"
@@ -277,25 +346,34 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
         </div>
 
         {/* 右侧按钮 */}
-        <div className="flex items-center gap-0.5 px-2 shrink-0" data-tauri-drag-region="false">
+        <div
+          className="flex items-center gap-0.5 px-2 shrink-0"
+          data-tauri-drag-region="false"
+        >
           {/* 左侧边栏切换按钮 */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 ${wouldCauseLeftOnly(leftSidebarVisible, 'left') ? 'cursor-not-allowed opacity-50' : ''}`}
+                className={`h-8 w-8 ${wouldCauseLeftOnly(leftSidebarVisible, "left") ? "cursor-not-allowed opacity-50" : ""}`}
                 onClick={() => {
-                  if (!wouldCauseLeftOnly(leftSidebarVisible, 'left')) {
-                    toggleLeftSidebar()
+                  if (!wouldCauseLeftOnly(leftSidebarVisible, "left")) {
+                    toggleLeftSidebar();
                   }
                 }}
               >
-                <PanelLeft className={`h-4 w-4 ${!leftSidebarVisible ? 'opacity-30' : ''}`} />
+                <PanelLeft
+                  className={`h-4 w-4 ${!leftSidebarVisible ? "opacity-30" : ""}`}
+                />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>{leftSidebarVisible ? t('navigation.hideLeftSidebar') : t('navigation.showLeftSidebar')}</p>
+              <p>
+                {leftSidebarVisible
+                  ? t("navigation.hideLeftSidebar")
+                  : t("navigation.showLeftSidebar")}
+              </p>
             </TooltipContent>
           </Tooltip>
 
@@ -305,18 +383,24 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 ${wouldCauseLeftOnly(centerPanelVisible, 'center') ? 'cursor-not-allowed opacity-50' : ''}`}
+                className={`h-8 w-8 ${wouldCauseLeftOnly(centerPanelVisible, "center") ? "cursor-not-allowed opacity-50" : ""}`}
                 onClick={() => {
-                  if (!wouldCauseLeftOnly(centerPanelVisible, 'center')) {
-                    toggleCenterPanel()
+                  if (!wouldCauseLeftOnly(centerPanelVisible, "center")) {
+                    toggleCenterPanel();
                   }
                 }}
               >
-                <SquarePen className={`h-4 w-4 ${!centerPanelVisible ? 'opacity-30' : ''}`} />
+                <SquarePen
+                  className={`h-4 w-4 ${!centerPanelVisible ? "opacity-30" : ""}`}
+                />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>{centerPanelVisible ? t('navigation.hideCenterPanel') : t('navigation.showCenterPanel')}</p>
+              <p>
+                {centerPanelVisible
+                  ? t("navigation.hideCenterPanel")
+                  : t("navigation.showCenterPanel")}
+              </p>
             </TooltipContent>
           </Tooltip>
 
@@ -326,44 +410,52 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 ${wouldCauseLeftOnly(rightSidebarVisible, 'right') ? 'cursor-not-allowed opacity-50' : ''}`}
+                className={`h-8 w-8 ${wouldCauseLeftOnly(rightSidebarVisible, "right") ? "cursor-not-allowed opacity-50" : ""}`}
                 onClick={() => {
-                  if (!wouldCauseLeftOnly(rightSidebarVisible, 'right')) {
-                    toggleRightSidebar()
+                  if (!wouldCauseLeftOnly(rightSidebarVisible, "right")) {
+                    toggleRightSidebar();
                   }
                 }}
               >
-                <PanelRight className={`h-4 w-4 ${!rightSidebarVisible ? 'opacity-30' : ''}`} />
+                <PanelRight
+                  className={`h-4 w-4 ${!rightSidebarVisible ? "opacity-30" : ""}`}
+                />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>{rightSidebarVisible ? t('navigation.hideRightSidebar') : t('navigation.showRightSidebar')}</p>
+              <p>
+                {rightSidebarVisible
+                  ? t("navigation.hideRightSidebar")
+                  : t("navigation.showRightSidebar")}
+              </p>
             </TooltipContent>
           </Tooltip>
-          
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 ${activityOpen ? 'bg-primary/10 text-primary hover:bg-primary/15' : ''}`}
+                className={`h-8 w-8 ${activityOpen ? "bg-primary/10 text-primary hover:bg-primary/15" : ""}`}
                 onClick={onActivityClick}
               >
-                <CalendarDays className="h-4 w-4" />
+                <History className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>{t('navigation.activity')}</p>
+              <p>{t("navigation.activity")}</p>
             </TooltipContent>
           </Tooltip>
-          
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-8 w-8 relative ${settingsOpen ? 'bg-primary/50 hover:bg-primary/60' : ''}`}
-                onClick={() => settingsOpen ? closeSettings() : openSettings()}
+                className={`h-8 w-8 relative ${settingsOpen ? "bg-primary/50 hover:bg-primary/60" : ""}`}
+                onClick={() =>
+                  settingsOpen ? closeSettings() : openSettings()
+                }
               >
                 {settingsOpen ? (
                   <Cog className="h-4 w-4" />
@@ -376,47 +468,47 @@ export function TitleBar({ onSearchClick, onActivityClick, activityOpen = false 
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>{settingsOpen ? t('common.back') : t('common.settings')}</p>
+              <p>{settingsOpen ? t("common.back") : t("common.settings")}</p>
             </TooltipContent>
           </Tooltip>
-          
+
           <AppStatus />
         </div>
 
         {/* Windows 控制按钮 */}
         <div className="flex items-center shrink-0 relative z-10">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-12 rounded-none hover:bg-accent"
-              onClick={handleMinimize}
-            >
-              <Minus className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-12 rounded-none hover:bg-accent"
-              onClick={handleMaximize}
-              aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
-              title={isMaximized ? 'Restore window' : 'Maximize window'}
-            >
-              {isMaximized ? (
-                <Copy className="h-3.5 w-3.5" />
-              ) : (
-                <Square className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-12 rounded-none hover:bg-destructive hover:text-destructive-foreground"
-              onClick={handleClose}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-12 rounded-none hover:bg-accent"
+            onClick={handleMinimize}
+          >
+            <Minus className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-12 rounded-none hover:bg-accent"
+            onClick={handleMaximize}
+            aria-label={isMaximized ? "Restore window" : "Maximize window"}
+            title={isMaximized ? "Restore window" : "Maximize window"}
+          >
+            {isMaximized ? (
+              <Copy className="h-3.5 w-3.5" />
+            ) : (
+              <Square className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-12 rounded-none hover:bg-destructive hover:text-destructive-foreground"
+            onClick={handleClose}
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       </div>
     </TooltipProvider>
-  )
+  );
 }

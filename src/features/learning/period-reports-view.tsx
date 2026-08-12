@@ -15,9 +15,11 @@ import { writePeriodicReportMarkdown } from '@/lib/learning/report'
 import { isTauriRuntime } from '@/lib/check'
 import useLearningStore from '@/stores/learning'
 import type { PeriodicLearningReport, PeriodicLearningReportType } from '@/types/learning'
+import useLearningWorkspaceStore from '@/stores/learning-workspace'
 
 export function PeriodReportsView({ onOpenNote }: { onOpenNote?: (path: string) => void } = {}) {
   const settings = useLearningStore(state => state.settings)
+  const { periodReportRequest, clearPeriodReportRequest } = useLearningWorkspaceStore()
   const [type, setType] = useState<PeriodicLearningReportType>('week')
   const [anchor, setAnchor] = useState(() => formatLocalDate(Date.now(), settings.timeZone))
   const [report, setReport] = useState<PeriodicLearningReport | null>(null)
@@ -28,6 +30,13 @@ export function PeriodReportsView({ onOpenNote }: { onOpenNote?: (path: string) 
   const [exporting, setExporting] = useState(false)
   const nativeRuntime = isTauriRuntime()
   const bounds = useMemo(() => getLearningPeriodBounds(type, anchor), [anchor, type])
+
+  useEffect(() => {
+    if (!periodReportRequest) return
+    setType(periodReportRequest.type)
+    setAnchor(periodReportRequest.anchor)
+    clearPeriodReportRequest()
+  }, [clearPeriodReportRequest, periodReportRequest])
 
   useEffect(() => {
     let cancelled = false
@@ -84,10 +93,10 @@ export function PeriodReportsView({ onOpenNote }: { onOpenNote?: (path: string) 
     setExporting(true)
     try {
       const path = await writePeriodicReportMarkdown({ ...report, content }, settings.reportDirectory)
-      toast.success('报告已写入 NoteGen 笔记')
+      toast.success('规划报告已写入 NoteGen')
       onOpenNote?.(path)
     } catch (error) {
-      toast.error('写入 NoteGen 笔记失败', { description: error instanceof Error ? error.message : String(error) })
+      toast.error('写入规划报告失败', { description: error instanceof Error ? error.message : String(error) })
     } finally {
       setExporting(false)
     }
@@ -96,7 +105,7 @@ export function PeriodReportsView({ onOpenNote }: { onOpenNote?: (path: string) 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h1 className="text-2xl font-semibold tracking-tight">周期报告</h1><p className="text-sm text-muted-foreground">用任务、专注记录和已提交日报生成本地周报或月报。</p></div>
+        <div><h1 className="text-2xl font-semibold tracking-tight">周月总结</h1><p className="text-sm text-muted-foreground">周报只汇总日报，月报只汇总已生成的周报。</p></div>
         <Tabs value={type} onValueChange={value => setType(value as PeriodicLearningReportType)}>
           <TabsList><TabsTrigger value="week">周报</TabsTrigger><TabsTrigger value="month">月报</TabsTrigger></TabsList>
         </Tabs>
@@ -115,16 +124,16 @@ export function PeriodReportsView({ onOpenNote }: { onOpenNote?: (path: string) 
       {report ? (
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Card><CardHeader className="pb-2"><CardDescription>学习天数</CardDescription><CardTitle>{report.metrics.studyDays} 天</CardTitle></CardHeader></Card>
+            <Card><CardHeader className="pb-2"><CardDescription>执行天数</CardDescription><CardTitle>{report.metrics.studyDays} 天</CardTitle></CardHeader></Card>
             <Card><CardHeader className="pb-2"><CardDescription>专注时长</CardDescription><CardTitle>{Math.floor(report.metrics.focusedMinutes / 60)}h {report.metrics.focusedMinutes % 60}m</CardTitle></CardHeader></Card>
             <Card><CardHeader className="pb-2"><CardDescription>完成任务</CardDescription><CardTitle>{report.metrics.taskDone}/{report.metrics.taskTotal}</CardTitle></CardHeader></Card>
-            <Card><CardHeader className="pb-2"><CardDescription>日报来源</CardDescription><CardTitle>{report.metrics.reportDays} 天</CardTitle></CardHeader></Card>
+            <Card><CardHeader className="pb-2"><CardDescription>{type === 'week' ? '日报来源' : '周报来源'}</CardDescription><CardTitle>{type === 'week' ? `${report.metrics.reportDays} 天` : `${report.sourceDates.length} 篇`}</CardTitle></CardHeader></Card>
           </div>
           <Card>
             <CardHeader className="flex-row items-start justify-between gap-3">
               <div><CardTitle>{report.title}</CardTitle><CardDescription>生成于 {new Date(report.updatedAt).toLocaleString()}</CardDescription></div>
               <div className="flex flex-wrap justify-end gap-2">
-                {nativeRuntime ? <Button variant="outline" onClick={() => void openAsNote()} disabled={exporting}><SquareArrowOutUpRight />{exporting ? '写入中…' : '在 NoteGen 中打开'}</Button> : null}
+                {nativeRuntime ? <Button variant="outline" onClick={() => void openAsNote()} disabled={exporting}><SquareArrowOutUpRight />{exporting ? '写入中…' : '打开只读报告'}</Button> : null}
                 <Button variant="outline" onClick={() => setEditing(value => !value)}><FilePenLine />{editing ? '预览' : '编辑'}</Button>
               </div>
             </CardHeader>
@@ -136,7 +145,7 @@ export function PeriodReportsView({ onOpenNote }: { onOpenNote?: (path: string) 
           </Card>
         </>
       ) : (
-        <Card><CardContent className="flex flex-col items-center gap-3 py-14 text-center"><FilePenLine className="size-10 text-muted-foreground" /><div><p className="font-medium">这个周期还没有报告</p><p className="text-sm text-muted-foreground">即使没有日报，也可以根据任务和专注记录生成数据概览。</p></div><Button onClick={() => void generate()} disabled={loading}>生成{type === 'week' ? '周报' : '月报'}</Button></CardContent></Card>
+        <Card><CardContent className="flex flex-col items-center gap-3 py-14 text-center"><FilePenLine className="size-10 text-muted-foreground" /><div><p className="font-medium">这个周期还没有报告</p><p className="text-sm text-muted-foreground">{type === 'week' ? '周报会汇总该周的日报、任务和专注记录。' : '月报只会汇总该月已完成的规划周报。'}</p></div><Button onClick={() => void generate()} disabled={loading}>生成{type === 'week' ? '周报' : '月报'}</Button></CardContent></Card>
       )}
     </div>
   )

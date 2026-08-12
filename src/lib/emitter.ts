@@ -1,6 +1,7 @@
 import mitt from 'mitt'
 import type { OnboardingStepId } from '@/app/core/main/editor/onboarding-state'
 import type { CanvasDocument } from '@/types/canvas'
+import type { AiLearningTaskDraft, CreateLearningGoalInput, DailyReflection, DailyReportGoalEntry } from '@/types/learning'
 
 // 定义事件类型
 interface Events {
@@ -81,6 +82,9 @@ interface Events {
   'record-assets-downloaded': { paths: string[] };
   'quick-prompt-insert': string;
   'quick-prompt-send': string;
+  'learning-goal-draft-adopted': Partial<CreateLearningGoalInput> & { targetGoalId?: string | null };
+  'learning-daily-plan-adopted': { date: string; basedOnDate: string | null; tasks: AiLearningTaskDraft[] };
+  'learning-daily-report-adopted': { date: string; overall: string; reflection: DailyReflection; entries: DailyReportGoalEntry[] };
   'conversation-compaction-status': {
     conversationId: number;
     status: 'running' | 'completed' | 'failed';

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useRef, useState, useEffect, memo } from 'react'
-import { X, FileText, Folder, GraduationCap, Plus, Undo2, Redo2 } from 'lucide-react'
+import { Brain, BookOpenCheck, CalendarDays, FileText, Flag, Folder, History, ListTodo, Plus, TimerReset, Undo2, Redo2, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn } from '@/lib/utils'
 import emitter from '@/lib/emitter'
@@ -41,10 +41,19 @@ export interface TabInfo {
   path: string
   name: string
   isFolder: boolean
-  kind?: 'file' | 'record' | 'canvas' | 'learning'
+  kind?: 'file' | 'record' | 'canvas' | 'learning' | 'schedule'
   markId?: number
   markType?: Mark['type']
 }
+
+const planningTabIcons = {
+  '今日': BookOpenCheck,
+  '目标': Flag,
+  '回顾': History,
+  '日程': CalendarDays,
+  '专注': TimerReset,
+  '复习': Brain,
+} as const
 
 interface TabBarProps {
   tabs: TabInfo[]
@@ -107,6 +116,7 @@ function SortableTabWithMenu({
   const isRecordTab = tab.kind === 'record' || isRecordTabPath(tab.path)
   const recordTypeLabel = isRecordTab ? recordTypeT(tab.markType || 'text') : ''
   const tabTitle = isRecordTab ? `${recordTypeLabel}: ${tab.name}` : tab.path
+  const PlanningTabIcon = planningTabIcons[tab.name as keyof typeof planningTabIcons] || ListTodo
 
   const handleAction = (action: 'close' | 'closeOthers' | 'closeAll' | 'closeLeft' | 'closeRight') => {
     switch (action) {
@@ -154,7 +164,9 @@ function SortableTabWithMenu({
               {recordTypeLabel}
             </span>
           ) : tab.kind === 'learning' ? (
-            <GraduationCap className={cn('w-4 h-4 shrink-0', isActive ? 'text-primary' : '')} />
+            <PlanningTabIcon className={cn('w-4 h-4 shrink-0', isActive ? 'text-primary' : '')} />
+          ) : tab.kind === 'schedule' ? (
+            <CalendarDays className={cn('w-4 h-4 shrink-0', isActive ? 'text-primary' : '')} />
           ) : tab.isFolder ? (
             <Folder className="w-4 h-4 shrink-0 text-amber-500" />
           ) : (

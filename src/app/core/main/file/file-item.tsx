@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import useArticleStore, { DirTree } from "@/stores/article";
 import { BaseDirectory, exists, rename, writeTextFile } from "@tauri-apps/plugin-fs";
-import { Copy, Database, Download, File, FileCode, FileJson, FileText, FileUp, FolderOpen, ImageIcon, LoaderCircle, RefreshCwOff, Trash2 } from "lucide-react"
+import { Archive, Copy, Database, Download, File, FileCode, FileJson, FileLock2, FileText, FileUp, FolderOpen, ImageIcon, LoaderCircle, RefreshCwOff, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ask } from '@tauri-apps/plugin-dialog';
 import { Store } from '@tauri-apps/plugin-store';
@@ -29,6 +29,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import useSettingStore from "@/stores/setting";
 import { VectorKnowledgeMenu } from "./vector-knowledge-menu";
 import { isSkillsFolder } from "@/lib/skills/utils";
+import { getDailyReportDateFromPath, isLearningReportMarkdown, removeLearningReportMarkdown } from '@/lib/learning/report'
 import { exportMarkdownFile, type MarkdownExportFormat } from "../editor/markdown/markdown-export";
 import { setFileManagerDragData } from "./file-dnd";
 import { debugSyncPath } from "@/lib/sync/remote-file";
@@ -44,6 +45,7 @@ import { useSettingsDialogStore } from "@/stores/settings-dialog";
 import { FileTreeDecorations } from "./file-tree-decorations";
 import { moveEntryToSystemTrash } from './system-trash'
 import { rewriteWorkspaceMarkdownMediaPaths } from '@/lib/markdown-media-path'
+import useLearningStore from '@/stores/learning'
 
 function shouldAutoSyncOnInitialRead(options?: { isNewFile?: boolean }) {
   return options?.isNewFile !== true
@@ -143,6 +145,7 @@ export function FileItem({
   const isMobile = useIsMobile()
   const [exportingFormat, setExportingFormat] = useState<MarkdownExportFormat | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [isArchivingReport, setIsArchivingReport] = useState(false)
 
   // 检查路径是否在 skills 文件夹下
   const isInSkillsFolder = (itemPath: string): boolean => {
@@ -151,6 +154,31 @@ export function FileItem({
   }
 
   const path = computedParentPath(item)
+  const isLearningReport = isLearningReportMarkdown('', path)
+  const dailyReportDate = getDailyReportDateFromPath(path)
+
+  async function handleArchiveDailyReport() {
+    if (!dailyReportDate || isArchivingReport) return
+    if (!window.confirm(`确定归档 ${dailyReportDate} 的日报吗？系统会先生成或更新所属规划周报，再归档该日报。`)) return
+
+    setIsArchivingReport(true)
+    try {
+      const weeklyReport = await useLearningStore.getState().archiveReport(dailyReportDate)
+      await removeLearningReportMarkdown(path)
+      await cleanTabsByDeletedFile(path)
+      useArticleStore.getState().removeLocalEntry(path)
+      await loadFileTree({ skipRemoteSync: true })
+      toast({ title: '日报已归档并汇总进规划周报', description: weeklyReport.title })
+    } catch (error) {
+      toast({
+        title: '归档日报失败',
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      })
+    } finally {
+      setIsArchivingReport(false)
+    }
+  }
 
   // 向量状态更新回调
   const handleVectorUpdated = useCallback(() => {
@@ -205,6 +233,9 @@ export function FileItem({
   }
 
   const renderFileTypeIcon = () => {
+    if (isLearningReport) {
+      return <FileLock2 className={`${iconSize} shrink-0 text-sky-600 dark:text-sky-400`} />
+    }
     if (item.name.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/i)) {
       return <ImageIcon className={`${iconSize} shrink-0`} />
     }
@@ -828,6 +859,7 @@ export function FileItem({
             treeItemProps={treeItemProps}
             onActivate={handleFileClick}
             onContextMenu={handleFileContextMenu}
+            className={isLearningReport ? 'bg-sky-500/[0.045]' : undefined}
           >
             {
               isEditing ? 
@@ -881,12 +913,18 @@ export function FileItem({
                   syncStatus={syncStatus}
                   syncTitle={syncStatusTitle}
                 />
-                {isMobile && (
-                  <MobileActionMenu className="ml-1">
+                  {isMobile && (
+                    <MobileActionMenu className="ml-1">
                     <MobileMenuItem onClick={handleShowFileManager}>
                       {t('context.viewDirectory')}
                     </MobileMenuItem>
-                    <MobileSeparator />
+                      <MobileSeparator />
+                      {dailyReportDate ? (
+                        <MobileMenuItem disabled={isArchivingReport} onClick={() => void handleArchiveDailyReport()}>
+                          归档日报
+                        </MobileMenuItem>
+                      ) : null}
+                      {dailyReportDate ? <MobileSeparator /> : null}
                     <MobileMenuItem disabled={!item.isLocale} onClick={handleCutFile}>
                       {t('context.cut')}
                     </MobileMenuItem>
@@ -925,7 +963,24 @@ export function FileItem({
                   className="relative flex min-w-0 flex-1 cursor-default select-none items-center gap-1 overflow-hidden"
                 >
                   <div className="relative flex shrink-0 items-center">{renderFileTypeIcon()}</div>
-                  <span className={`text-${fileManagerTextSize} min-w-0 flex-1 truncate`}>{item.name}</span>
+                  <span className={`text-${fileManagerTextSize} min-w-0 flex-1 truncate ${isLearningReport ? 'font-medium text-sky-700 dark:text-sky-300' : ''}`}>{item.name}</span>
+                  {isLearningReport ? <Badge variant="outline" className="h-4 shrink-0 border-sky-500/30 bg-sky-500/10 px-1 text-[10px] font-normal text-sky-700 dark:text-sky-300">只读</Badge> : null}
+                  {dailyReportDate ? (
+                    <button
+                      type="button"
+                      disabled={isArchivingReport}
+                      className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition hover:bg-accent hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 disabled:opacity-50"
+                      title="归档日报"
+                      aria-label="归档日报"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        void handleArchiveDailyReport()
+                      }}
+                    >
+                      {isArchivingReport ? <LoaderCircle className="size-3.5 animate-spin" /> : <Archive className="size-3.5" />}
+                    </button>
+                  ) : null}
                 </div>
                 <FileTreeDecorations
                   iconSize={iconSize}
@@ -939,6 +994,14 @@ export function FileItem({
                       {t('context.viewDirectory')}
                     </MobileMenuItem>
                     <MobileSeparator />
+                    {dailyReportDate ? (
+                      <>
+                        <MobileMenuItem disabled={isArchivingReport} onClick={() => void handleArchiveDailyReport()}>
+                          归档日报
+                        </MobileMenuItem>
+                        <MobileSeparator />
+                      </>
+                    ) : null}
                     <MobileMenuItem disabled={!item.isLocale} onClick={handleCutFile}>
                       {t('context.cut')}
                     </MobileMenuItem>
@@ -1064,6 +1127,15 @@ export function FileItem({
                 </ContextMenuShortcut>
               </ContextMenuItem>
               <ContextMenuSeparator />
+              {dailyReportDate ? (
+                <>
+                  <ContextMenuItem inset disabled={isArchivingReport} onClick={() => void handleArchiveDailyReport()} menuType="file">
+                    {isArchivingReport ? <LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> : <Archive className="mr-2 h-4 w-4" />}
+                    归档日报
+                  </ContextMenuItem>
+                  <ContextMenuSeparator />
+                </>
+              ) : null}
               <ContextMenuItem disabled={!item.isLocale} inset onClick={handleStartRename} menuType="file">
                 <File className="mr-2 h-4 w-4" />
                 {t('context.rename')}

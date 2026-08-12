@@ -1,8 +1,11 @@
 use futures_util::StreamExt;
 use reqwest::{
-    header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION, CONTENT_TYPE},
+    header::{
+        HeaderMap, HeaderName, HeaderValue, ACCEPT, ACCEPT_ENCODING, AUTHORIZATION,
+        CACHE_CONTROL, CONTENT_TYPE,
+    },
     multipart::{Form, Part},
-    Client, Method, Proxy, Url,
+    Client, Method, Proxy, Url, Version,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -402,62 +405,95 @@ pub async fn ai_chat_completion_stream(
 ) -> Result<(), String> {
     let client = build_client(&request.config)?;
     let url = build_url(&request.config.base_url, "/chat/completions")?;
-    let headers = build_headers(&request.config, true)?;
+    let mut headers = build_headers(&request.config, true)?;
+    // A number of OpenAI-compatible gateways and local proxies advertise a
+    // compressed or HTTP/2 stream but then send an incomplete/mismatched body.
+    // SSE is already incremental and benefits little from transport compression,
+    // so prefer a plain HTTP/1.1 response to avoid reqwest/hyper decode failures.
+    headers.insert(ACCEPT, HeaderValue::from_static("text/event-stream"));
+    headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     let cancellation = manager.register(&request.request_id).await;
 
-    let response = tokio::select! {
-        _ = cancellation.cancelled() => {
-            manager.finish(&request.request_id).await;
-            return Err(abort_error());
-        }
-        response = client
-            .post(url)
-            .headers(headers)
-            .json(&request.body)
-            .send() => response.map_err(|error| format!("Request failed: {error}"))?,
-    };
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = response.text().await.unwrap_or_default();
-        manager.finish(&request.request_id).await;
-        return Err(format!("Request failed: {status} {error_text}"));
-    }
-
-    let mut decoder = SseDecoder::new();
-    let mut stream = response.bytes_stream();
-
-    loop {
-        let next = tokio::select! {
+    let mut attempt = 0_u8;
+    'request_loop: loop {
+        let response = tokio::select! {
             _ = cancellation.cancelled() => {
                 manager.finish(&request.request_id).await;
                 return Err(abort_error());
             }
-            item = stream.next() => item,
+            response = client
+                .post(url.clone())
+                .version(Version::HTTP_11)
+                .headers(headers.clone())
+                .json(&request.body)
+                .send() => match response {
+                    Ok(response) => response,
+                    Err(error) => {
+                        manager.finish(&request.request_id).await;
+                        return Err(format!("Request failed: {error:#}"));
+                    }
+                },
         };
 
-        let Some(item) = next else {
-            break;
-        };
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            manager.finish(&request.request_id).await;
+            return Err(format!("Request failed: {status} {error_text}"));
+        }
 
-        let chunk = item.map_err(|error| format!("Stream read failed: {error}"))?;
-        for message in decoder.push(chunk.as_ref()) {
-            if message == "[DONE]" {
-                let _ = on_event.send(AiStreamEvent::Done);
-                manager.finish(&request.request_id).await;
-                return Ok(());
-            }
+        let mut decoder = SseDecoder::new();
+        let mut stream = response.bytes_stream();
+        let mut emitted_chunks = 0_u64;
 
-            match serde_json::from_str::<Value>(&message) {
-                Ok(value) => {
-                    let _ = on_event.send(AiStreamEvent::Chunk(value));
+        loop {
+            let next = tokio::select! {
+                _ = cancellation.cancelled() => {
+                    manager.finish(&request.request_id).await;
+                    return Err(abort_error());
+                }
+                item = stream.next() => item,
+            };
+
+            let Some(item) = next else {
+                break 'request_loop;
+            };
+
+            let chunk = match item {
+                Ok(chunk) => chunk,
+                Err(_error) if emitted_chunks == 0 && attempt == 0 => {
+                    attempt += 1;
+                    tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+                    continue 'request_loop;
                 }
                 Err(error) => {
-                    let _ = on_event.send(AiStreamEvent::Error(format!(
-                        "Failed to parse stream chunk: {error}"
-                    )));
                     manager.finish(&request.request_id).await;
-                    return Err(format!("Failed to parse stream chunk: {error}"));
+                    return Err(format!(
+                        "Stream connection interrupted after {emitted_chunks} chunks: {error:#}"
+                    ));
+                }
+            };
+
+            for message in decoder.push(chunk.as_ref()) {
+                if message == "[DONE]" {
+                    let _ = on_event.send(AiStreamEvent::Done);
+                    manager.finish(&request.request_id).await;
+                    return Ok(());
+                }
+
+                match serde_json::from_str::<Value>(&message) {
+                    Ok(value) => {
+                        emitted_chunks += 1;
+                        let _ = on_event.send(AiStreamEvent::Chunk(value));
+                    }
+                    Err(error) => {
+                        let _ = on_event.send(AiStreamEvent::Error(format!(
+                            "Failed to parse stream chunk: {error}"
+                        )));
+                        manager.finish(&request.request_id).await;
+                        return Err(format!("Failed to parse stream chunk: {error}"));
+                    }
                 }
             }
         }

@@ -15,6 +15,7 @@ mod file_open;
 mod fonts;
 mod fuzzy_search;
 mod keywords;
+mod maimemo;
 mod mcp;
 mod mcp_runtime;
 mod notion_import;
@@ -142,6 +143,7 @@ fn main() {
             install_mcp_runtime,
             cancel_mcp_runtime_install,
             get_device_id,
+            maimemo::maimemo_request,
             list_system_fonts,
             analytics::track_analytics_event,
             ai_json_request,
