@@ -7,6 +7,4 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="notegen_system_bar_light">#FFFFFFFF</color>
-    <color name="notegen_system_bar_dark">#FF0A0A0A</color>
 </resources>
