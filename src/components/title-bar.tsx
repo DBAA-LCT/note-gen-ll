@@ -30,7 +30,6 @@ import {
 import { Button } from "@/components/ui/button";
 import useSettingStore from "@/stores/setting";
 import useArticleStore from "@/stores/article";
-import useUpdateStore from "@/stores/update";
 import React from "react";
 import { ControlText } from "@/app/core/main/mark/control-text";
 import { ControlRecording } from "@/app/core/main/mark/control-recording";
@@ -114,7 +113,6 @@ export function TitleBar({
   };
   const { recordToolbarConfig, setRecordToolbarConfig } = useSettingStore();
   const { activeFilePath } = useArticleStore();
-  const { hasUpdate } = useUpdateStore();
   const t = useTranslations();
   const { isModifierPressed } = useToolbarShortcuts();
 
@@ -461,9 +459,6 @@ export function TitleBar({
                   <Cog className="h-4 w-4" />
                 ) : (
                   <Settings className="h-4 w-4" />
-                )}
-                {hasUpdate && !settingsOpen && (
-                  <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500" />
                 )}
               </Button>
             </TooltipTrigger>

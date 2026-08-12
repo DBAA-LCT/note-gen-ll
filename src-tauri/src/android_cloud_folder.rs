@@ -5,7 +5,7 @@ use tauri::{
 };
 
 const PLUGIN_NAME: &str = "android_cloud_folder";
-const ANDROID_PLUGIN_IDENTIFIER: &str = "com.codexu.NoteGen";
+const ANDROID_PLUGIN_IDENTIFIER: &str = "com.codexu.NoteGoal";
 const ANDROID_PLUGIN_CLASS: &str = "CloudFolderPlugin";
 
 pub struct AndroidCloudFolderPlugin<R: Runtime>(PluginHandle<R>);

@@ -31,7 +31,7 @@
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "targets": "all",
     "resources": [
       "icons"
@@ -57,14 +57,6 @@
       "desktop": {
         "schemes": ["notegoal"]
       }
-    },
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRENURGRUVFREY4M0RGRDkKUldUWjM0UGY3djVkVGQ0aDluR0J6SnBUV2dET0FibXdzVmdTL2hIM21QQ1NCS3R2enllUStSd2oK",
-      "endpoints": [
-        "https://download.notegen.top/updates/latest.json",
-        "https://github.com/codexu/note-gen/releases/latest/download/latest.json"
-      ],
-      "createUpdaterArtifacts": true
     }
   }
 }

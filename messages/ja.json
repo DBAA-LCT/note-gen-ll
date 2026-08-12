@@ -1040,6 +1040,10 @@
       "later": "後で",
       "close": "閉じる",
       "sections": {
+        "upstream": {
+          "title": "オリジナルプロジェクト NoteGen",
+          "desc": "NoteGoal はオープンソースの NoteGen を基に、ノート、記録、AI 機能へプランニング機能を追加したプロジェクトです。"
+        },
         "appInfo": {
           "title": "アプリ情報",
           "desc": "現在のバージョン、更新状態、アプリ概要を確認します。"
@@ -1062,6 +1066,11 @@
         }
       },
       "items": {
+        "upstream": {
+          "title": "NoteGen（オリジナル）",
+          "buttonName": "元のプロジェクトを見る",
+          "desc": "NoteGen のソースコード、ライセンス、プロジェクト情報を確認します。"
+        },
         "home": {
           "title": "公式サイト",
           "buttonName": "表示",

@@ -1040,6 +1040,10 @@
       "later": "稍後",
       "close": "關閉",
       "sections": {
+        "upstream": {
+          "title": "原專案 NoteGen",
+          "desc": "NoteGoal 基於開源專案 NoteGen 進行二次開發，並在其筆記、記錄與 AI 能力上擴充了規劃功能。"
+        },
         "appInfo": {
           "title": "應用資訊",
           "desc": "查看目前版本、更新狀態和應用簡介。"
@@ -1062,6 +1066,11 @@
         }
       },
       "items": {
+        "upstream": {
+          "title": "NoteGen（原專案）",
+          "buttonName": "查看原專案",
+          "desc": "查看 NoteGen 原始碼、授權條款與原專案說明。"
+        },
         "home": {
           "title": "官網",
           "buttonName": "打開",

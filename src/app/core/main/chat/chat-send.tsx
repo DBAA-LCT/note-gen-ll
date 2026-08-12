@@ -4,7 +4,7 @@ import useSettingStore from "@/stores/setting"
 import useChatStore from "@/stores/chat"
 import useTagStore from "@/stores/tag"
 import { TooltipButton } from "@/components/tooltip-button"
-import { useImperativeHandle, forwardRef, useRef } from "react"
+import { useEffect, useImperativeHandle, forwardRef, useRef } from "react"
 import { useTranslations } from "next-intl"
 import { LinkedResource, isLinkedFolder, type MarkdownFile } from "@/lib/files"
 import { readTextFile } from "@tauri-apps/plugin-fs"
@@ -36,6 +36,7 @@ import {
   parseContextOverflowError,
   reduceLearnedContextWindow,
 } from '@/lib/ai/model-capacity'
+import emitter from '@/lib/emitter'
 function getLastDisplayableAgentContent(
   liveContent: string | undefined,
   traceEvents: AgentTraceEvent[]
@@ -127,6 +128,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
   const repeatedScriptApprovalRef = useRef<{ signature: string; count: number }>({ signature: '', count: 0 })
   const contextOverflowRetryRef = useRef(0)
   const recentSubmissionRef = useRef<{ fingerprint: string; timestamp: number } | null>(null)
+  const regenerateResponseRef = useRef<(assistantChatId: number) => Promise<void>>(async () => {})
   const t = useTranslations()
   const requestText = inputValue.trim() || t('record.chat.input.addAttachment.attachmentOnlyPrompt')
 
@@ -398,7 +400,14 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
   }
 
   // Agent 模式处理
-  async function handleAgentMode(images: ImageAttachment[], userMessage: Chat) {
+  async function handleAgentMode(
+    images: ImageAttachment[],
+    userMessage: Chat,
+    regeneration?: { requestText: string; quoteData?: QuoteData | null; selectedSkills?: string[] }
+  ) {
+    const effectiveRequestText = regeneration?.requestText ?? requestText
+    const effectiveQuoteData = regeneration ? regeneration.quoteData : quoteData
+    const effectiveSelectedSkills = regeneration?.selectedSkills ?? selectedSkillIds
     // 先创建一个占位的 AI 消息
     const placeholderMessage = await insert({
       tagId: currentTagId,
@@ -499,19 +508,19 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       activeFilePath: articleStore.activeFilePath,
       permissionMode: agentPermissionMode,
       requestConfirmation,
-      currentQuote: quoteData
+      currentQuote: effectiveQuoteData
         ? {
-            fileName: quoteData.fileName,
-            startLine: quoteData.startLine,
-            endLine: quoteData.endLine,
-            from: quoteData.from,
-            to: quoteData.to,
-            fullContent: quoteData.fullContent,
+            fileName: effectiveQuoteData.fileName,
+            startLine: effectiveQuoteData.startLine,
+            endLine: effectiveQuoteData.endLine,
+            from: effectiveQuoteData.from,
+            to: effectiveQuoteData.to,
+            fullContent: effectiveQuoteData.fullContent,
           }
         : undefined,
       attachments: fileAttachments,
       imageAttachments: agentImageAttachments,
-      selectedSkills: selectedSkillIds,
+      selectedSkills: effectiveSelectedSkills,
       onFinalAnswerRender: (markdownContent) => {
         // 检测到 Final Answer 时触发渲染
         setAgentState({
@@ -695,7 +704,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
         imageAnalysisAbortControllerRef.current?.abort()
         const imageAnalysisAbortController = new AbortController()
         imageAnalysisAbortControllerRef.current = imageAnalysisAbortController
-        let liveAnalyses = createPendingChatImageAnalyses(images, requestText)
+        let liveAnalyses = createPendingChatImageAnalyses(images, effectiveRequestText)
         const updatePersistedAnalysis = (analyses: PersistedChatImageAnalysis[], persist: boolean) => {
           const updatedMessage = {
             ...userMessage,
@@ -713,7 +722,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
           isRunning: true,
           isThinking: false,
         })
-        const imageResult = await buildChatImageContext(images, requestText, {
+        const imageResult = await buildChatImageContext(images, effectiveRequestText, {
           signal: imageAnalysisAbortController.signal,
           onProgress: (progress) => {
             liveAnalyses = liveAnalyses.map(analysis => (
@@ -823,8 +832,8 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       }
 
       // 5. 如果有引用内容，添加引用上下文（在构建消息之前）
-      if (quoteData) {
-        const { fileName, startLine, endLine, fullContent, from, to } = quoteData
+      if (effectiveQuoteData) {
+        const { fileName, startLine, endLine, fullContent, from, to } = effectiveQuoteData
         let lineInfo = ''
         const hasValidLineNumbers = startLine !== -1 && endLine !== -1
         const hasValidRange = from >= 0 && to >= from
@@ -904,15 +913,15 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
           endLine,
           from,
           to,
-          quoteLength: quoteData.quote.length,
+          quoteLength: effectiveQuoteData.quote.length,
           contentLength: fullContent.length,
-          quotePreview: previewText(quoteData.quote),
+          quotePreview: previewText(effectiveQuoteData.quote),
           fullContentPreview: previewText(fullContent),
           hasValidRange,
         })
       }
 
-      context += await buildMentionedContext()
+      if (!regeneration) context += await buildMentionedContext()
 
       // 6. 构建消息数组：较早回合使用会话级锚定摘要，最近完整回合保留原文
       const compactionContext = [
@@ -931,7 +940,7 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
           preparedHistory = await prepareConversationHistory({
             conversationId: chatState.currentConversationId,
             chats,
-            currentUserInput: requestText,
+            currentUserInput: effectiveRequestText,
             additionalContext: compactionContext,
             imageCount: 0,
           })
@@ -964,7 +973,7 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
       )
 
       agentDebugLog('chat_messages_built', {
-        userInput: requestText,
+        userInput: effectiveRequestText,
         contextLength: context.length,
         compactionRevision: preparedHistory?.compaction?.revision || null,
         compactionSource: preparedHistory?.capacity.source || null,
@@ -979,7 +988,7 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
       })
 
       try {
-        await agentHandler.execute(requestText, messages)
+        await agentHandler.execute(effectiveRequestText, messages)
       } catch (error) {
         const parsedOverflow = parseContextOverflowError(error)
         const overflow =
@@ -1004,7 +1013,7 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
         preparedHistory = await prepareConversationHistory({
           conversationId: chatState.currentConversationId,
           chats: useChatStore.getState().chats,
-          currentUserInput: requestText,
+          currentUserInput: effectiveRequestText,
           additionalContext: compactionContext,
           imageCount: 0,
           force: true,
@@ -1029,7 +1038,7 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
             coveredThroughChatId: preparedHistory.compaction?.coveredThroughChatId,
           }
         )
-        await agentHandler.execute(requestText, messages)
+        await agentHandler.execute(effectiveRequestText, messages)
       }
     } catch (error) {
       if (deferredOverflowError) {
@@ -1042,6 +1051,92 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
       agentHandlerRef.current = null
     }
   }
+
+  regenerateResponseRef.current = async (assistantChatId: number) => {
+    if (activeRunRef.current || useChatStore.getState().loading) return
+
+    const chatState = useChatStore.getState()
+    const assistantIndex = chatState.chats.findIndex(chat => chat.id === assistantChatId)
+    const assistantMessage = chatState.chats[assistantIndex]
+    if (assistantIndex < 1 || assistantMessage?.role !== 'system') return
+
+    const userMessage = [...chatState.chats.slice(0, assistantIndex)]
+      .reverse()
+      .find(chat => chat.role === 'user' && chat.type === 'chat')
+    if (!userMessage) return
+
+    let previousSelectedSkills: string[] = []
+    let previousRunUsedTools = false
+    if (assistantMessage.agentHistory) {
+      try {
+        const history = JSON.parse(assistantMessage.agentHistory) as {
+          selectedSkills?: unknown
+          toolCalls?: unknown
+          changes?: unknown
+        }
+        previousSelectedSkills = Array.isArray(history.selectedSkills)
+          ? history.selectedSkills.filter((skill): skill is string => typeof skill === 'string')
+          : []
+        previousRunUsedTools = (Array.isArray(history.toolCalls) && history.toolCalls.length > 0)
+          || (Array.isArray(history.changes) && history.changes.length > 0)
+      } catch {
+        previousSelectedSkills = []
+      }
+    }
+
+    if (
+      previousRunUsedTools
+      && !window.confirm('这条回复执行过工具操作。重新生成只会替换回复内容，已执行的文件或数据操作不会自动撤销，是否继续？')
+    ) return
+
+    let previousQuote: QuoteData | null = null
+    if (userMessage.quoteData) {
+      try {
+        previousQuote = JSON.parse(userMessage.quoteData) as QuoteData
+      } catch {
+        previousQuote = null
+      }
+    }
+
+    let previousImages: ImageAttachment[] = []
+    if (userMessage.images) {
+      try {
+        const urls = JSON.parse(userMessage.images) as string[]
+        previousImages = urls.map((url, index) => ({
+          id: `regenerate-${userMessage.id}-${index}`,
+          url,
+          source: 'file',
+        }))
+      } catch {
+        previousImages = []
+      }
+    }
+
+    manualStopRequestedRef.current = false
+    contextOverflowRetryRef.current = 0
+    activeRunRef.current = true
+    repeatedScriptApprovalRef.current = { signature: '', count: 0 }
+    setLoading(true)
+    try {
+      await chatState.deleteChat(assistantChatId)
+      await handleAgentMode(previousImages, userMessage, {
+        requestText: userMessage.content?.trim() || t('record.chat.input.addAttachment.attachmentOnlyPrompt'),
+        quoteData: previousQuote,
+        selectedSkills: previousSelectedSkills,
+      })
+    } finally {
+      activeRunRef.current = false
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    const handleRegenerate = ({ assistantChatId }: { assistantChatId: number }) => {
+      void regenerateResponseRef.current(assistantChatId)
+    }
+    emitter.on('chat-regenerate-response', handleRegenerate)
+    return () => emitter.off('chat-regenerate-response', handleRegenerate)
+  }, [])
 
   // 对话（Agent 模式）
   async function handleSubmit() {

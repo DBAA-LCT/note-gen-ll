@@ -4,8 +4,6 @@ import { useMemo, useState } from 'react'
 import baseConfig from '../config'
 import { useMessages, useTranslations } from 'next-intl'
 import { Search } from 'lucide-react'
-import useUpdateStore from '@/stores/update'
-import { Badge } from '@/components/ui/badge'
 import { Empty, EmptyDescription } from '@/components/ui/empty'
 import {
   InputGroup,
@@ -24,7 +22,6 @@ function collectSearchTerms(value: unknown): string[] {
 export function SettingTab() {
   const t = useTranslations('settings')
   const messages = useMessages()
-  const { hasUpdate } = useUpdateStore()
   const [query, setQuery] = useState('')
   
   // Add translations to the config
@@ -144,13 +141,6 @@ export function SettingTab() {
               >
                 <span data-icon="inline-start">{item.icon}</span>
                 <span className="truncate">{item.title}</span>
-                {item.anchor === 'about' && hasUpdate ? (
-                  <Badge
-                    variant="destructive"
-                    className="ml-auto size-2 shrink-0 p-0"
-                    aria-hidden
-                  />
-                ) : null}
               </TabsTrigger>
             )
           })}

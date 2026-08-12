@@ -13,7 +13,6 @@ import useVectorStore from "@/stores/vector"
 import useImageStore from "@/stores/imageHosting"
 import useShortcutStore from "@/stores/shortcut"
 import useEditorShortcutStore from "@/stores/editor-shortcut"
-import useUpdateStore from "@/stores/update"
 import initQuickRecordText from "@/lib/shortcut/quick-record-text"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import initShowWindow from "@/lib/shortcut/show-window"
@@ -54,7 +53,6 @@ export default function RootLayout({
   const { initShortcut } = useShortcutStore()
   const { initEditorShortcuts } = useEditorShortcutStore()
   const { initVectorDb } = useVectorStore()
-  const { initUpdateStore, checkForUpdates } = useUpdateStore()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -323,9 +321,6 @@ export default function RootLayout({
         initShowWindow()
         initMcp()
 
-        await initUpdateStore()
-        if (cancelled) return
-        checkForUpdates()
       } catch (error) {
         console.error('Failed to initialize app core:', error)
       }

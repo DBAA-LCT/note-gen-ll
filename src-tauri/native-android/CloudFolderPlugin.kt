@@ -1,4 +1,4 @@
-package com.codexu.NoteGen
+package com.codexu.NoteGoal
 
 import android.app.Activity
 import android.content.Intent

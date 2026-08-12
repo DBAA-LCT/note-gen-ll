@@ -24,7 +24,6 @@ import {
   subscribeAutoDataSyncState,
   type AutoDataSyncState,
 } from "@/lib/sync/auto-data-sync-queue"
-import useUpdateStore from "@/stores/update"
 import { MobileMeSheet } from "@/app/mobile/components/mobile-me-sheet"
 
 const SearchDialog = dynamic(
@@ -54,7 +53,6 @@ export function MobileChatHeader() {
   const { language } = useSettingStore()
   const autoRecordSyncEnabled = useSettingStore(state => state.autoRecordSyncEnabled)
   const autoConversationSyncEnabled = useSettingStore(state => state.autoConversationSyncEnabled)
-  const hasMobileUpdate = useUpdateStore(state => Boolean(state.mobileUpdate))
   const tEmpty = useTranslations("record.chat.empty")
   const tInput = useTranslations("record.chat.input")
   const tSearch = useTranslations("search")
@@ -68,8 +66,7 @@ export function MobileChatHeader() {
 
   useEffect(() => subscribeAutoDataSyncState(setAutoDataSyncState), [])
 
-  const meIndicator = hasMobileUpdate
-    || (
+  const meIndicator = (
       autoRecordSyncEnabled
       && (
         autoDataSyncState.phase === "waiting_provider"

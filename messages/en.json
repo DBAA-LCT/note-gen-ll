@@ -884,8 +884,8 @@
       "download": "Download"
     },
     "about": {
-      "title": "About",
-      "desc": "Capture first, organize later.",
+      "title": "About NoteGoal",
+      "desc": "Connect notes, goals, and daily action in one planning flow.",
       "resourcesTitle": "Resources and support",
       "resourcesDesc": "Open docs, release notes, or community channels for feedback.",
       "licenseText": "Open source · GitHub · GPL-3.0",
@@ -924,6 +924,10 @@
       "later": "Later",
       "close": "Close",
       "sections": {
+        "upstream": {
+          "title": "Original project: NoteGen",
+          "desc": "NoteGoal is derived from the open-source NoteGen project and extends its notes, records, and AI capabilities with planning workflows."
+        },
         "appInfo": {
           "title": "App information",
           "desc": "Review the current version, update status, and app summary."
@@ -946,6 +950,11 @@
         }
       },
       "items": {
+        "upstream": {
+          "title": "NoteGen (original project)",
+          "buttonName": "View original project",
+          "desc": "View the NoteGen source code, license, and original project information."
+        },
         "home": {
           "title": "Home",
           "buttonName": "Open",

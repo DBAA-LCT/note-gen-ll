@@ -39,13 +39,6 @@ export function SettingAbout({id, icon}: {id: string, icon?: React.ReactNode}) {
       buttonName: t('items.home.buttonName')
     },
     {
-      url: "https://github.com/codexu/note-gen",
-      title: t('items.github.title'),
-      desc: t('items.github.desc'),
-      icon: <GitFork />,
-      buttonName: t('items.github.buttonName')
-    },
-    {
       url: "https://github.com/codexu/note-gen/issues",
       title: t('items.issues.title'),
       desc: t('items.issues.desc'),
@@ -58,6 +51,16 @@ export function SettingAbout({id, icon}: {id: string, icon?: React.ReactNode}) {
       desc: t('items.discussions.desc'),
       icon: <MessageSquare />,
       buttonName: t('items.discussions.buttonName')
+    }
+  ]
+
+  const upstreamItems: AboutResource[] = [
+    {
+      url: "https://github.com/codexu/note-gen",
+      title: t('items.upstream.title'),
+      desc: t('items.upstream.desc'),
+      icon: <GitFork />,
+      buttonName: t('items.upstream.buttonName')
     }
   ]
 
@@ -80,6 +83,12 @@ export function SettingAbout({id, icon}: {id: string, icon?: React.ReactNode}) {
   ]
 
   const sections: AboutResourceSection[] = [
+    {
+      id: 'upstream',
+      title: t('sections.upstream.title'),
+      desc: t('sections.upstream.desc'),
+      items: upstreamItems
+    },
     {
       id: 'donation',
       title: t('sections.donation.title'),

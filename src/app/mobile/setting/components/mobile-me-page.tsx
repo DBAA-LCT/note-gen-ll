@@ -22,7 +22,6 @@ import { cn } from '@/lib/utils'
 import { MobileMeActivityDrawer } from './mobile-me-activity-drawer'
 import { buildActivityDaySummaryText, buildProfileCardData, getBackupMethodStatus, getBackupProviderName, getCurrentActivityStreak, getCurrentWeekActivityCount } from './mobile-me-helpers'
 import { MobileMeProfileCard } from './mobile-me-profile-card'
-import { MobileUpdateSettings } from './mobile-update-settings'
 import { SettingTab } from './setting-tab'
 
 const MOBILE_HEATMAP_WEEKS = 16
@@ -475,10 +474,6 @@ export function MobileMePage({
         initial={embedded && animateEntrance && !reduceMotion ? "hidden" : false}
         animate="visible"
       >
-        <motion.div variants={embeddedItemVariants}>
-          <MobileUpdateSettings />
-        </motion.div>
-
         <motion.div variants={embeddedItemVariants}>
           <MobileMeProfileCard
             name={profileCardName}

@@ -42,10 +42,6 @@ const SyncConfirmDialog = dynamic(
   () => import('@/components/sync-confirm-dialog').then(module => module.SyncConfirmDialog),
   { ssr: false },
 )
-const MobileUpdateChecker = dynamic(
-  () => import('./components/mobile-update-prompt').then(module => module.MobileUpdateChecker),
-  { ssr: false },
-)
 const ControlText = dynamic(
   () => import('@/app/core/main/mark/control-text').then(module => module.ControlText),
   { ssr: false },
@@ -224,7 +220,6 @@ export default function RootLayout({
             ) : null}
           </TooltipProvider>
           {nativeRuntime ? <SyncConfirmDialog /> : null}
-          {nativeRuntime ? <MobileUpdateChecker /> : null}
           {nativeRuntime ? <MemoryAutoNotifications /> : null}
         </TextSizeProvider>
       </ThemeProvider>

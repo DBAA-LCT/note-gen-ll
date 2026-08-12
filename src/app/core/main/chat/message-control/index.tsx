@@ -1,6 +1,6 @@
 import { Chat } from "@/db/chats"
 import useChatStore from "@/stores/chat"
-import { XIcon } from "lucide-react"
+import { RefreshCw, XIcon } from "lucide-react"
 import { clear, hasText, readText } from "tauri-plugin-clipboard-api"
 import { useState } from "react"
 import { MessageInfo } from "./message-info"
@@ -10,8 +10,9 @@ import { CopyControl } from "./copy-control"
 import { ReadAloudControl } from "./read-aloud-control"
 import { TooltipButton } from "@/components/tooltip-button"
 import { useTranslations } from 'next-intl';
+import emitter from '@/lib/emitter'
 
-export default function MessageControl({chat, children}: {chat: Chat, children: React.ReactNode}) {
+export default function MessageControl({chat, children, canRegenerate = false}: {chat: Chat, children: React.ReactNode, canRegenerate?: boolean}) {
   const { deleteChat } = useChatStore()
   const [translatedContent, setTranslatedContent] = useState<string>('')
   const t = useTranslations('common')
@@ -57,6 +58,16 @@ export default function MessageControl({chat, children}: {chat: Chat, children: 
             chat={chat}
             translatedContent={translatedContent}
           />
+
+          {canRegenerate ? (
+            <TooltipButton
+              icon={<RefreshCw className='size-4' />}
+              tooltipText="重新生成回复"
+              variant="ghost"
+              size="icon"
+              onClick={() => emitter.emit('chat-regenerate-response', { assistantChatId: chat.id })}
+            />
+          ) : null}
 
           <TooltipButton icon={<XIcon className='size-4' />} tooltipText={t('delete')} variant={"ghost"} size={"icon"} onClick={deleteHandler}/>
         </div>

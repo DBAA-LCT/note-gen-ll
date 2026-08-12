@@ -82,6 +82,7 @@ interface Events {
   'record-assets-downloaded': { paths: string[] };
   'quick-prompt-insert': string;
   'quick-prompt-send': string;
+  'chat-regenerate-response': { assistantChatId: number };
   'learning-goal-draft-adopted': Partial<CreateLearningGoalInput> & { targetGoalId?: string | null };
   'learning-daily-plan-adopted': { date: string; basedOnDate: string | null; tasks: AiLearningTaskDraft[] };
   'learning-daily-report-adopted': { date: string; overall: string; reflection: DailyReflection; entries: DailyReportGoalEntry[] };

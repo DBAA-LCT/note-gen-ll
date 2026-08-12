@@ -102,7 +102,6 @@ fn main() {
         .plugin(tauri_plugin_clipboard::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         // 功能插件
-        .plugin(tauri_plugin_updater::Builder::new().build())
         // 注册命令处理器
         .invoke_handler(tauri::generate_handler![
             fuzzy_search,

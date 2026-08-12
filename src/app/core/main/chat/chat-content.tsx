@@ -296,6 +296,7 @@ const Message = React.memo(function Message({ chat }: { chat: Chat }) {
   const content = chat.content
   const isActiveAgentMessage = chat.role === 'system' && agentState.activeChatId === chat.id
   const latestChatId = chats[chats.length - 1]?.id
+  const latestAssistantChatId = chats.findLast(item => item.role === 'system' && item.type === 'chat')?.id
   const isLatestSystemMessage = chat.role === 'system' && latestChatId === chat.id
   const isGeneratingMessage = chat.role === 'system' && (
     (loading && isLatestSystemMessage) ||
@@ -515,7 +516,7 @@ const Message = React.memo(function Message({ chat }: { chat: Chat }) {
               </div>
             }
             {!isGeneratingMessage && (
-              <MessageControl chat={chat}>
+              <MessageControl chat={chat} canRegenerate={chat.id === latestAssistantChatId && !loading && !agentState.isRunning}>
                 <NoteOutput chat={chat} />
               </MessageControl>
             )}

@@ -861,6 +861,10 @@
       "later": "Mais tarde",
       "close": "Fechar",
       "sections": {
+        "upstream": {
+          "title": "Projeto original: NoteGen",
+          "desc": "O NoteGoal é baseado no projeto de código aberto NoteGen e amplia seus recursos de notas, registros e IA com fluxos de planejamento."
+        },
         "appInfo": {
           "title": "Informações do app",
           "desc": "Veja a versão atual, o status de atualização e o resumo do app."
@@ -883,6 +887,11 @@
         }
       },
       "items": {
+        "upstream": {
+          "title": "NoteGen (projeto original)",
+          "buttonName": "Ver projeto original",
+          "desc": "Veja o código-fonte, a licença e as informações do projeto NoteGen."
+        },
         "home": {
           "title": "Início",
           "buttonName": "Abrir",
