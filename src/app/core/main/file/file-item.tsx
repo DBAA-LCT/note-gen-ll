@@ -7,8 +7,6 @@ import { Archive, Copy, Database, Download, File, FileCode, FileJson, FileLock2,
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ask } from '@tauri-apps/plugin-dialog';
 import { Store } from '@tauri-apps/plugin-store';
-import { RepoNames } from "@/lib/sync/github.types";
-import { S3Config, WebDAVConfig } from "@/types/sync";
 import { cloneDeep } from "lodash-es";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { computedParentPath, getCurrentFolder } from "@/lib/path";
@@ -16,13 +14,8 @@ import { toast } from "@/hooks/use-toast";
 import { useTranslations } from "next-intl";
 import useClipboardStore from "@/stores/clipboard";
 import { appDataDir, join } from '@tauri-apps/api/path';
-import { deleteFile } from "@/lib/sync/github";
-import { deleteFile as deleteGiteeFile } from "@/lib/sync/gitee";
-import { deleteFile as deleteGitlabFile } from "@/lib/sync/gitlab";
-import { deleteFile as deleteGiteaFile } from "@/lib/sync/gitea";
-import { s3Delete } from "@/lib/sync/s3";
-import { webdavDelete } from "@/lib/sync/webdav";
-import { getSyncRepoName } from "@/lib/sync/repo-utils";
+import { getSyncPathWritePolicy } from '@/lib/sync/connector-mappings'
+import { getSyncManager } from '@/lib/sync/sync-manager'
 import { generateUniqueFilename } from "@/lib/default-filename";
 import { MobileActionMenu, MobileMenuItem, MobileSeparator } from "./mobile-action-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -46,6 +39,7 @@ import { FileTreeDecorations } from "./file-tree-decorations";
 import { moveEntryToSystemTrash } from './system-trash'
 import { rewriteWorkspaceMarkdownMediaPaths } from '@/lib/markdown-media-path'
 import useLearningStore from '@/stores/learning'
+import emitter from '@/lib/emitter'
 
 function shouldAutoSyncOnInitialRead(options?: { isNewFile?: boolean }) {
   return options?.isNewFile !== true
@@ -141,6 +135,7 @@ export function FileItem({
   const { setClipboardItem, clipboardItem, clipboardItems, clipboardOperation } = useClipboardStore()
   const { fileManagerTextSize, primaryBackupMethod } = useSettingStore()
   const t = useTranslations('article.file')
+  const tSync = useTranslations('settings.sync')
   const tCommon = useTranslations('common')
   const isMobile = useIsMobile()
   const [exportingFormat, setExportingFormat] = useState<MarkdownExportFormat | null>(null)
@@ -154,6 +149,28 @@ export function FileItem({
   }
 
   const path = computedParentPath(item)
+  const [canWriteRemote, setCanWriteRemote] = useState(false)
+  const [isReadOnlySync, setIsReadOnlySync] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const refreshPolicy = () => {
+      setCanWriteRemote(false)
+      setIsReadOnlySync(false)
+      void getSyncPathWritePolicy(path).then((policy) => {
+        if (!cancelled) {
+          setCanWriteRemote(policy.writable)
+          setIsReadOnlySync(policy.blockedByReadOnly)
+        }
+      })
+    }
+    refreshPolicy()
+    emitter.on('sync-mappings-changed', refreshPolicy)
+    return () => {
+      cancelled = true
+      emitter.off('sync-mappings-changed', refreshPolicy)
+    }
+  }, [path])
   const isLearningReport = isLearningReportMarkdown('', path)
   const dailyReportDate = getDailyReportDateFromPath(path)
 
@@ -199,7 +216,10 @@ export function FileItem({
 
   const iconSize = getIconSize(fileManagerTextSize)
   const syncStatus = providedSyncStatus ?? getFileTreeSyncStatus(item)
-  const syncStatusTitle = item.syncError ?? t(`syncStatus.${syncStatus}`)
+  const syncStatusTitle = item.syncError
+    ?? (isReadOnlySync && syncStatus === 'dirty'
+      ? tSync('mapping.readOnlyLocalChanges')
+      : t(`syncStatus.${syncStatus}`))
 
   // 检查文件是否被剪切
   const isCut = clipboardOperation === 'cut' && clipboardItems.some(entry => entry.path === path)
@@ -361,6 +381,17 @@ export function FileItem({
   }
 
   async function handleDeleteSyncFile() {
+    const writePolicy = await getSyncPathWritePolicy(computedParentPath(item))
+    if (!writePolicy.writable) {
+      toast({
+        title: t('context.delete'),
+        description: writePolicy.ambiguous
+          ? tSync('mapping.deleteAmbiguous')
+          : tSync('readOnlyWriteBlocked'),
+        variant: 'destructive',
+      })
+      return
+    }
     const answer = await ask(t('context.deleteSyncFile') + '?', {
       title: item.name,
       kind: 'warning',
@@ -371,56 +402,8 @@ export function FileItem({
       setEntryLoading(currentPath, true)
 
       try {
-        // 获取当前主要备份方式
-        const store = await Store.load('store.json');
-        const backupMethod = await store.get<'github' | 'gitee' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'>('primaryBackupMethod') || 'github';
-        if (backupMethod === 'cloudFolder') {
-          setEntryLoading(currentPath, false)
-          return
-        }
-        const repoName = backupMethod === 's3' || backupMethod === 'webdav'
-          ? RepoNames.sync
-          : await getSyncRepoName(backupMethod)
-
-        let success = false
-        switch (backupMethod) {
-          case 'github': {
-            const result = await deleteFile({ path: currentPath, sha: item.sha as string, repo: repoName });
-            success = !!result
-            break;
-          }
-          case 'gitee': {
-            const result = await deleteGiteeFile({ path: currentPath, sha: item.sha as string, repo: repoName });
-            success = result !== false
-            break;
-          }
-          case 'gitlab': {
-            const result = await deleteGitlabFile({ path: currentPath, sha: item.sha as string, repo: repoName });
-            success = !!result
-            break;
-          }
-          case 'gitea': {
-            const result = await deleteGiteaFile({ path: currentPath, sha: item.sha as string, repo: repoName });
-            success = !!result
-            break;
-          }
-          case 's3': {
-            const s3Config = await store.get<S3Config>('s3SyncConfig')
-            if (s3Config) {
-              const result = await s3Delete(s3Config, currentPath)
-              success = result
-            }
-            break;
-          }
-          case 'webdav': {
-            const webdavConfig = await store.get<WebDAVConfig>('webdavSyncConfig')
-            if (webdavConfig) {
-              const result = await webdavDelete(webdavConfig, currentPath)
-              success = result
-            }
-            break;
-          }
-        }
+        const result = await getSyncManager().deleteRemoteFile(currentPath)
+        const success = result.success
 
         if (success) {
           clearFileRemoteState(currentPath)
@@ -737,7 +720,18 @@ export function FileItem({
 
   async function handleUploadFile() {
     if (isUploading || !item.isLocale || item.name === '') return
-    const sync = await getSyncConfiguration()
+    const writePolicy = await getSyncPathWritePolicy(path)
+    if (!writePolicy.writable) {
+      toast({
+        title: t('context.uploadFileError'),
+        description: writePolicy.ambiguous
+          ? tSync('mapping.uploadAmbiguous')
+          : tSync('readOnlyWriteBlocked'),
+        variant: 'destructive',
+      })
+      return
+    }
+    const sync = await getSyncConfiguration(path)
     if (!sync.configured) {
       toast({
         title: sync.reason === 'missing-repository'
@@ -912,6 +906,7 @@ export function FileItem({
                   knowledge={renderVectorIcon()}
                   syncStatus={syncStatus}
                   syncTitle={syncStatusTitle}
+                  readOnly={isReadOnlySync}
                 />
                   {isMobile && (
                     <MobileActionMenu className="ml-1">
@@ -935,7 +930,7 @@ export function FileItem({
                       {t('context.paste')}
                     </MobileMenuItem>
                     <MobileSeparator />
-                    <MobileMenuItem disabled={isUploading || !item.isLocale || item.name === ''} onClick={() => void handleUploadFile()}>
+                    <MobileMenuItem disabled={isUploading || !item.isLocale || item.name === '' || !canWriteRemote} onClick={() => void handleUploadFile()}>
                       {t('context.uploadFile')}
                     </MobileMenuItem>
                     <MobileSeparator />
@@ -943,7 +938,7 @@ export function FileItem({
                       {t('context.rename')}
                     </MobileMenuItem>
                     {primaryBackupMethod !== 'cloudFolder' ? (
-                      <MobileMenuItem disabled={!item.sha} className="text-red-600" onClick={handleDeleteSyncFile}>
+                      <MobileMenuItem disabled={!item.sha || !canWriteRemote} className="text-red-600" onClick={handleDeleteSyncFile}>
                         {t('context.deleteSyncFile')}
                       </MobileMenuItem>
                     ) : null}
@@ -987,6 +982,7 @@ export function FileItem({
                   knowledge={renderVectorIcon()}
                   syncStatus={syncStatus}
                   syncTitle={syncStatusTitle}
+                  readOnly={isReadOnlySync}
                 />
                 {isMobile && (
                   <MobileActionMenu className="ml-1">
@@ -1012,7 +1008,7 @@ export function FileItem({
                       {t('context.paste')}
                     </MobileMenuItem>
                     <MobileSeparator />
-                    <MobileMenuItem disabled={isUploading || !item.isLocale || item.name === ''} onClick={() => void handleUploadFile()}>
+                    <MobileMenuItem disabled={isUploading || !item.isLocale || item.name === '' || !canWriteRemote} onClick={() => void handleUploadFile()}>
                       {t('context.uploadFile')}
                     </MobileMenuItem>
                     <MobileSeparator />
@@ -1020,7 +1016,7 @@ export function FileItem({
                       {t('context.rename')}
                     </MobileMenuItem>
                     {primaryBackupMethod !== 'cloudFolder' ? (
-                      <MobileMenuItem disabled={!item.sha} className="text-red-600" onClick={handleDeleteSyncFile}>
+                      <MobileMenuItem disabled={!item.sha || !canWriteRemote} className="text-red-600" onClick={handleDeleteSyncFile}>
                         {t('context.deleteSyncFile')}
                       </MobileMenuItem>
                     ) : null}
@@ -1089,7 +1085,7 @@ export function FileItem({
               <ContextMenuSeparator />
               <ContextMenuItem
                 inset
-                disabled={isUploading || !item.isLocale || item.name === ''}
+                disabled={isUploading || !item.isLocale || item.name === '' || !canWriteRemote}
                 onClick={() => void handleUploadFile()}
                 menuType="file"
               >
@@ -1144,7 +1140,7 @@ export function FileItem({
                 </ContextMenuShortcut>
               </ContextMenuItem>
               {primaryBackupMethod !== 'cloudFolder' ? (
-                <ContextMenuItem disabled={!item.sha} inset className="text-red-900" onClick={handleDeleteSyncFile} menuType="file">
+                <ContextMenuItem disabled={!item.sha || !canWriteRemote} inset className="text-red-900" onClick={handleDeleteSyncFile} menuType="file">
                   <RefreshCwOff className="mr-2 h-4 w-4" />
                   {t('context.deleteSyncFile')}
                 </ContextMenuItem>

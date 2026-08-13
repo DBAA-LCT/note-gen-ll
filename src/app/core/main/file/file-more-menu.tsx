@@ -22,6 +22,7 @@ import {
   Upload,
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -41,6 +42,8 @@ import useCloudLibraryStore from '@/stores/cloud-library'
 import useVectorStore from '@/stores/vector'
 import { getSyncConfiguration } from './file-tree-action-policy'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
+import emitter from '@/lib/emitter'
+import { getSyncPathWritePolicy } from '@/lib/sync/connector-mappings'
 
 type FileMoreMenuProps = {
   isImporting: boolean
@@ -86,6 +89,30 @@ export function FileMoreMenu({ isImporting, onImportMarkdown, onImportNotion }: 
     downloadKnowledgeBase,
   } = useCloudLibraryStore()
   const busy = operation !== null || isProcessing || isImporting
+  const [canUploadWorkspace, setCanUploadWorkspace] = useState(false)
+
+  useEffect(() => {
+    const refreshPolicy = () => {
+      void getSyncPathWritePolicy('', { includeDescendants: true }).then((policy) => {
+        setCanUploadWorkspace(policy.configured && !policy.blockedByReadOnly)
+      })
+    }
+    refreshPolicy()
+    emitter.on('sync-mappings-changed', refreshPolicy)
+    return () => emitter.off('sync-mappings-changed', refreshPolicy)
+  }, [])
+
+  async function ensureWorkspaceUploadAllowed() {
+    const policy = await getSyncPathWritePolicy('', { includeDescendants: true })
+    if (policy.configured && !policy.blockedByReadOnly) return true
+    toast({
+      description: policy.blockedByReadOnly
+        ? tSync('mapping.readOnlyLocalChanges')
+        : tSync('status.unconfigured'),
+      variant: 'destructive',
+    })
+    return false
+  }
 
   async function ensureSyncConfigured() {
     const sync = await getSyncConfiguration()
@@ -107,6 +134,7 @@ export function FileMoreMenu({ isImporting, onImportMarkdown, onImportNotion }: 
   }
 
   async function handleUploadFiles() {
+    if (!await ensureWorkspaceUploadAllowed()) return
     if (!await ensureSyncConfigured()) return
     const accepted = await confirm(t(syncStaticAssets ? 'uploadFilesWithAssetsWarning' : 'uploadFilesWarning'), {
       title: t('uploadFiles'),
@@ -347,7 +375,7 @@ export function FileMoreMenu({ isImporting, onImportMarkdown, onImportNotion }: 
             aria-label={t('syncStaticAssets')}
           />
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void handleUploadFiles()}>
+        <DropdownMenuItem disabled={!canUploadWorkspace} onSelect={() => void handleUploadFiles()}>
           <Upload className="mr-2 size-4" />
           {t('uploadFiles')}
         </DropdownMenuItem>

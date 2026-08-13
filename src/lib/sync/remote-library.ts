@@ -24,6 +24,15 @@ import { getFilePathOptions } from '@/lib/workspace'
 import { decodeBase64ToBytes, getRemoteFileContent } from './remote-file'
 import type { CloudFolderConfig, S3Config, SyncPlatform, WebDAVConfig } from '@/types/sync'
 import { recordSyncTiming } from './sync-timing'
+import { shouldExclude } from '@/config/sync-exclusions'
+import { isCurrentWorkspaceSyncReadOnly } from '@/lib/sync/workspace-sync-config'
+import {
+  getConnectorMappings,
+  getEffectiveSyncPathPolicy,
+  getSyncPathWritePolicy,
+  resolvePrimarySyncMapping,
+  type ConnectorSyncMapping,
+} from '@/lib/sync/connector-mappings'
 
 const MARKDOWN_FILE_PATTERN = /\.md$/i
 const ONE_DRIVE_FILE_TRANSFER_CONCURRENCY = 3
@@ -150,9 +159,10 @@ function normalizeGitEntries(value: unknown): GitRemoteEntry[] {
 
 async function listGitRemoteFiles(
   platform: Exclude<SyncPlatform, 's3' | 'webdav' | 'cloudFolder'>,
-  options: RemoteLibraryOptions
+  options: RemoteLibraryOptions,
+  repository?: string,
 ): Promise<RemoteLibraryFile[]> {
-  const repo = await getSyncRepoName(platform)
+  const repo = repository || await getSyncRepoName(platform)
   const queue = ['']
   const visited = new Set<string>()
   const files: RemoteLibraryFile[] = []
@@ -203,11 +213,13 @@ async function listGitRemoteFiles(
 async function listObjectStorageFiles(
   store: Store,
   platform: 's3' | 'webdav',
-  options: RemoteLibraryOptions
+  options: RemoteLibraryOptions,
+  remoteTarget?: string,
 ): Promise<RemoteLibraryFile[]> {
   if (platform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     if (!config) throw new Error('S3 未配置')
+    if (remoteTarget) config.bucket = remoteTarget
     const objects = await s3ListObjects(config, '')
     return objects
       .filter(object => isLibraryPath(object.key, options))
@@ -221,6 +233,7 @@ async function listObjectStorageFiles(
 
   const config = await store.get<WebDAVConfig>('webdavSyncConfig')
   if (!config) throw new Error('WebDAV 未配置')
+  if (remoteTarget) config.url = remoteTarget
   const queue = ['']
   const visited = new Set<string>()
   const files: RemoteLibraryFile[] = []
@@ -255,6 +268,32 @@ async function listObjectStorageFiles(
 
 async function listRemoteLibraryFilesRaw(options: RemoteLibraryOptions): Promise<RemoteLibraryFile[]> {
   const store = await Store.load('store.json')
+  const workspacePath = await store.get<string>('workspacePath') || ''
+  const mappings = (await getConnectorMappings()).filter(mapping => (
+    mapping.enabled && mapping.localWorkspacePath === workspacePath
+  ))
+  if (mappings.length) {
+    const mappedFiles = await Promise.all(mappings.map(async (mapping) => {
+      const remoteRoot = mapping.remotePath.replace(/^\/+|\/+$/g, '')
+      const files = await listRemoteLibraryFilesForMapping(mapping, options)
+      return files.flatMap((file) => {
+        const remotePath = file.path.replace(/^\/+|\/+$/g, '')
+        const suffix = mapping.entryType === 'file'
+          ? ''
+          : remotePath.slice(remoteRoot.length).replace(/^\/+/, '')
+        const localPath = mapping.entryType === 'file'
+          ? mapping.localPath
+          : [mapping.localPath, suffix].filter(Boolean).join('/')
+        const policy = getEffectiveSyncPathPolicy(mapping, localPath)
+        return !localPath || policy === 'local-only' || policy === 'ignore-remote'
+          ? []
+          : [{ ...file, path: localPath }]
+      })
+    }))
+    return Array.from(
+      new Map(mappedFiles.flat().map(file => [file.path, file])).values(),
+    ).sort((left, right) => left.path.localeCompare(right.path))
+  }
   const platform = await getPlatform(store)
   if (platform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
@@ -279,13 +318,44 @@ async function listRemoteLibraryFilesRaw(options: RemoteLibraryOptions): Promise
 export async function listRemoteLibraryFiles(options: RemoteLibraryOptions = {}): Promise<RemoteLibraryFile[]> {
   const startedAt = Date.now()
   try {
-    const files = await listRemoteLibraryFilesRaw(options)
+    const files = (await listRemoteLibraryFilesRaw(options)).filter(file => !shouldExclude(file.path))
     recordSyncTiming('workspaceList', startedAt, { files: files.length, success: true })
     return files
   } catch (error) {
     recordSyncTiming('workspaceList', startedAt, { success: false })
     throw error
   }
+}
+
+/** List the remote inventory addressed by a specific connector mapping. */
+export async function listRemoteLibraryFilesForMapping(
+  mapping: ConnectorSyncMapping,
+  options: RemoteLibraryOptions = { includeStaticAssets: true },
+): Promise<RemoteLibraryFile[]> {
+  const store = await Store.load('store.json')
+  let files: RemoteLibraryFile[]
+
+  if (mapping.platform === 'cloudFolder') {
+    const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+    if (!config || !supportsCloudFolderWorkspace(config)) return []
+    config.path = mapping.remoteTarget || config.path
+    files = (await androidCloudFolderWorkspaceList(config)).map(object => ({
+      path: object.key,
+      sha: object.etag,
+      size: object.size,
+      modifiedAt: new Date(object.modifiedAt).toISOString(),
+    }))
+  } else if (mapping.platform === 's3' || mapping.platform === 'webdav') {
+    files = await listObjectStorageFiles(store, mapping.platform, options, mapping.remoteTarget)
+  } else {
+    files = await listGitRemoteFiles(mapping.platform, options, mapping.remoteTarget)
+  }
+
+  const remoteRoot = mapping.remotePath.replace(/^\/+|\/+$/g, '')
+  return files
+    .filter(file => !shouldExclude(file.path))
+    .filter(file => !remoteRoot || file.path === remoteRoot || file.path.startsWith(`${remoteRoot}/`))
+    .sort((left, right) => left.path.localeCompare(right.path))
 }
 
 export async function isLocalLibraryFile(path: string): Promise<boolean> {
@@ -402,6 +472,11 @@ async function uploadLocalLibraryFiles(
   files: Array<{ path: string; name: string }>,
   onProgress?: (progress: PullAllProgress) => void
 ): Promise<UploadAllResult> {
+  const selectedFiles: Array<{ path: string; name: string }> = []
+  for (const file of files) {
+    if ((await getSyncPathWritePolicy(file.path)).writable) selectedFiles.push(file)
+  }
+  files = selectedFiles
   const result: UploadAllResult = { total: files.length, uploaded: 0, failed: [] }
   const concurrency = await getFileTransferConcurrency()
   let started = 0
@@ -454,6 +529,7 @@ async function collectLocalLibraryFiles(
     }
 
     const entryPath = folderPath ? `${folderPath}/${entry.name}` : entry.name
+    if (shouldExclude(entryPath)) continue
     if (entry.isDirectory) {
       files.push(...await collectLocalLibraryFiles(entryPath, options))
     } else if (entry.isFile && isLibraryPath(entryPath, options)) {
@@ -484,54 +560,70 @@ async function downloadRemoteBytesRaw(
   path: string,
   scope: RemoteRepositoryScope = 'workspace',
 ): Promise<Uint8Array> {
+  if (scope === 'workspace' && shouldExclude(path)) {
+    throw new Error('文件被当前工作区的同步范围规则排除')
+  }
+
   const store = await Store.load('store.json')
-  const platform = await getPlatform(store)
+  let platform = await getPlatform(store)
+  let remotePath = path
+  let remoteTarget = ''
+  if (scope === 'workspace') {
+    const mapping = await resolvePrimarySyncMapping(path)
+    if (!mapping || mapping.syncPolicy === 'ignore-remote') throw new Error('当前远端文件已设为不拉取')
+    platform = mapping.platform
+    remotePath = mapping.remoteFilePath
+    remoteTarget = mapping.remoteTarget
+  }
 
   if (platform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
-    const file = config ? await s3DownloadBytes(config, path) : null
+    if (config && remoteTarget) config.bucket = remoteTarget
+    const file = config ? await s3DownloadBytes(config, remotePath) : null
     if (!file) throw new Error('S3 下载失败')
     return file.content
   }
 
   if (platform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
-    const file = config ? await webdavDownloadBytes(config, path) : null
+    if (config && remoteTarget) config.url = remoteTarget
+    const file = config ? await webdavDownloadBytes(config, remotePath) : null
     if (!file) throw new Error('WebDAV 下载失败')
     return file.content
   }
 
   if (platform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+    if (config && remoteTarget) config.path = remoteTarget
     const file = config?.path
       ? scope === 'workspace' && supportsCloudFolderWorkspace(config)
-        ? await androidCloudFolderWorkspaceDownloadBytes(config, path)
+        ? await androidCloudFolderWorkspaceDownloadBytes(config, remotePath)
         : scope === 'data'
-          ? await cloudFolderDownloadBytes(config, path)
+          ? await cloudFolderDownloadBytes(config, remotePath)
           : null
       : null
     if (!file) throw new Error('云盘文件夹下载失败')
     return file.content
   }
 
-  const repo = await getGitRepository(platform, scope)
+  const repo = remoteTarget || await getGitRepository(platform, scope)
   let file: unknown
   switch (platform) {
     case 'github':
-      file = await getGithubFiles({ path, repo })
+      file = await getGithubFiles({ path: remotePath, repo })
       break
     case 'gitee':
-      file = await getGiteeFiles({ path, repo })
+      file = await getGiteeFiles({ path: remotePath, repo })
       break
     case 'gitlab':
-      file = await getGitlabFileContent({ path, ref: 'main', repo })
+      file = await getGitlabFileContent({ path: remotePath, ref: 'main', repo })
       break
     case 'gitea':
-      file = await getGiteaFileContent({ path, ref: 'main', repo })
+      file = await getGiteaFileContent({ path: remotePath, ref: 'main', repo })
       break
   }
 
-  return decodeBase64ToBytes(getRemoteFileContent(file, path))
+  return decodeBase64ToBytes(getRemoteFileContent(file, remotePath))
 }
 
 export async function downloadRemoteBytes(
@@ -610,58 +702,83 @@ async function uploadRemoteContentRaw(
   contentType?: string,
   scope: RemoteRepositoryScope = 'workspace',
 ): Promise<string> {
+  if (scope === 'workspace' && shouldExclude(path)) {
+    throw new Error('文件被当前工作区的同步范围规则排除')
+  }
+
   const store = await Store.load('store.json')
-  const platform = await getPlatform(store)
+  let platform = await getPlatform(store)
+  let remotePath = path
+  let mappedRemoteTarget = ''
+  if (scope === 'workspace') {
+    const { getSyncPathWritePolicy, resolvePrimarySyncMapping } = await import('./connector-mappings')
+    const writePolicy = await getSyncPathWritePolicy(path)
+    if (!writePolicy.writable) {
+      throw new Error(writePolicy.ambiguous
+        ? '当前文件命中多个同步映射，请先明确上传目标'
+        : '当前映射为只读，不允许上传')
+    }
+    const mapping = await resolvePrimarySyncMapping(path)
+    if (!mapping) throw new Error('当前文件没有同步映射')
+    platform = mapping.platform
+    remotePath = mapping.remoteFilePath
+    mappedRemoteTarget = mapping.remoteTarget
+  } else if (await isCurrentWorkspaceSyncReadOnly()) {
+    throw new Error('当前工作区为只读同步，不允许上传')
+  }
 
   if (platform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
-    const result = config ? await s3Upload(config, path, content, undefined, contentType) : null
+    if (config && mappedRemoteTarget) config.bucket = mappedRemoteTarget
+    const result = config ? await s3Upload(config, remotePath, content, undefined, contentType) : null
     if (!result) throw new Error('S3 上传失败')
-    return result.etag || `uploaded:${path}`
+    return result.etag || `uploaded:${remotePath}`
   }
 
   if (platform === 'webdav') {
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
-    const result = config ? await webdavUpload(config, path, content, undefined, contentType) : null
+    if (config && mappedRemoteTarget) config.url = mappedRemoteTarget
+    const result = config ? await webdavUpload(config, remotePath, content, undefined, contentType) : null
     if (!result) throw new Error('WebDAV 上传失败')
-    return result.etag || `uploaded:${path}`
+    return result.etag || `uploaded:${remotePath}`
   }
 
   if (platform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+    if (config && mappedRemoteTarget) config.path = mappedRemoteTarget
     const result = config?.path
       ? scope === 'workspace' && supportsCloudFolderWorkspace(config)
-        ? await androidCloudFolderWorkspaceUpload(config, path, content)
+        ? await androidCloudFolderWorkspaceUpload(config, remotePath, content)
         : scope === 'data'
-          ? await cloudFolderUpload(config, path, content)
+          ? await cloudFolderUpload(config, remotePath, content)
           : null
       : null
     if (!result) throw new Error('云盘文件夹上传失败')
     return result.etag
   }
 
-  const repo = await getGitRepository(platform, scope)
-  const sha = await getExistingRemoteSha(platform, path, repo)
-  const filename = path.split('/').pop() || path
+  const repo = mappedRemoteTarget || await getGitRepository(platform, scope)
+  const sha = await getExistingRemoteSha(platform, remotePath, repo)
+  const filename = remotePath.split('/').pop() || remotePath
   let response: unknown
 
   switch (platform) {
     case 'github':
-      response = await uploadGithubFile({ file: content, filename, path, repo, sha, message })
+      response = await uploadGithubFile({ file: content, filename, path: remotePath, repo, sha, message })
       break
     case 'gitee':
-      response = await uploadGiteeFile({ file: content, filename, path, repo, sha, message })
+      response = await uploadGiteeFile({ file: content, filename, path: remotePath, repo, sha, message })
       break
     case 'gitlab':
-      response = await uploadGitlabFile({ file: content, filename, path, repo, sha, message })
+      response = await uploadGitlabFile({ file: content, filename, path: remotePath, repo, sha, message })
       break
     case 'gitea':
-      response = await uploadGiteaFile({ file: content, filename, path, repo, sha, message })
+      response = await uploadGiteaFile({ file: content, filename, path: remotePath, repo, sha, message })
       break
   }
 
   if (!response) throw new Error(`${platform} 上传失败`)
-  return getUploadedRemoteVersion(response) || sha || `uploaded:${path}`
+  return getUploadedRemoteVersion(response) || sha || `uploaded:${remotePath}`
 }
 
 async function uploadRemoteContent(
@@ -707,6 +824,8 @@ async function remoteFileExistsRaw(
   path: string,
   scope: RemoteRepositoryScope = 'workspace',
 ): Promise<boolean> {
+  if (scope === 'workspace' && shouldExclude(path)) return false
+
   const store = await Store.load('store.json')
   const platform = await getPlatform(store)
 
@@ -752,6 +871,13 @@ export async function deleteRemoteFile(
   path: string,
   scope: RemoteRepositoryScope = 'workspace',
 ): Promise<void> {
+  if (await isCurrentWorkspaceSyncReadOnly()) return
+  if (scope === 'workspace') {
+    const { getSyncPathWritePolicy } = await import('./connector-mappings')
+    if (!(await getSyncPathWritePolicy(path)).writable) return
+  }
+  if (scope === 'workspace' && shouldExclude(path)) return
+
   const store = await Store.load('store.json')
   const platform = await getPlatform(store)
 

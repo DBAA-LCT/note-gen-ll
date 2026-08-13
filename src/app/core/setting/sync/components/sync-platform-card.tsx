@@ -1,15 +1,17 @@
 'use client'
 
 import { Store } from '@tauri-apps/plugin-store'
-import { AlertCircle } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Loader2, XCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useCallback, useEffect, useState } from 'react'
 
 import { TokenInputControl } from './token-input-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import type { SyncPlatform } from '@/types/sync'
+import { testGitSyncProviderConnection } from '@/lib/sync/provider-status'
 
 export interface SyncPlatformConfig {
   platform: SyncPlatform
@@ -35,6 +37,7 @@ export function SyncPlatformCard({
   const [tokenVisible, setTokenVisible] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isInitializing, setIsInitializing] = useState(true)
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'failed'>('idle')
 
   useEffect(() => {
     async function init() {
@@ -56,6 +59,7 @@ export function SyncPlatformCard({
     const value = event.target.value
     setAccessToken(value)
     setError(null)
+    setTestStatus('idle')
 
     try {
       const store = await Store.load('store.json')
@@ -66,6 +70,23 @@ export function SyncPlatformCard({
       setError(t('settings.sync.tokenSaveFailed'))
     }
   }, [config.tokenKey, setAccessToken, t])
+
+  async function handleTestConnection() {
+    if (!accessToken.trim() || !['github', 'gitee', 'gitlab', 'gitea'].includes(config.platform)) return
+    setTestStatus('testing')
+    try {
+      const store = await Store.load('store.json')
+      await store.set(config.tokenKey, accessToken.trim())
+      await store.save()
+      const connected = await testGitSyncProviderConnection(
+        config.platform as 'github' | 'gitee' | 'gitlab' | 'gitea',
+      )
+      setTestStatus(connected ? 'success' : 'failed')
+    } catch (testError) {
+      console.error(`Failed to test ${config.platform} connection:`, testError)
+      setTestStatus('failed')
+    }
+  }
 
   return (
     <Card>
@@ -99,6 +120,28 @@ export function SyncPlatformCard({
           </Alert>
         ) : null}
       </CardContent>
+      <CardFooter className="flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void handleTestConnection()}
+          disabled={isInitializing || !accessToken.trim() || testStatus === 'testing'}
+        >
+          {testStatus === 'testing' ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
+          {t(testStatus === 'testing' ? 'settings.sync.testingConnection' : 'settings.sync.testConnection')}
+        </Button>
+        {testStatus === 'success' ? (
+          <span className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="size-4" />
+            {t('settings.sync.connectionTestSuccess')}
+          </span>
+        ) : testStatus === 'failed' ? (
+          <span className="inline-flex items-center gap-1 text-sm text-destructive">
+            <XCircle className="size-4" />
+            {t('settings.sync.connectionTestFailed')}
+          </span>
+        ) : null}
+      </CardFooter>
     </Card>
   )
 }

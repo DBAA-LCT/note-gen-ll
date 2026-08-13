@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/components/ui/input-group'
 import { migrateWorkspaceToCloudFolder, testCloudFolderConnection } from '@/lib/sync/cloud-folder'
+import { saveWorkspaceProviderConfig } from '@/lib/sync/workspace-sync-config'
 import useSyncStore from '@/stores/sync'
 import useSettingStore from '@/stores/setting'
 import useArticleStore from '@/stores/article'
@@ -48,7 +49,7 @@ export function CloudFolderSync() {
       const store = await Store.load('store.json')
       const saved = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
       if (cancelled) return
-      if (saved) setConfig(saved)
+      setConfig(saved || { path: '' })
       setInitialized(true)
       if (saved?.path) void testConnection(saved)
     }
@@ -56,13 +57,11 @@ export function CloudFolderSync() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [workspacePath])
 
   async function saveConfig(next: CloudFolderConfig) {
     setConfig(next)
-    const store = await Store.load('store.json')
-    await store.set('cloudFolderSyncConfig', next)
-    await store.save()
+    await saveWorkspaceProviderConfig('cloudFolder', next)
   }
 
   async function testConnection(target = config) {

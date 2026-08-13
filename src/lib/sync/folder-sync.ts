@@ -11,6 +11,8 @@ import { webdavUpload } from './webdav'
 import { S3Config, WebDAVConfig } from '@/types/sync'
 import { buildGithubCreateTreePayload, buildGitlabCommitActions } from './folder-sync-payload'
 import { buildRepoContentPath, debugSyncPath } from './remote-file'
+import { shouldExclude } from '@/config/sync-exclusions'
+import { isCurrentWorkspaceSyncReadOnly } from '@/lib/sync/workspace-sync-config'
 
 export interface FolderSyncResult {
   success: boolean
@@ -42,17 +44,30 @@ export class FolderSync {
     // 每次同步前重新读取平台配置
     await this.init()
 
+    if (await isCurrentWorkspaceSyncReadOnly()) {
+      return {
+        success: false,
+        totalFiles: 0,
+        successCount: 0,
+        failedCount: 0,
+        message: '当前工作区为只读同步，不允许上传文件夹',
+      }
+    }
+
     try {
       // 1. 获取本地文件夹下所有 Markdown 文件
       const markdownFiles = await collectMarkdownFiles(localFolderPath)
+      const syncableMarkdownFiles = markdownFiles.filter(file => !shouldExclude(file.path))
 
-      if (markdownFiles.length === 0) {
+      if (syncableMarkdownFiles.length === 0) {
         return {
           success: false,
           totalFiles: 0,
           successCount: 0,
           failedCount: 0,
-          message: '当前文件夹下没有 Markdown 文件'
+          message: markdownFiles.length
+            ? '当前文件夹下的文件均已被同步范围规则排除'
+            : '当前文件夹下没有 Markdown 文件'
         }
       }
 
@@ -60,7 +75,7 @@ export class FolderSync {
       const workspace = await getWorkspacePath()
       const filesToUpload: Array<{ path: string; content: string; sha?: string }> = []
 
-      for (const file of markdownFiles) {
+      for (const file of syncableMarkdownFiles) {
         const pathOptions = await getFilePathOptions(file.path)
         let content = ''
 
@@ -124,9 +139,9 @@ export class FolderSync {
         default:
           return {
             success: false,
-            totalFiles: markdownFiles.length,
+            totalFiles: syncableMarkdownFiles.length,
             successCount: 0,
-            failedCount: markdownFiles.length,
+            failedCount: syncableMarkdownFiles.length,
             message: `不支持的平台: ${this.platform}`
           }
       }
@@ -134,17 +149,17 @@ export class FolderSync {
       if (success) {
         return {
           success: true,
-          totalFiles: markdownFiles.length,
-          successCount: markdownFiles.length,
+          totalFiles: syncableMarkdownFiles.length,
+          successCount: syncableMarkdownFiles.length,
           failedCount: 0,
-          message: `成功同步 ${markdownFiles.length} 个文件`
+          message: `成功同步 ${syncableMarkdownFiles.length} 个文件`
         }
       } else {
         return {
           success: false,
-          totalFiles: markdownFiles.length,
+          totalFiles: syncableMarkdownFiles.length,
           successCount: 0,
-          failedCount: markdownFiles.length,
+          failedCount: syncableMarkdownFiles.length,
           message: '同步失败'
         }
       }

@@ -8,17 +8,20 @@ import { toast } from '@/hooks/use-toast'
 import useArticleStore from '@/stores/article'
 import useSyncStore from '@/stores/sync'
 import { Store } from '@tauri-apps/plugin-store'
-import { getOptionalSyncRepoName } from '@/lib/sync/repo-utils'
 import { getWorkspacePath, getFilePathOptions } from '@/lib/workspace'
 import { readTextFile } from '@tauri-apps/plugin-fs'
-import { isSyncConfigured } from '@/lib/sync/sync-manager'
+import { getSyncManager, isSyncConfigured } from '@/lib/sync/sync-manager'
 import emitter from '@/lib/emitter'
 import { setLocalRecordedSha } from '@/lib/sync/auto-sync'
 import { debugSyncPerf } from '@/lib/sync/remote-file'
 import { generateGitSyncCommitMessage } from '@/lib/sync/commit-message'
-import { uploadRemoteText } from '@/lib/sync/remote-library'
-import type { S3Config, WebDAVConfig } from '@/types/sync'
+import type { CloudFolderConfig, S3Config, WebDAVConfig } from '@/types/sync'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
+import {
+  resolvePrimarySyncMapping,
+  resolveSyncMappings,
+  type ResolvedSyncMapping,
+} from '@/lib/sync/connector-mappings'
 
 type SyncProvider = 'gitee' | 'github' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
 
@@ -80,6 +83,26 @@ function roundMs(value: number) {
 export function SyncButton() {
   const t = useTranslations()
   const { activeFilePath } = useArticleStore()
+  const [activeMapping, setActiveMapping] = useState<ResolvedSyncMapping | undefined>()
+
+  useEffect(() => {
+    let cancelled = false
+    const refreshMapping = () => {
+      if (!activeFilePath) {
+        setActiveMapping(undefined)
+        return
+      }
+      void resolvePrimarySyncMapping(activeFilePath).then(mapping => {
+        if (!cancelled) setActiveMapping(mapping)
+      })
+    }
+    refreshMapping()
+    emitter.on('sync-mappings-changed', refreshMapping)
+    return () => {
+      cancelled = true
+      emitter.off('sync-mappings-changed', refreshMapping)
+    }
+  }, [activeFilePath])
   const [isLoading, setIsLoading] = useState(false)
   const [isConfigured, setIsConfigured] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -152,6 +175,16 @@ export function SyncButton() {
   // Push to remote
   const handlePush = useCallback(async () => {
     if (!activeFilePath || isLoading) return
+    const mappings = await resolveSyncMappings(activeFilePath)
+    const mapping = mappings[0]
+    if (!mapping) {
+      toast({ description: t('settings.sync.mapping.empty'), variant: 'destructive' })
+      return
+    }
+    if (mapping.accessMode === 'read-only') {
+      toast({ description: t('settings.sync.readOnlyWriteBlocked'), variant: 'destructive' })
+      return
+    }
 
     const syncStartedAt = getPerfNow()
     let previousPerfAt = syncStartedAt
@@ -172,10 +205,11 @@ export function SyncButton() {
     try {
       logPerf('start')
       const store = await Store.load('store.json')
-      const provider = (await store.get<string>('primaryBackupMethod') || 'github') as SyncProvider
+      const provider = mapping.platform as SyncProvider
+      const remotePath = mapping.remoteFilePath
       providerForLog = provider
       const needsRepo = provider !== 's3' && provider !== 'webdav' && provider !== 'cloudFolder'
-      const repo = needsRepo ? await getOptionalSyncRepoName(provider) : ''
+      const repo = needsRepo ? mapping.remoteTarget : ''
       if (needsRepo && !repo) {
         toast({ description: t('settings.sync.repositoryRequired'), variant: 'destructive' })
         useSettingsDialogStore.getState().openSettings('sync')
@@ -198,6 +232,14 @@ export function SyncButton() {
         contentLength: content.length,
       })
 
+      if (mappings.length > 1) {
+        const result = await getSyncManager().pushFile(activeFilePath, content)
+        if (!result.success) throw new Error(result.error || '同步映射推送失败')
+        logPerf('completed', { success: true, mappingCount: mappings.length })
+        emitter.emit('sync-push-completed', { path: activeFilePath, success: true })
+        return
+      }
+
       const needsCommitMessage = needsRepo
       const commitMessage = needsCommitMessage
         ? await generateGitSyncCommitMessage(activeFilePath, content)
@@ -218,11 +260,11 @@ export function SyncButton() {
 
       switch (provider) {
         case 'cloudFolder': {
-          uploadedSha = await uploadRemoteText(
-            activeFilePath,
-            content,
-            `Upload file: ${activeFilePath}`,
-          )
+          const { androidCloudFolderWorkspaceUpload } = await import('@/lib/sync/cloud-folder')
+          const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+          if (!config) throw new Error('网盘文件夹未配置')
+          config.path = mapping.remoteTarget || config.path
+          uploadedSha = (await androidCloudFolderWorkspaceUpload(config, remotePath, content)).etag
           logPerf('uploadFile', {
             hasResult: Boolean(uploadedSha),
           })
@@ -236,8 +278,9 @@ export function SyncButton() {
           if (!s3Config) {
             throw new Error('S3 配置未找到')
           }
+          s3Config.bucket = mapping.remoteTarget || s3Config.bucket
           // S3 上传文件
-          const result = await s3Module.s3Upload(s3Config, activeFilePath, content)
+          const result = await s3Module.s3Upload(s3Config, remotePath, content)
           logPerf('uploadFile', {
             hasResult: Boolean(result),
             hasEtag: Boolean(result?.etag),
@@ -253,7 +296,7 @@ export function SyncButton() {
         case 'github': {
           const githubModule = await import('@/lib/sync/github')
           logPerf('loadProviderModule', { module: 'github' })
-          const fileInfo = await githubModule.getFiles({ path: activeFilePath, repo })
+          const fileInfo = await githubModule.getFiles({ path: remotePath, repo })
           logPerf('getRemoteFile', {
             isDirectory: Array.isArray(fileInfo),
             hasRemoteSha: Boolean(getRemoteFileSha(fileInfo)),
@@ -267,7 +310,7 @@ export function SyncButton() {
             sha: getRemoteFileSha(fileInfo),
             message: commitMessage,
             repo,
-            path: activeFilePath
+            path: remotePath
           })
           logPerf('uploadFile', {
             hasData: hasUploadData(result),
@@ -276,7 +319,7 @@ export function SyncButton() {
           if (hasUploadData(result)) {
             uploadedSha = getUploadResultSha(result)
             if (!uploadedSha) {
-              uploadedSha = await getUploadedSha(() => githubModule.getFiles({ path: activeFilePath, repo }))
+              uploadedSha = await getUploadedSha(() => githubModule.getFiles({ path: remotePath, repo }))
               logPerf('refreshUploadedSha', {
                 hasSha: Boolean(uploadedSha),
               })
@@ -289,7 +332,7 @@ export function SyncButton() {
         case 'gitee': {
           const giteeModule = await import('@/lib/sync/gitee')
           logPerf('loadProviderModule', { module: 'gitee' })
-          const fileInfo = await giteeModule.getFiles({ path: activeFilePath, repo })
+          const fileInfo = await giteeModule.getFiles({ path: remotePath, repo })
           logPerf('getRemoteFile', {
             isDirectory: Array.isArray(fileInfo),
             hasRemoteSha: Boolean(getRemoteFileSha(fileInfo)),
@@ -303,7 +346,7 @@ export function SyncButton() {
             sha: getRemoteFileSha(fileInfo),
             message: commitMessage,
             repo,
-            path: activeFilePath
+            path: remotePath
           })
           logPerf('uploadFile', {
             hasData: hasUploadData(result),
@@ -312,7 +355,7 @@ export function SyncButton() {
           if (hasUploadData(result)) {
             uploadedSha = getUploadResultSha(result)
             if (!uploadedSha) {
-              uploadedSha = await getUploadedSha(() => giteeModule.getFiles({ path: activeFilePath, repo }))
+              uploadedSha = await getUploadedSha(() => giteeModule.getFiles({ path: remotePath, repo }))
               logPerf('refreshUploadedSha', {
                 hasSha: Boolean(uploadedSha),
               })
@@ -325,7 +368,7 @@ export function SyncButton() {
         case 'gitlab': {
           const gitlabModule = await import('@/lib/sync/gitlab')
           logPerf('loadProviderModule', { module: 'gitlab' })
-          const fileInfo = await gitlabModule.getFiles({ path: activeFilePath, repo })
+          const fileInfo = await gitlabModule.getFiles({ path: remotePath, repo })
           logPerf('getRemoteFile', {
             isDirectory: Array.isArray(fileInfo),
             hasRemoteSha: Boolean(getRemoteFileSha(fileInfo)),
@@ -339,13 +382,13 @@ export function SyncButton() {
             sha: getRemoteFileSha(fileInfo),
             message: commitMessage,
             repo,
-            path: activeFilePath
+            path: remotePath
           })
           logPerf('uploadFile', {
             hasData: hasUploadData(result),
           })
           if (hasUploadData(result)) {
-            uploadedSha = await getUploadedSha(() => gitlabModule.getFiles({ path: activeFilePath, repo }))
+            uploadedSha = await getUploadedSha(() => gitlabModule.getFiles({ path: remotePath, repo }))
             logPerf('refreshUploadedSha', {
               hasSha: Boolean(uploadedSha),
             })
@@ -357,7 +400,7 @@ export function SyncButton() {
         case 'gitea': {
           const giteaModule = await import('@/lib/sync/gitea')
           logPerf('loadProviderModule', { module: 'gitea' })
-          const fileInfo = await giteaModule.getFiles({ path: activeFilePath, repo })
+          const fileInfo = await giteaModule.getFiles({ path: remotePath, repo })
           logPerf('getRemoteFile', {
             isDirectory: Array.isArray(fileInfo),
             hasRemoteSha: Boolean(getRemoteFileSha(fileInfo)),
@@ -371,7 +414,7 @@ export function SyncButton() {
             sha: getRemoteFileSha(fileInfo),
             message: commitMessage,
             repo,
-            path: activeFilePath
+            path: remotePath
           })
           logPerf('uploadFile', {
             hasData: hasUploadData(result),
@@ -380,7 +423,7 @@ export function SyncButton() {
           if (hasUploadData(result)) {
             uploadedSha = getUploadResultSha(result)
             if (!uploadedSha) {
-              uploadedSha = await getUploadedSha(() => giteaModule.getFiles({ path: activeFilePath, repo }))
+              uploadedSha = await getUploadedSha(() => giteaModule.getFiles({ path: remotePath, repo }))
               logPerf('refreshUploadedSha', {
                 hasSha: Boolean(uploadedSha),
               })
@@ -397,7 +440,8 @@ export function SyncButton() {
           if (!webdavConfig) {
             throw new Error('WebDAV 配置未找到')
           }
-          const result = await webdavModule.webdavUpload(webdavConfig, activeFilePath, content)
+          webdavConfig.url = mapping.remoteTarget || webdavConfig.url
+          const result = await webdavModule.webdavUpload(webdavConfig, remotePath, content)
           logPerf('uploadFile', {
             hasResult: Boolean(result),
             hasEtag: Boolean(result?.etag),
@@ -444,7 +488,7 @@ export function SyncButton() {
   }, [activeFilePath, isLoading, t])
 
   // 如果没有配置同步，不显示按钮
-  if (!isConfigured || !activeFilePath) return null
+  if ((!isConfigured && !activeMapping) || !activeFilePath) return null
 
   // 格式化时间
   const formatTime = (date: Date) => {
@@ -481,11 +525,13 @@ export function SyncButton() {
       {!showSuccess && !showError && !isLoading && (
         <button
           onClick={handlePush}
-          disabled={isLoading}
+          disabled={isLoading || !activeMapping || activeMapping.accessMode === 'read-only'}
           className={cn(
             'p-0.5 rounded transition-colors flex items-center gap-1 text-muted-foreground hover:text-foreground hover:bg-muted'
           )}
-          title={isLoading ? '上传中...' : '点击推送'}
+          title={activeMapping?.accessMode === 'read-only'
+            ? t('settings.sync.readOnlyWriteBlocked')
+            : isLoading ? '上传中...' : '点击推送'}
         >
           <ArrowUpCircle size={14} />
         </button>

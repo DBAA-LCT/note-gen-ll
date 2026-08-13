@@ -9,7 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ResponsiveSelect } from "@/components/responsive-select"
 import { SettingType } from "../components/setting-base";
-import { AiConfig, ModelConfig, ProxyMode, builtinProviderTemplates } from "../config";
+import {
+  AiConfig,
+  MIMO_PAY_AS_YOU_GO_BASE_URL,
+  MIMO_TOKEN_PLAN_BASE_URL,
+  ModelConfig,
+  ProxyMode,
+  builtinProviderTemplates,
+} from "../config";
 import useSettingStore from "@/stores/setting";
 import { noteGenModelKeys } from "@/app/model-config";
 import { BotMessageSquare, Copy, Eye, EyeOff, KeyRound, LoaderCircle, Network, Plus, Server, Settings2, Trash2, X } from "lucide-react";
@@ -17,7 +24,12 @@ import { OpenBroswer } from "@/components/open-broswer";
 import DefaultModelsSection from "./default-models";
 import ModelCard from "./model-card";
 import CreateConfig from "./create";
-import { getCachedProviderTemplates, getProviderTemplateMatch, loadProviderTemplates } from "@/lib/ai/provider-templates-runtime";
+import {
+  getCachedProviderTemplates,
+  getProviderTemplateMatch,
+  isRemovedProviderTemplate,
+  loadProviderTemplates,
+} from "@/lib/ai/provider-templates-runtime";
 import { isValidProxyURL } from "@/lib/ai/tauri-client";
 import { excludeBuiltInOpenAIProviders, isMainlandChinaRegion } from "@/lib/ai/provider-region-policy";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -29,7 +41,6 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import AgentEngines from "./agent-engines";
 
 function getPlatformAvatarFallback(config: AiConfig) {
   const characterCount = config.templateSource === 'custom' ? 1 : 2
@@ -49,6 +60,58 @@ function getCustomPlatformAvatarStyle(config: AiConfig) {
   return {
     backgroundColor: `hsl(${hue} 62% 42%)`,
     color: 'white',
+  }
+}
+
+const MIMO_TEMPLATE_KEYS = new Set(['mimo', 'mimo-token-plan'])
+
+function isMimoProvider(config: AiConfig) {
+  return MIMO_TEMPLATE_KEYS.has((config.templateKey || config.key).trim().toLowerCase())
+}
+
+function migrateMimoProviders(configs: AiConfig[], selectedKey?: string) {
+  const mimoConfigs = configs.filter(isMimoProvider)
+  if (mimoConfigs.length === 0) return { configs, selectedKey }
+
+  const preferred = mimoConfigs.find(config => config.key === selectedKey)
+    || [...mimoConfigs].sort((left, right) => {
+      const score = (config: AiConfig) => (
+        (config.apiKey ? 100 : 0)
+        + (config.models?.filter(model => model.model.trim()).length || 0) * 10
+        + ((config.templateKey || config.key) === 'mimo' ? 1 : 0)
+      )
+      return score(right) - score(left)
+    })[0]
+
+  const seenModels = new Set<string>()
+  const models = mimoConfigs.flatMap(config => config.models || []).filter(model => {
+    const identity = model.model.trim()
+      ? `${model.modelType}:${model.model.trim().toLowerCase()}`
+      : model.id
+    if (seenModels.has(identity)) return false
+    seenModels.add(identity)
+    return true
+  })
+  const preferredWasTokenPlan = (preferred.templateKey || preferred.key) === 'mimo-token-plan'
+  const merged: AiConfig = {
+    ...preferred,
+    title: 'Xiaomi MiMo',
+    templateKey: 'mimo',
+    baseURL: preferred.baseURL || (preferredWasTokenPlan
+      ? MIMO_TOKEN_PLAN_BASE_URL
+      : MIMO_PAY_AS_YOU_GO_BASE_URL),
+    models,
+  }
+  const migratedConfigs = configs.flatMap(config => {
+    if (!isMimoProvider(config)) return [config]
+    return config.key === preferred.key ? [merged] : []
+  })
+
+  return {
+    configs: migratedConfigs,
+    selectedKey: mimoConfigs.some(config => config.key === selectedKey)
+      ? preferred.key
+      : selectedKey,
   }
 }
 
@@ -87,6 +150,15 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
   const currentProviderTemplate = currentConfig?.templateSource === 'custom'
     ? null
     : getProviderTemplateMatch(currentConfig, providerTemplates)
+  const currentIsMimoProvider = currentConfig ? isMimoProvider(currentConfig) : false
+  const currentMimoAccessMode = currentConfig?.baseURL === MIMO_TOKEN_PLAN_BASE_URL
+    ? 'tokenPlan'
+    : 'payAsYouGo'
+  const currentApiKeyUrl = currentIsMimoProvider
+    ? currentMimoAccessMode === 'tokenPlan'
+      ? 'https://platform.xiaomimimo.com/token-plan'
+      : 'https://platform.xiaomimimo.com/'
+    : currentProviderTemplate?.apiKeyUrl
   const currentPlatformNameEditable = currentConfig?.templateSource === 'custom' || !currentProviderTemplate
   const proxyURLInvalid = currentConfig?.proxyMode === 'custom' && !isValidProxyURL(currentConfig.proxyURL)
   const getConfiguredModelCount = (config: AiConfig) => config.models?.filter(model => model.model.trim()).length || 0
@@ -324,7 +396,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       setHideBuiltInOpenAI(shouldHideBuiltInOpenAI)
       let templates: AiConfig[] = []
       try {
-        const cachedTemplates = await getCachedProviderTemplates()
+        const cachedTemplates = await getCachedProviderTemplates(builtinProviderTemplates)
         if (cachedTemplates.length > 0) {
           setProviderTemplates(shouldHideBuiltInOpenAI
             ? excludeBuiltInOpenAIProviders(cachedTemplates)
@@ -344,7 +416,14 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
       // 模板平台是默认平台：只补齐缺失项，不修改任何已有用户配置。
       // 再次读取 Store，避免模板加载期间用户新建的平台被旧快照覆盖。
       const storedAiModelList = await store.get<AiConfig[]>('aiModelList') || []
-      const migratedList = storedAiModelList.map(migrateOldConfig)
+      const migratedResult = migrateMimoProviders(
+        storedAiModelList.map(migrateOldConfig).filter(config => !isRemovedProviderTemplate(config)),
+        selectedAiConfig,
+      )
+      const migratedList = migratedResult.configs
+      if (migratedResult.selectedKey !== selectedAiConfig) {
+        setSelectedAiConfig(migratedResult.selectedKey || '')
+      }
       const existingPlatforms = migratedList.filter(model => (
         !noteGenModelKeys.includes(model.key) && model.title !== 'NoteGen Limited'
       ))
@@ -364,7 +443,9 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
         modelType: 'chat' as const,
       }))
       const nextAiModelList = [...migratedList, ...defaultPlatforms]
-      const hasChanges = defaultPlatforms.length > 0 || migratedList.some((config, index) => (
+      const hasChanges = defaultPlatforms.length > 0
+        || migratedList.length !== storedAiModelList.length
+        || migratedList.some((config, index) => (
         JSON.stringify(config) !== JSON.stringify(storedAiModelList[index])
       ))
 
@@ -397,7 +478,6 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
 
   return (
     <SettingType id="ai" icon={<BotMessageSquare />} title={t('title')} desc={t('desc')}>
-      <AgentEngines />
       {userCustomModels.length === 0 && <DefaultModelsSection />}
       <div className="grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
             <Card size="sm" className="lg:sticky lg:top-2">
@@ -616,6 +696,27 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
                       </CardHeader>
                       <CardContent>
                         <FieldGroup>
+                          {currentIsMimoProvider ? (
+                            <Field>
+                              <FieldLabel>{t('mimoAccessMode')}</FieldLabel>
+                              <ResponsiveSelect
+                                title={t('mimoAccessMode')}
+                                value={currentMimoAccessMode}
+                                onValueChange={value => void updateAiConfig({
+                                  ...currentConfig,
+                                  baseURL: value === 'tokenPlan'
+                                    ? MIMO_TOKEN_PLAN_BASE_URL
+                                    : MIMO_PAY_AS_YOU_GO_BASE_URL,
+                                })}
+                                options={[
+                                  { value: 'payAsYouGo', label: t('mimoPayAsYouGo') },
+                                  { value: 'tokenPlan', label: t('mimoTokenPlan') },
+                                ]}
+                              />
+                              <FieldDescription>{t('mimoAccessModeDesc')}</FieldDescription>
+                            </Field>
+                          ) : null}
+
                           <Field>
                             <FieldLabel htmlFor={`provider-url-${currentConfig.key}`}>{t('apiEndpoint')}</FieldLabel>
                             <Input
@@ -648,8 +749,8 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
                                 </InputGroupButton>
                               </InputGroupAddon>
                             </InputGroup>
-                            {currentProviderTemplate?.apiKeyUrl ? (
-                              <FieldDescription><OpenBroswer url={currentProviderTemplate.apiKeyUrl} title={t('apiKeyUrl')} /></FieldDescription>
+                            {currentApiKeyUrl ? (
+                              <FieldDescription><OpenBroswer url={currentApiKeyUrl} title={t('apiKeyUrl')} /></FieldDescription>
                             ) : null}
                           </Field>
 

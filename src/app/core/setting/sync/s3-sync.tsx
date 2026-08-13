@@ -13,10 +13,13 @@ import useSyncStore from '@/stores/sync';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { InputGroup, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import { Item, ItemActions, ItemContent, ItemTitle } from '@/components/ui/item';
+import { saveWorkspaceProviderConfig } from '@/lib/sync/workspace-sync-config';
+import useSettingStore from '@/stores/setting';
 
 export function S3Sync() {
   const t = useTranslations();
   const { s3Connected, setS3Connected } = useSyncStore();
+  const workspacePath = useSettingStore(state => state.workspacePath);
 
   const [config, setConfig] = useState<S3Config>({
     accessKeyId: '',
@@ -35,6 +38,7 @@ export function S3Sync() {
   // 初始化配置
   useEffect(() => {
     const initConfig = async () => {
+      setIsInitialized(false);
       try {
         const store = await Store.load('store.json');
         const savedConfig = await store.get<S3Config>('s3SyncConfig');
@@ -44,13 +48,13 @@ export function S3Sync() {
           if (savedConfig.accessKeyId && savedConfig.secretAccessKey && savedConfig.region && savedConfig.bucket) {
             testConnection(savedConfig);
           }
-        }
+        } else setConfig({ accessKeyId: '', secretAccessKey: '', region: 'us-east-1', bucket: '', endpoint: '', pathPrefix: '', customDomain: '' });
       } finally {
         setIsInitialized(true);
       }
     };
     initConfig();
-  }, []);
+  }, [workspacePath]);
 
   // 测试连接
   const testConnection = async (configToTest?: S3Config) => {
@@ -77,9 +81,7 @@ export function S3Sync() {
 
     const timer = setTimeout(async () => {
       try {
-        const store = await Store.load('store.json');
-        await store.set('s3SyncConfig', config);
-        await store.save();
+        await saveWorkspaceProviderConfig('s3', config);
       } catch (error) {
         console.error('Failed to auto-save S3 config:', error);
       }

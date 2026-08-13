@@ -30,6 +30,8 @@ import { sanitizeFilePath, hasInvalidFileNameChars } from './filename-utils'
 import { useSyncConfirmStore } from '@/stores/sync-confirm'
 import useSyncStore from '@/stores/sync'
 import emitter from '@/lib/emitter'
+import { shouldExclude } from '@/config/sync-exclusions'
+import { resolvePrimarySyncMapping } from './connector-mappings'
 
 // Store 实例缓存
 let storeInstance: Store | null = null
@@ -174,17 +176,20 @@ export async function getLocalFileMetadata(path: string): Promise<FileMetadata> 
  */
 export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; lastModified?: number }> {
   const store = await Store.load('store.json')
-  const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github'
+  const mapping = await resolvePrimarySyncMapping(path)
+  if (!mapping) return { sha: undefined, lastModified: undefined }
+  const primaryBackupMethod = mapping.platform
+  const remotePath = mapping.remoteFilePath
 
   try {
     let file
     switch (primaryBackupMethod) {
       case 'github':
-        const githubRepo = await getSyncRepoName('github')
-        file = await getGithubFiles({ path, repo: githubRepo })
+        const githubRepo = mapping.remoteTarget || await getSyncRepoName('github', path)
+        file = await getGithubFiles({ path: remotePath, repo: githubRepo })
         if (file) {
           // 获取最新提交信息
-          const commits = await getGithubFileCommits({ path, repo: githubRepo })
+          const commits = await getGithubFileCommits({ path: remotePath, repo: githubRepo })
           if (commits && commits.length > 0) {
             return {
               sha: file.sha,
@@ -197,10 +202,10 @@ export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; l
         break
 
       case 'gitee':
-        const giteeRepo = await getSyncRepoName('gitee')
-        file = await getGiteeFiles({ path, repo: giteeRepo })
+        const giteeRepo = mapping.remoteTarget || await getSyncRepoName('gitee', path)
+        file = await getGiteeFiles({ path: remotePath, repo: giteeRepo })
         if (file) {
-          const commits = await getGiteeFileCommits({ path, repo: giteeRepo })
+          const commits = await getGiteeFileCommits({ path: remotePath, repo: giteeRepo })
           if (commits && commits.length > 0) {
             return {
               sha: file.sha,
@@ -213,11 +218,11 @@ export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; l
         break
 
       case 'gitlab': {
-        const gitlabRepo = await getSyncRepoName('gitlab')
+        const gitlabRepo = mapping.remoteTarget || await getSyncRepoName('gitlab', path)
         const gitlabBranch = await getGitlabBranch()
-        file = await getGitlabFileContent({ path, ref: gitlabBranch, repo: gitlabRepo })
+        file = await getGitlabFileContent({ path: remotePath, ref: gitlabBranch, repo: gitlabRepo })
         if (file) {
-          const commits = await getGitlabFileCommits({ path, repo: gitlabRepo })
+          const commits = await getGitlabFileCommits({ path: remotePath, repo: gitlabRepo })
           if (commits && commits.data && commits.data.length > 0) {
             return {
               sha: commits.data[0].id,
@@ -231,11 +236,11 @@ export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; l
       }
 
       case 'gitea': {
-        const giteaRepo = await getSyncRepoName('gitea')
+        const giteaRepo = mapping.remoteTarget || await getSyncRepoName('gitea', path)
         const giteaBranch = await getGiteaBranch()
-        file = await getGiteaFileContent({ path, ref: giteaBranch, repo: giteaRepo })
+        file = await getGiteaFileContent({ path: remotePath, ref: giteaBranch, repo: giteaRepo })
         if (file) {
-          const commits = await getGiteaFileCommits({ path, repo: giteaRepo })
+          const commits = await getGiteaFileCommits({ path: remotePath, repo: giteaRepo })
           if (commits && commits.data && commits.data.length > 0) {
             return {
               sha: commits.data[0].sha,
@@ -250,8 +255,9 @@ export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; l
 
       case 'cloudFolder': {
         const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+        if (config) config.path = mapping.remoteTarget || config.path
         const object = config?.path && supportsCloudFolderWorkspace(config)
-          ? await androidCloudFolderWorkspaceHead(config, path)
+          ? await androidCloudFolderWorkspaceHead(config, remotePath)
           : null
         if (object) {
           return {
@@ -264,9 +270,10 @@ export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; l
 
       case 's3': {
         const config = await store.get<S3Config>('s3SyncConfig')
+        if (config) config.bucket = mapping.remoteTarget || config.bucket
         const proxyUrl = await store.get<string>('proxy')
         const object = config
-          ? await s3HeadObject(config, path, proxyUrl ? { all: proxyUrl } : undefined)
+          ? await s3HeadObject(config, remotePath, proxyUrl ? { all: proxyUrl } : undefined)
           : null
         if (object) {
           return {
@@ -279,9 +286,10 @@ export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; l
 
       case 'webdav': {
         const config = await store.get<WebDAVConfig>('webdavSyncConfig')
+        if (config) config.url = mapping.remoteTarget || config.url
         const proxyUrl = await store.get<string>('proxy')
         const object = config
-          ? await webdavHeadObject(config, path, proxyUrl ? { all: proxyUrl } : undefined)
+          ? await webdavHeadObject(config, remotePath, proxyUrl ? { all: proxyUrl } : undefined)
           : null
         if (object) {
           return {
@@ -305,9 +313,7 @@ export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; l
  * 因此不直接比较 SHA，而是依赖修改时间进行比较
  */
 export async function compareFileVersions(path: string): Promise<SyncResult> {
-  // 检查当前平台是否是 S3
-  const store = await getStore()
-  const platform = await store.get<string>('primaryBackupMethod')
+  const platform = (await resolvePrimarySyncMapping(path))?.platform
 
   if (platform === 's3') {
     return compareS3FileVersions(path)
@@ -450,31 +456,35 @@ export async function compareFileVersions(path: string): Promise<SyncResult> {
  */
 export async function pullRemoteFile(path: string): Promise<string> {
   const store = await Store.load('store.json')
-  const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github'
+  const mapping = await resolvePrimarySyncMapping(path)
+  if (mapping?.syncPolicy === 'ignore-remote') throw new Error('当前远端文件已设为不拉取')
+  if (!mapping) throw new Error('没有匹配的同步映射')
+  const primaryBackupMethod = mapping.platform
+  const remotePath = mapping.remoteFilePath
 
   try {
     let file
     switch (primaryBackupMethod) {
       case 'github':
-        const githubRepo = await getSyncRepoName('github')
-        file = await getGithubFiles({ path, repo: githubRepo })
+        const githubRepo = mapping.remoteTarget
+        file = await getGithubFiles({ path: remotePath, repo: githubRepo })
         if (file && typeof file.content === 'string') {
           return decodeBase64ToString(file.content)
         }
         break
 
       case 'gitee':
-        const giteeRepo = await getSyncRepoName('gitee')
-        file = await getGiteeFiles({ path, repo: giteeRepo })
+        const giteeRepo = mapping.remoteTarget
+        file = await getGiteeFiles({ path: remotePath, repo: giteeRepo })
         if (file && typeof file.content === 'string') {
           return decodeBase64ToString(file.content)
         }
         break
 
       case 'gitlab': {
-        const gitlabRepo = await getSyncRepoName('gitlab')
+        const gitlabRepo = mapping.remoteTarget
         const gitlabBranch = await getGitlabBranch()
-        file = await getGitlabFileContent({ path, ref: gitlabBranch, repo: gitlabRepo })
+        file = await getGitlabFileContent({ path: remotePath, ref: gitlabBranch, repo: gitlabRepo })
         if (file && typeof file.content === 'string') {
           return decodeBase64ToString(file.content)
         }
@@ -482,9 +492,9 @@ export async function pullRemoteFile(path: string): Promise<string> {
       }
 
       case 'gitea': {
-        const giteaRepo = await getSyncRepoName('gitea')
+        const giteaRepo = mapping.remoteTarget
         const giteaBranch = await getGiteaBranch()
-        file = await getGiteaFileContent({ path, ref: giteaBranch, repo: giteaRepo })
+        file = await getGiteaFileContent({ path: remotePath, ref: giteaBranch, repo: giteaRepo })
         if (file && typeof file.content === 'string') {
           return decodeBase64ToString(file.content)
         }
@@ -493,8 +503,9 @@ export async function pullRemoteFile(path: string): Promise<string> {
 
       case 's3': {
         const s3Config = await store.get<S3Config>('s3SyncConfig')
+        if (s3Config) s3Config.bucket = mapping.remoteTarget || s3Config.bucket
         if (s3Config) {
-          const s3File = await s3Download(s3Config, path)
+          const s3File = await s3Download(s3Config, remotePath)
           if (s3File) {
             return s3File.content
           }
@@ -504,8 +515,9 @@ export async function pullRemoteFile(path: string): Promise<string> {
 
       case 'webdav': {
         const webdavConfig = await store.get<WebDAVConfig>('webdavSyncConfig')
+        if (webdavConfig) webdavConfig.url = mapping.remoteTarget || webdavConfig.url
         if (webdavConfig) {
-          const webdavFile = await webdavDownload(webdavConfig, path)
+          const webdavFile = await webdavDownload(webdavConfig, remotePath)
           if (webdavFile) {
             return webdavFile.content
           }
@@ -515,8 +527,9 @@ export async function pullRemoteFile(path: string): Promise<string> {
 
       case 'cloudFolder': {
         const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+        if (config) config.path = mapping.remoteTarget || config.path
         const cloudFile = config?.path && supportsCloudFolderWorkspace(config)
-          ? await androidCloudFolderWorkspaceDownloadBytes(config, path)
+          ? await androidCloudFolderWorkspaceDownloadBytes(config, remotePath)
           : null
         if (cloudFile) {
           return new TextDecoder().decode(cloudFile.content)
@@ -693,6 +706,8 @@ export async function autoSyncIfNeeded(path: string, options: {
   showConfirm?: boolean
   enableConflictResolution?: boolean
 } = {}): Promise<string | null> {
+  if (shouldExclude(path)) return null
+
   const { autoPull = true, showConfirm = false, enableConflictResolution = true } = options
   
   try {

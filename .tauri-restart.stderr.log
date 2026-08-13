@@ -1,0 +1,47 @@
+     Running BeforeDevCommand (`pnpm dev`)
+        Warn Waiting for your frontend dev server to start on http://localhost:3456/...
+        Warn Waiting for your frontend dev server to start on http://localhost:3456/...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+ ⚠ The config property `experimental.turbo` is deprecated. Move this setting to `config.turbopack` as Turbopack is now stable.
+        Info Watching C:\Users\Leonard\Documents\note-gen-ll\src-tauri for changes...
+[1m[93mwarning[0m[1m[97m: linker stdout: Non-UTF-8 output:   \xd5\xfd\xd4\xda\xb4\xb4\xbd\xa8\xbf\xe2 C:\\Users\\Leonard\\Documents\\note-gen-ll\\src-tauri\\target\\debug\\deps\\tauri_app_lib.dll.lib \xba\xcd\xb6\xd4\xcf\xf3 C:\\Users\\Leonard\\Documents\\note-gen-ll\\src-tauri\\target\\debug\\deps\\tauri_app_lib.dll.exp\r\n[0m
+  [1m[96m|[0m
+  [1m[96m= [0m[1m[97mnote[0m: `#[warn(linker_messages)]` on by default
+
+[1m[93mwarning[0m: `note-goal` (lib) generated 1 warning
+[1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 46.44s
+[1m[92m     Running[0m `target\debug\note-goal.exe`
+ ⚠ Fast Refresh had to perform a full reload when ./messages/zh.json (json) changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload when ./messages/zh.json (json) changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload when ./src/db/conversations.ts changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload when ./src/db/conversations.ts changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload when ./src/db/conversations.ts changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+        Info File src-tauri\src\agent_engine.rs changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+Yjs was already imported. This breaks constructor checks and will lead to issues! - https://github.com/yjs/yjs/issues/438
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m   Compiling[0m note-goal v0.1.0 (C:\Users\Leonard\Documents\note-gen-ll\src-tauri)
+[1m[96m    Building[0m [=======================> ] 716/718: note-go…                                                            [1m[93mwarning[0m[1m[97m: linker stdout: Non-UTF-8 output:   \xd5\xfd\xd4\xda\xb4\xb4\xbd\xa8\xbf\xe2 C:\\Users\\Leonard\\Documents\\note-gen-ll\\src-tauri\\target\\debug\\deps\\tauri_app_lib.dll.lib \xba\xcd\xb6\xd4\xcf\xf3 C:\\Users\\Leonard\\Documents\\note-gen-ll\\src-tauri\\target\\debug\\deps\\tauri_app_lib.dll.exp\r\n[0m
+  [1m[96m|[0m
+  [1m[96m= [0m[1m[97mnote[0m: `#[warn(linker_messages)]` on by default
+
+[1m[96m    Building[0m [=======================> ] 716/718: note-go…                                                            [1m[93mwarning[0m: `note-goal` (lib) generated 1 warning
+[1m[96m    Building[0m [=======================> ] 717/718: note-go…                                                            [1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 4m 22s
+[1m[92m     Running[0m `target\debug\note-goal.exe`
+Yjs was already imported. This breaks constructor checks and will lead to issues! - https://github.com/yjs/yjs/issues/438
+        Info File src-tauri\src\agent_engine.rs changed. Rebuilding application...
+     Running DevCommand (`cargo  run --no-default-features --color always --`)
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on package cache
+[1m[92m    Blocking[0m waiting for file lock on shared package cache
+[1m[92m   Compiling[0m note-goal v0.1.0 (C:\Users\Leonard\Documents\note-gen-ll\src-tauri)
+[1m[96m    Building[0m [=======================> ] 716/718: note-go…                                                            [1m[93mwarning[0m[1m[97m: linker stdout: Non-UTF-8 output:   \xd5\xfd\xd4\xda\xb4\xb4\xbd\xa8\xbf\xe2 C:\\Users\\Leonard\\Documents\\note-gen-ll\\src-tauri\\target\\debug\\deps\\tauri_app_lib.dll.lib \xba\xcd\xb6\xd4\xcf\xf3 C:\\Users\\Leonard\\Documents\\note-gen-ll\\src-tauri\\target\\debug\\deps\\tauri_app_lib.dll.exp\r\n[0m
+  [1m[96m|[0m
+  [1m[96m= [0m[1m[97mnote[0m: `#[warn(linker_messages)]` on by default
+
+[1m[96m    Building[0m [=======================> ] 716/718: note-go…                                                            [1m[93mwarning[0m: `note-goal` (lib) generated 1 warning
+[1m[96m    Building[0m [=======================> ] 717/718: note-go…                                                            [1m[92m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 2m 39s
+[1m[92m     Running[0m `target\debug\note-goal.exe`

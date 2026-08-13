@@ -14,6 +14,9 @@ import {
 } from "./delete-folder-utils";
 import { moveEntryToSystemTrash } from '../system-trash'
 import useSettingStore from '@/stores/setting'
+import { useEffect, useState } from 'react'
+import { getSyncPathWritePolicy } from '@/lib/sync/connector-mappings'
+import emitter from '@/lib/emitter'
 
 interface DeleteFolderProps {
   item: DirTree;
@@ -23,6 +26,7 @@ interface DeleteFolderProps {
 export function DeleteFolder({ item, shortcut }: DeleteFolderProps) {
   const t = useTranslations('article.file');
   const primaryBackupMethod = useSettingStore(state => state.primaryBackupMethod)
+  const tSync = useTranslations('settings.sync')
   const {
     fileTree,
     setFileTree,
@@ -31,6 +35,23 @@ export function DeleteFolder({ item, shortcut }: DeleteFolderProps) {
   } = useArticleStore();
 
   const path = computedParentPath(item);
+  const [canDeleteRemote, setCanDeleteRemote] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const refreshPolicy = () => {
+      setCanDeleteRemote(false)
+      void getSyncPathWritePolicy(path, { includeDescendants: true }).then((policy) => {
+        if (!cancelled) setCanDeleteRemote(policy.writable)
+      })
+    }
+    refreshPolicy()
+    emitter.on('sync-mappings-changed', refreshPolicy)
+    return () => {
+      cancelled = true
+      emitter.off('sync-mappings-changed', refreshPolicy)
+    }
+  }, [path])
 
   async function handleDeleteFolder(event: React.MouseEvent<HTMLDivElement, MouseEvent>) {
     event.stopPropagation();
@@ -73,6 +94,17 @@ export function DeleteFolder({ item, shortcut }: DeleteFolderProps) {
 
   async function handleDeleteRemoteFolder(event: React.MouseEvent<HTMLDivElement, MouseEvent>) {
     event.stopPropagation()
+    const writePolicy = await getSyncPathWritePolicy(path, { includeDescendants: true })
+    if (!writePolicy.writable) {
+      toast({
+        title: t('context.deleteFailed'),
+        description: writePolicy.ambiguous
+          ? tSync('mapping.deleteAmbiguous')
+          : tSync('readOnlyWriteBlocked'),
+        variant: 'destructive',
+      })
+      return
+    }
     const confirmed = await ask(t('context.confirmDeleteRemoteFolder', { name: item.name }), {
       title: item.name,
       kind: 'warning',
@@ -114,7 +146,7 @@ export function DeleteFolder({ item, shortcut }: DeleteFolderProps) {
       {primaryBackupMethod !== 'cloudFolder' ? (
         <ContextMenuItem
           inset
-          disabled={!hasRemoteFolderData(item)}
+          disabled={!hasRemoteFolderData(item) || !canDeleteRemote}
           className="text-destructive"
           onClick={handleDeleteRemoteFolder}
           menuType="file"

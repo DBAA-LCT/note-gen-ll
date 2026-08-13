@@ -26,7 +26,18 @@ const defaultShortcuts: Shortcut[] = [
   }
 ]
 
-async function bindShortcuts(shortcuts: Shortcut[]) {
+interface ShortcutRuntime {
+  bindQueue: Promise<void>
+}
+
+const shortcutGlobal = globalThis as typeof globalThis & {
+  __noteGoalShortcutRuntime?: ShortcutRuntime
+}
+const shortcutRuntime = shortcutGlobal.__noteGoalShortcutRuntime ??= {
+  bindQueue: Promise.resolve(),
+}
+
+async function performShortcutBinding(shortcuts: Shortcut[]) {
   await unregisterAll()
 
   const registeredValues = new Set<string>()
@@ -45,6 +56,17 @@ async function bindShortcuts(shortcuts: Shortcut[]) {
       console.error(`Failed to register shortcut ${shortcut.value}:`, error);
     }
   }
+}
+
+async function bindShortcuts(shortcuts: Shortcut[]) {
+  const nextShortcuts = shortcuts.map(shortcut => ({ ...shortcut }))
+  const bind = () => performShortcutBinding(nextShortcuts)
+
+  // React Strict Mode and Fast Refresh can initialize the app more than once.
+  // Serialize unregister/register cycles across module reloads so two cycles
+  // cannot both attempt to register the same OS hotkey.
+  shortcutRuntime.bindQueue = shortcutRuntime.bindQueue.then(bind, bind)
+  await shortcutRuntime.bindQueue
 }
 
 const useShortcutStore = create<SettingState>((set, get) => ({

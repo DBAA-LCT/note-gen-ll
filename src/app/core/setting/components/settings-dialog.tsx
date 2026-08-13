@@ -111,7 +111,7 @@ export function SettingsDialog() {
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && closeSettings()}>
       <DialogContent
         showCloseButton
-        className="flex h-[min(840px,calc(100vh-2rem))] w-[calc(100vw-3rem)] max-w-[1280px] gap-0 overflow-hidden p-0 sm:w-[calc(100vw-3rem)] sm:max-w-[1280px]"
+        className="flex h-[min(920px,calc(100vh-1rem))] w-[calc(100vw-1rem)] max-w-[1560px] gap-0 overflow-hidden p-0 sm:w-[calc(100vw-1rem)] sm:max-w-[1560px]"
       >
         <DialogTitle className="sr-only">{t('title')}</DialogTitle>
         <DialogDescription className="sr-only">{t('title')}</DialogDescription>

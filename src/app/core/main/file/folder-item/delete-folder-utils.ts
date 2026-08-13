@@ -4,7 +4,6 @@ import type { DirTree } from "@/stores/article";
 import type { CloudFolderConfig, S3Config, SyncPlatform, WebDAVConfig } from "@/types/sync";
 import { computedParentPath, getCurrentFolder, joinRelativePath } from "@/lib/path";
 import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace";
-import { getSyncRepoName } from "@/lib/sync/repo-utils";
 import { deleteFile as deleteGithubFile, getFiles as getGithubFiles } from "@/lib/sync/github";
 import { deleteFile as deleteGiteeFile, getFiles as getGiteeFiles } from "@/lib/sync/gitee";
 import { deleteFile as deleteGitlabFile, getFiles as getGitlabFiles } from "@/lib/sync/gitlab";
@@ -12,6 +11,7 @@ import { deleteFile as deleteGiteaFile, getFiles as getGiteaFiles } from "@/lib/
 import { s3Delete, s3ListObjects } from "@/lib/sync/s3";
 import { webdavDelete } from "@/lib/sync/webdav";
 import { androidCloudFolderWorkspaceDelete } from "@/lib/sync/cloud-folder";
+import { getSyncPathWritePolicy, resolvePrimarySyncMapping } from '@/lib/sync/connector-mappings'
 
 type GitSyncPlatform = Extract<SyncPlatform, "github" | "gitee" | "gitlab" | "gitea">;
 
@@ -338,13 +338,10 @@ async function deleteGitRemoteFile(platform: GitSyncPlatform, entry: RemoteConte
 async function deleteGitRemoteFolder(
   platform: GitSyncPlatform,
   folderPath: string,
-  loadedFileEntries: RemoteContentEntry[]
+  repo: string,
 ) {
-  const repo = await getSyncRepoName(platform);
   const remoteEntries = await collectGitRemoteFileEntries(platform, folderPath, repo);
-  const entries = remoteEntries.length > 0
-    ? remoteEntries
-    : loadedFileEntries;
+  const entries = remoteEntries;
 
   const result: DeleteRemoteFolderResult = {
     attempted: entries.length > 0,
@@ -369,10 +366,10 @@ async function deleteGitRemoteFolder(
   return result;
 }
 
-async function deleteS3RemoteFolder(config: S3Config, folderPath: string, loadedFilePaths: string[]) {
+async function deleteS3RemoteFolder(config: S3Config, folderPath: string) {
   const listedObjects = await s3ListObjects(config, folderPath);
   const objectKeys = listedObjects.map(object => joinListedObjectPath(folderPath, object.key));
-  const keys = uniquePaths(objectKeys.length > 0 ? objectKeys : loadedFilePaths);
+  const keys = uniquePaths(objectKeys);
 
   const result: DeleteRemoteFolderResult = {
     attempted: keys.length > 0,
@@ -402,9 +399,28 @@ async function deleteWebDAVRemoteFolder(config: WebDAVConfig, folderPath: string
 }
 
 export async function deleteRemoteFolder(item: DirTree, localDeleted: boolean) {
-  const store = await Store.load("store.json");
-  const platform = await store.get<SyncPlatform>("primaryBackupMethod") || "github";
   const folderPath = computedParentPath(item);
+  const writePolicy = await getSyncPathWritePolicy(folderPath, { includeDescendants: true })
+  if (!writePolicy.writable) {
+    return {
+      attempted: false,
+      deletedPaths: [],
+      failedPaths: [],
+    } satisfies DeleteRemoteFolderResult;
+  }
+
+  const mapping = await resolvePrimarySyncMapping(folderPath)
+  if (!mapping) {
+    return {
+      attempted: false,
+      deletedPaths: [],
+      failedPaths: [],
+    } satisfies DeleteRemoteFolderResult;
+  }
+
+  const store = await Store.load("store.json");
+  const platform = mapping.platform;
+  const remoteFolderPath = mapping.remoteFilePath;
   const loadedFileEntries = collectFolderFileEntries(item);
   const loadedFilePaths = loadedFileEntries.map(entry => entry.path).filter(isStringPath);
 
@@ -417,7 +433,7 @@ export async function deleteRemoteFolder(item: DirTree, localDeleted: boolean) {
   }
 
   if (isGitPlatform(platform)) {
-    return deleteGitRemoteFolder(platform, folderPath, loadedFileEntries);
+    return deleteGitRemoteFolder(platform, remoteFolderPath, mapping.remoteTarget);
   }
 
   if (platform === "s3") {
@@ -429,8 +445,9 @@ export async function deleteRemoteFolder(item: DirTree, localDeleted: boolean) {
         failedPaths: [],
       } satisfies DeleteRemoteFolderResult;
     }
+    config.bucket = mapping.remoteTarget || config.bucket
 
-    return deleteS3RemoteFolder(config, folderPath, loadedFilePaths);
+    return deleteS3RemoteFolder(config, remoteFolderPath);
   }
 
   if (platform === "cloudFolder") {
@@ -442,8 +459,9 @@ export async function deleteRemoteFolder(item: DirTree, localDeleted: boolean) {
         failedPaths: [],
       } satisfies DeleteRemoteFolderResult;
     }
+    config.path = mapping.remoteTarget || config.path
 
-    const deleted = await androidCloudFolderWorkspaceDelete(config, folderPath);
+    const deleted = await androidCloudFolderWorkspaceDelete(config, remoteFolderPath);
     return {
       attempted: true,
       deletedPaths: deleted ? [folderPath] : [],
@@ -459,6 +477,7 @@ export async function deleteRemoteFolder(item: DirTree, localDeleted: boolean) {
       failedPaths: [],
     } satisfies DeleteRemoteFolderResult;
   }
+  config.url = mapping.remoteTarget || config.url
 
-  return deleteWebDAVRemoteFolder(config, folderPath);
+  return deleteWebDAVRemoteFolder(config, remoteFolderPath);
 }

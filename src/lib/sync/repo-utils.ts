@@ -1,6 +1,7 @@
 import { RepoNames } from './github.types'
 import { Store } from '@tauri-apps/plugin-store'
 import { getWorkspaceSyncRepos } from './workspace-repos'
+import { resolvePrimarySyncMapping } from './connector-mappings'
 
 /**
  * 获取实际使用的仓库名称
@@ -10,7 +11,8 @@ import { getWorkspaceSyncRepos } from './workspace-repos'
  */
 export async function getActualRepoName(
   type: 'sync' | 'image',
-  platform: 'github' | 'gitee' | 'gitlab' | 'gitea'
+  platform: 'github' | 'gitee' | 'gitlab' | 'gitea',
+  localPath?: string,
 ): Promise<string> {
   const store = await Store.load('store.json')
   
@@ -18,6 +20,10 @@ export async function getActualRepoName(
   let customRepoName = ''
   
   if (type === 'sync') {
+    if (localPath !== undefined) {
+      const mapping = await resolvePrimarySyncMapping(localPath)
+      if (mapping?.platform === platform && mapping.remoteTarget) return mapping.remoteTarget
+    }
     const workspaceRepos = await getWorkspaceSyncRepos()
     customRepoName = workspaceRepos[platform] || ''
   } else if (type === 'image' && platform === 'github') {
@@ -44,16 +50,22 @@ export async function getActualRepoName(
  * @param platform 平台：'github' | 'gitee' | 'gitlab' | 'gitea'
  * @returns 同步仓库名称
  */
-export async function getSyncRepoName(platform: 'github' | 'gitee' | 'gitlab' | 'gitea'): Promise<string> {
-  const repo = await getActualRepoName('sync', platform)
+export async function getSyncRepoName(
+  platform: 'github' | 'gitee' | 'gitlab' | 'gitea',
+  localPath?: string,
+): Promise<string> {
+  const repo = await getActualRepoName('sync', platform, localPath)
   if (!repo) {
     throw new Error('Sync repository is not configured for the current workspace')
   }
   return repo
 }
 
-export async function getOptionalSyncRepoName(platform: 'github' | 'gitee' | 'gitlab' | 'gitea'): Promise<string> {
-  return getActualRepoName('sync', platform)
+export async function getOptionalSyncRepoName(
+  platform: 'github' | 'gitee' | 'gitlab' | 'gitea',
+  localPath?: string,
+): Promise<string> {
+  return getActualRepoName('sync', platform, localPath)
 }
 
 /**

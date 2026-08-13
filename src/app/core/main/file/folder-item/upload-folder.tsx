@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FolderUp, LoaderCircle } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { ContextMenuItem } from '@/components/ui/enhanced-context-menu'
@@ -9,15 +9,37 @@ import { MobileMenuItem } from '../mobile-action-menu'
 import { computedParentPath } from '@/lib/path'
 import { getSyncConfiguration } from '../file-tree-action-policy'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
+import { getSyncPathWritePolicy } from '@/lib/sync/connector-mappings'
+import emitter from '@/lib/emitter'
 
 export function UploadFolder({ item, mobile = false }: { item: DirTree; mobile?: boolean }) {
   const t = useTranslations('article.file.context')
   const [isUploading, setIsUploading] = useState(false)
+  const [canUpload, setCanUpload] = useState(false)
   const { loadFileTree, loadRemoteSyncFiles, markFileRemote, setEntryLoading, setEntrySyncError } = useArticleStore()
+  const folderPath = computedParentPath(item)
+
+  useEffect(() => {
+    let cancelled = false
+    const refreshPolicy = () => {
+      setCanUpload(false)
+      void getSyncPathWritePolicy(folderPath, { includeDescendants: true }).then((policy) => {
+        if (!cancelled) setCanUpload(policy.writable)
+      })
+    }
+    refreshPolicy()
+    emitter.on('sync-mappings-changed', refreshPolicy)
+    return () => {
+      cancelled = true
+      emitter.off('sync-mappings-changed', refreshPolicy)
+    }
+  }, [folderPath])
 
   async function handleUploadFolder() {
     if (isUploading || !item.isLocale || !item.isDirectory) return
-    const sync = await getSyncConfiguration()
+    const writePolicy = await getSyncPathWritePolicy(folderPath, { includeDescendants: true })
+    if (!writePolicy.writable) return
+    const sync = await getSyncConfiguration(folderPath)
     if (!sync.configured) {
       toast({
         title: sync.reason === 'missing-repository' ? t('syncRepoRequired') : t('syncNotConfigured'),
@@ -27,7 +49,6 @@ export function UploadFolder({ item, mobile = false }: { item: DirTree; mobile?:
       return
     }
 
-    const folderPath = computedParentPath(item)
     setIsUploading(true)
     setEntryLoading(folderPath, true)
     setEntrySyncError(folderPath)
@@ -76,7 +97,7 @@ export function UploadFolder({ item, mobile = false }: { item: DirTree; mobile?:
 
   if (mobile) {
     return (
-      <MobileMenuItem disabled={isUploading || !item.isLocale} onClick={() => void handleUploadFolder()}>
+      <MobileMenuItem disabled={isUploading || !item.isLocale || !canUpload} onClick={() => void handleUploadFolder()}>
         {t('uploadFolder')}
       </MobileMenuItem>
     )
@@ -85,7 +106,7 @@ export function UploadFolder({ item, mobile = false }: { item: DirTree; mobile?:
   return (
     <ContextMenuItem
       inset
-      disabled={isUploading || !item.isLocale}
+      disabled={isUploading || !item.isLocale || !canUpload}
       onClick={() => void handleUploadFolder()}
       menuType="file"
     >

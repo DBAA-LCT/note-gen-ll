@@ -1,4 +1,5 @@
 import { Store } from '@tauri-apps/plugin-store'
+import { isCurrentWorkspaceSyncReadOnly } from '@/lib/sync/workspace-sync-config'
 import { deleteFile as deleteGithubFile, uploadFile as uploadGithubFile, getFiles as githubGetFiles } from '@/lib/sync/github'
 import { deleteFile as deleteGiteeFile, uploadFile as uploadGiteeFile, getFiles as giteeGetFiles } from '@/lib/sync/gitee'
 import { deleteFile as deleteGitlabFile, uploadFile as uploadGitlabFile, getFiles as gitlabGetFiles, getFileContent as gitlabGetFileContent } from '@/lib/sync/gitlab'
@@ -382,6 +383,7 @@ function indexMatchesProjects(index: CanvasSyncIndex, projects: CanvasProject[])
 }
 
 export async function uploadCanvases() {
+  if (await isCurrentWorkspaceSyncReadOnly()) return false
   const { getCanvasProjects } = await import('@/db/canvases')
   const projects = await getCanvasProjects({ includeDeleted: true })
   const store = await Store.load('store.json')
@@ -428,6 +430,7 @@ export async function uploadCanvases() {
 }
 
 export async function uploadCanvas(canvasId: string) {
+  if (await isCurrentWorkspaceSyncReadOnly()) return false
   const { getCanvasProjects } = await import('@/db/canvases')
   const projects = await getCanvasProjects({ includeDeleted: true })
   const project = projects.find(candidate => candidate.id === canvasId)

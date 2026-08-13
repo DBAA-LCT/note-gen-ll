@@ -1,5 +1,6 @@
 import { BaseDirectory, exists, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { Store } from '@tauri-apps/plugin-store'
+import { isCurrentWorkspaceSyncReadOnly } from '@/lib/sync/workspace-sync-config'
 import emitter from '@/lib/emitter'
 import { recordSyncTiming } from './sync-timing'
 import {
@@ -101,6 +102,7 @@ async function flushPendingRecordAssetRemoteDeletions() {
 }
 
 export async function uploadRecordAssets(marks: RecordAssetMark[]) {
+  if (await isCurrentWorkspaceSyncReadOnly()) return
   const startedAt = Date.now()
   await flushPendingRecordAssetRemoteDeletions()
 

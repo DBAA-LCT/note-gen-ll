@@ -28,6 +28,10 @@ import {
   hasRemoteConversationSyncData,
   uploadConversations,
 } from '@/lib/sync/conversation-sync'
+import {
+  isActiveWorkspaceSyncReadOnly,
+  isCurrentWorkspaceSyncReadOnly,
+} from '@/lib/sync/workspace-sync-config'
 
 export type AutoDataSyncDomain = 'records' | 'settings' | 'conversations'
 type AutoDataSyncProvider = 'github' | 'gitee' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
@@ -468,6 +472,10 @@ export function isAutoDataSyncApplyingRemote(): boolean {
 }
 
 export function enqueueAutoDataSync(domain: AutoDataSyncDomain, reason = 'change', mode: 'auto' | 'manual' = 'auto') {
+  if (isActiveWorkspaceSyncReadOnly()) {
+    debugAutoDataSync('skip enqueue for read-only workspace', { domain, reason, mode })
+    return
+  }
   if (applyingRemote || repositoryChangePauseDepth > 0) {
     debugAutoDataSync('skip enqueue while applying remote data', { domain, reason, mode })
     return
@@ -592,6 +600,12 @@ export function finishAutoDataSyncRepositoryChange() {
   void (async () => {
     if (!await isAutoDataSyncProviderConfigured()) return
 
+    if (await isCurrentWorkspaceSyncReadOnly()) {
+      startPeriodicAutoDataSyncMetaCheck()
+      await checkRemoteAutoDataSync('startup', { uploadDirtyDomains: false, force: true })
+      return
+    }
+
     // A repository has its own independent baseline. Existing local data may
     // be clean relative to the previous repository but still be absent from
     // the new one, so every enabled domain must participate in the first
@@ -611,6 +625,10 @@ function trackAutoDataSyncDirtyWrite(domain: AutoDataSyncDomain) {
 
 export async function uploadAutoDataSyncNow(options: AutoDataSyncUploadOptions = {}): Promise<void> {
   debugAutoDataSync('manual upload requested')
+
+  if (await isCurrentWorkspaceSyncReadOnly()) {
+    throw new Error('当前工作区为只读同步，不允许上传记录或配置')
+  }
 
   if (!await isAutoDataSyncProviderConfigured()) {
     updateState({
@@ -1589,6 +1607,9 @@ function dropRedundantFrontTasks(domain: AutoDataSyncDomain, taskStartedAt: numb
 }
 
 async function uploadDomain(domain: AutoDataSyncDomain) {
+  if (await isCurrentWorkspaceSyncReadOnly()) {
+    throw new Error('当前工作区为只读同步，不允许上传记录或配置')
+  }
   const startedAt = Date.now()
   debugAutoDataSync('upload domain started', { domain })
   await ensureAutoDataSyncRemoteDataPath()

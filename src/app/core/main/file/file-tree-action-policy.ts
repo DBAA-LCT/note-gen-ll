@@ -1,6 +1,7 @@
 import { Store } from '@tauri-apps/plugin-store'
 
 import { getOptionalSyncRepoName } from '@/lib/sync/repo-utils'
+import { resolvePrimarySyncMapping } from '@/lib/sync/connector-mappings'
 import type { DirTree } from '@/stores/article'
 import type { CloudFolderConfig, S3Config, SyncPlatform, WebDAVConfig } from '@/types/sync'
 
@@ -60,19 +61,20 @@ export function buildFileTreeSyncStatusMap(tree: DirTree[]) {
   return statuses
 }
 
-export async function getSyncConfiguration(): Promise<{
+export async function getSyncConfiguration(localPath?: string): Promise<{
   configured: boolean
   platform: SyncPlatform
   reason?: 'missing-credentials' | 'missing-repository'
 }> {
   const store = await Store.load('store.json')
-  const platform = await store.get<SyncPlatform>('primaryBackupMethod') ?? 'github'
+  const mapping = localPath === undefined ? undefined : await resolvePrimarySyncMapping(localPath)
+  const platform = mapping?.platform ?? await store.get<SyncPlatform>('primaryBackupMethod') ?? 'github'
 
   if (platform === 's3') {
     const config = await store.get<S3Config>('s3SyncConfig')
     return {
       platform,
-      configured: Boolean(config?.accessKeyId && config.secretAccessKey && config.region && config.bucket),
+      configured: Boolean(config?.accessKeyId && config.secretAccessKey && config.region && (mapping?.remoteTarget || config.bucket)),
     }
   }
 
@@ -80,13 +82,13 @@ export async function getSyncConfiguration(): Promise<{
     const config = await store.get<WebDAVConfig>('webdavSyncConfig')
     return {
       platform,
-      configured: Boolean(config?.url && config.username && config.password),
+      configured: Boolean((mapping?.remoteTarget || config?.url) && config?.username && config.password),
     }
   }
 
   if (platform === 'cloudFolder') {
     const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-    return { platform, configured: Boolean(config?.path) }
+    return { platform, configured: Boolean(mapping?.remoteTarget || config?.path) }
   }
 
   const credentials: Record<Exclude<SyncPlatform, 's3' | 'webdav' | 'cloudFolder'>, [string, string]> = {
@@ -105,7 +107,7 @@ export async function getSyncConfiguration(): Promise<{
     return { platform, configured: false, reason: 'missing-credentials' }
   }
 
-  const repo = await getOptionalSyncRepoName(platform)
+  const repo = mapping?.remoteTarget || await getOptionalSyncRepoName(platform)
   return repo
     ? { platform, configured: true }
     : { platform, configured: false, reason: 'missing-repository' }

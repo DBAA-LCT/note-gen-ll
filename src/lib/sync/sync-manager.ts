@@ -2,7 +2,7 @@ import { Store } from '@tauri-apps/plugin-store'
 import { calculateFileSha, getLocalFileMetadata, getRemoteFileInfo, compareFileVersions, pullRemoteFile, saveLocalFile, setLocalRecordedSha } from './auto-sync'
 import { decodeBase64ToString } from './github'
 import { updateFileSyncTime } from './conflict-resolution'
-import { getOptionalSyncRepoName, getSyncRepoName } from './repo-utils'
+import { getOptionalSyncRepoName } from './repo-utils'
 import { uploadFile as uploadToGithub, getFiles as getGithubFiles, deleteFile as deleteGithubFile } from './github'
 import { uploadFile as uploadToGitee, getFiles as getGiteeFiles, deleteFile as deleteGiteeFile } from './gitee'
 import { uploadFile as uploadToGitlab, getFileContent as getGitlabFile, deleteFile as deleteGitlabFile } from './gitlab'
@@ -21,6 +21,12 @@ import { toast } from '@/hooks/use-toast'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { getFilePathOptions, getWorkspacePath } from '@/lib/workspace'
 import { shouldExclude } from '@/config/sync-exclusions'
+import {
+  resolvePrimarySyncMapping,
+  resolveSyncMappings,
+  getSyncPathWritePolicy,
+  type ResolvedSyncMapping,
+} from '@/lib/sync/connector-mappings'
 
 /**
  * 获取 GitLab 分支配置
@@ -189,7 +195,9 @@ export class SyncManager {
   /**
    * 获取当前使用的平台
    */
-  async getCurrentPlatform(): Promise<string> {
+  async getCurrentPlatform(path = ''): Promise<string> {
+    const mapping = await resolvePrimarySyncMapping(path)
+    if (mapping) return mapping.platform
     const store = await Store.load('store.json')
     return await store.get<string>('primaryBackupMethod') || 'github'
   }
@@ -220,16 +228,31 @@ export class SyncManager {
   /**
    * 推送文件到远程
    */
-  async pushFile(path: string, content: string): Promise<SyncResult> {
+  async pushFile(path: string, content: string, selectedMapping?: ResolvedSyncMapping): Promise<SyncResult> {
     // 检查是否应该排除
     if (shouldExclude(path)) {
       return { success: true, action: 'none', message: '文件被排除在同步之外' }
     }
 
     try {
-      const platform = await this.getCurrentPlatform() as 'github' | 'gitee' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
-      // S3 不需要 repo，直接设为空字符串
-      const repo = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? '' : await getSyncRepoName(platform)
+      if (!selectedMapping) {
+        const mappings = await resolveSyncMappings(path)
+        if (mappings.length > 1) {
+          const results = []
+          for (const mapping of mappings) results.push(await this.pushFile(path, content, mapping))
+          const failed = results.find(result => !result.success)
+          return failed || { success: true, action: 'push', message: '已同步到所有匹配映射' }
+        }
+        selectedMapping = mappings[0]
+      }
+      const mapping = selectedMapping
+      if (!mapping) return { success: true, action: 'none', message: '没有匹配的同步映射' }
+      if (mapping.accessMode === 'read-only') {
+        return { success: false, action: 'none', error: '当前映射为只读，不允许上传' }
+      }
+      const platform = mapping.platform
+      const remotePath = mapping.remoteFilePath
+      const repo = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? '' : mapping.remoteTarget
       const sha = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? undefined : await this.getRemoteSha(path) || undefined
       const message = `Sync: ${path} - ${new Date().toLocaleString('zh-CN')}`
       const filename = path.split('/').pop() || path
@@ -238,22 +261,22 @@ export class SyncManager {
 
       switch (platform) {
         case 'github': {
-          const result = await uploadToGithub({ file: content, sha, message, repo, path, filename })
+          const result = await uploadToGithub({ file: content, sha, message, repo, path: remotePath, filename })
           uploadSuccess = !!result
           break
         }
         case 'gitee': {
-          const result = await uploadToGitee({ file: content, sha, message, repo, path, filename })
+          const result = await uploadToGitee({ file: content, sha, message, repo, path: remotePath, filename })
           uploadSuccess = !!result
           break
         }
         case 'gitlab': {
-          const result = await uploadToGitlab({ file: content, sha, message, repo, path, filename })
+          const result = await uploadToGitlab({ file: content, sha, message, repo, path: remotePath, filename })
           uploadSuccess = !!result
           break
         }
         case 'gitea': {
-          const result = await uploadToGitea({ file: content, sha, message, repo, path, filename })
+          const result = await uploadToGitea({ file: content, sha, message, repo, path: remotePath, filename })
           uploadSuccess = !!result
           break
         }
@@ -262,8 +285,9 @@ export class SyncManager {
           if (!s3Config) {
             return { success: false, action: 'push', error: 'S3 配置未找到' }
           }
+          s3Config.bucket = mapping.remoteTarget || s3Config.bucket
           // S3 使用相对路径作为 key，不需要添加 pathPrefix
-          const result = await s3Upload(s3Config, path, content)
+          const result = await s3Upload(s3Config, remotePath, content)
           uploadSuccess = !!result
           if (uploadSuccess && result) {
             // 更新 ETag 记录
@@ -276,7 +300,8 @@ export class SyncManager {
           if (!webdavConfig) {
             return { success: false, action: 'push', error: 'WebDAV 配置未找到' }
           }
-          const result = await webdavUpload(webdavConfig, path, content)
+          webdavConfig.url = mapping.remoteTarget || webdavConfig.url
+          const result = await webdavUpload(webdavConfig, remotePath, content)
           uploadSuccess = !!result
           if (uploadSuccess && result) {
             // 更新 ETag 记录
@@ -289,7 +314,8 @@ export class SyncManager {
           if (!config) {
             return { success: false, action: 'push', error: '网盘文件夹未配置' }
           }
-          uploadSuccess = Boolean(await androidCloudFolderWorkspaceUpload(config, path, content))
+          config.path = mapping.remoteTarget || config.path
+          uploadSuccess = Boolean(await androidCloudFolderWorkspaceUpload(config, remotePath, content))
           break
         }
       }
@@ -318,31 +344,37 @@ export class SyncManager {
    * 从远程拉取文件
    */
   async pullFile(path: string): Promise<SyncResult> {
+    if (shouldExclude(path)) {
+      return { success: true, action: 'none', message: '文件被排除在同步之外' }
+    }
     try {
-      const platform = await this.getCurrentPlatform() as 'github' | 'gitee' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
-      // S3 不需要 repo
-      const repo = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? '' : await getSyncRepoName(platform)
+      const mapping = await resolvePrimarySyncMapping(path)
+      if (mapping?.syncPolicy === 'ignore-remote') return { success: true, action: 'none', message: '当前远端文件已设为不拉取' }
+      if (!mapping) return { success: true, action: 'none', message: '没有匹配的同步映射' }
+      const platform = mapping.platform
+      const remotePath = mapping.remoteFilePath
+      const repo = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? '' : mapping.remoteTarget
 
       let content: string | undefined
 
       switch (platform) {
         case 'github':
-          const githubFile = await getGithubFiles({ path, repo })
+          const githubFile = await getGithubFiles({ path: remotePath, repo })
           content = githubFile?.content
           break
         case 'gitee':
-          const giteeFile = await getGiteeFiles({ path, repo })
+          const giteeFile = await getGiteeFiles({ path: remotePath, repo })
           content = giteeFile?.content
           break
         case 'gitlab': {
           const branch = await getGitlabBranch()
-          const gitlabFile = await getGitlabFile({ path, ref: branch, repo })
+          const gitlabFile = await getGitlabFile({ path: remotePath, ref: branch, repo })
           content = gitlabFile?.content
           break
         }
         case 'gitea': {
           const branch = await getGiteaBranch()
-          const giteaFile = await getGiteaFile({ path, ref: branch, repo })
+          const giteaFile = await getGiteaFile({ path: remotePath, ref: branch, repo })
           content = giteaFile?.content
           break
         }
@@ -351,8 +383,9 @@ export class SyncManager {
           if (!s3Config) {
             return { success: false, action: 'pull', error: 'S3 配置未找到' }
           }
+          s3Config.bucket = mapping.remoteTarget || s3Config.bucket
           // S3 使用相对路径作为 key
-          const s3File = await s3Download(s3Config, path)
+          const s3File = await s3Download(s3Config, remotePath)
           if (s3File) {
             content = s3File.content
             // 更新 ETag 记录
@@ -365,7 +398,8 @@ export class SyncManager {
           if (!webdavConfig) {
             return { success: false, action: 'pull', error: 'WebDAV 配置未找到' }
           }
-          const webdavFile = await webdavDownload(webdavConfig, path)
+          webdavConfig.url = mapping.remoteTarget || webdavConfig.url
+          const webdavFile = await webdavDownload(webdavConfig, remotePath)
           if (webdavFile) {
             content = webdavFile.content
             // 更新 ETag 记录
@@ -378,7 +412,8 @@ export class SyncManager {
           if (!config) {
             return { success: false, action: 'pull', error: '网盘文件夹未配置' }
           }
-          const cloudFile = await androidCloudFolderWorkspaceDownloadBytes(config, path)
+          config.path = mapping.remoteTarget || config.path
+          const cloudFile = await androidCloudFolderWorkspaceDownloadBytes(config, remotePath)
           if (cloudFile) content = new TextDecoder().decode(cloudFile.content)
           break
         }
@@ -417,10 +452,28 @@ export class SyncManager {
    * 删除远程文件
    */
   async deleteRemoteFile(path: string): Promise<SyncResult> {
+    if (shouldExclude(path)) {
+      return { success: true, action: 'none', message: '文件被排除在同步之外' }
+    }
     try {
-      const platform = await this.getCurrentPlatform() as 'github' | 'gitee' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
-      // S3 不需要 repo
-      const repo = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? '' : await getSyncRepoName(platform)
+      const writePolicy = await getSyncPathWritePolicy(path)
+      if (!writePolicy.writable) {
+        return {
+          success: false,
+          action: 'none',
+          error: writePolicy.ambiguous
+            ? '当前文件命中多个同步映射，请在连接器中明确选择远端后再删除'
+            : '当前映射为只读，不允许删除远端文件',
+        }
+      }
+      const mapping = await resolvePrimarySyncMapping(path)
+      if (!mapping) return { success: true, action: 'none', message: '没有匹配的同步映射' }
+      if (mapping.accessMode === 'read-only') {
+        return { success: false, action: 'none', error: '当前映射为只读，不允许删除远端文件' }
+      }
+      const platform = mapping.platform
+      const remotePath = mapping.remoteFilePath
+      const repo = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? '' : mapping.remoteTarget
       const sha = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? undefined : await this.getRemoteSha(path)
 
       // S3 和 WebDAV 不需要 SHA，但其他平台需要
@@ -432,24 +485,25 @@ export class SyncManager {
 
       switch (platform) {
         case 'github':
-          success = !!(await deleteGithubFile({ path, sha: sha!, repo }))
+          success = !!(await deleteGithubFile({ path: remotePath, sha: sha!, repo }))
           break
         case 'gitee':
-          success = !!(await deleteGiteeFile({ path, sha: sha!, repo }))
+          success = !!(await deleteGiteeFile({ path: remotePath, sha: sha!, repo }))
           break
         case 'gitlab':
-          success = !!(await deleteGitlabFile({ path, sha: sha!, repo }))
+          success = !!(await deleteGitlabFile({ path: remotePath, sha: sha!, repo }))
           break
         case 'gitea':
-          success = !!(await deleteGiteaFile({ path, sha: sha!, repo }))
+          success = !!(await deleteGiteaFile({ path: remotePath, sha: sha!, repo }))
           break
         case 's3': {
           const s3Config = await getS3Config()
           if (!s3Config) {
             return { success: false, action: 'delete', error: 'S3 配置未找到' }
           }
+          s3Config.bucket = mapping.remoteTarget || s3Config.bucket
           // S3 使用相对路径作为 key
-          success = await s3Delete(s3Config, path)
+          success = await s3Delete(s3Config, remotePath)
           if (success) {
             // 移除 ETag 记录
             useSyncStore.getState().removeS3FileEtag(path)
@@ -461,7 +515,8 @@ export class SyncManager {
           if (!webdavConfig) {
             return { success: false, action: 'delete', error: 'WebDAV 配置未找到' }
           }
-          success = await webdavDelete(webdavConfig, path)
+          webdavConfig.url = mapping.remoteTarget || webdavConfig.url
+          success = await webdavDelete(webdavConfig, remotePath)
           if (success) {
             // 移除 ETag 记录
             useSyncStore.getState().removeWebDAVFileEtag(path)
@@ -473,7 +528,8 @@ export class SyncManager {
           if (!config) {
             return { success: false, action: 'delete', error: '网盘文件夹未配置' }
           }
-          success = await androidCloudFolderWorkspaceDelete(config, path)
+          config.path = mapping.remoteTarget || config.path
+          success = await androidCloudFolderWorkspaceDelete(config, remotePath)
           break
         }
       }
@@ -546,6 +602,10 @@ export class SyncManager {
   async syncFile(path: string, options: {
     onConflict?: (local: string, remote: string) => Promise<'local' | 'remote' | 'cancel'>
   } = {}): Promise<SyncResult> {
+    if (shouldExclude(path)) {
+      return { success: true, action: 'none', message: '文件被排除在同步之外' }
+    }
+
     // 检查是否正在同步
     if (this.state.isSyncing) {
       this.state.pendingSync = true
@@ -624,6 +684,8 @@ export class SyncManager {
     if (!this.config.autoSync || !this.config.autoPushOnSave) {
       return
     }
+    const mapping = await resolvePrimarySyncMapping(path)
+    if (!mapping || mapping.accessMode === 'read-only' || mapping.syncMode !== 'automatic') return
 
     // 检查是否应该排除
     if (shouldExclude(path)) {

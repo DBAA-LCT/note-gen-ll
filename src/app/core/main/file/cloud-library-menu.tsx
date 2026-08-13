@@ -3,7 +3,7 @@
 import { confirm } from '@tauri-apps/plugin-dialog'
 import { Cloud, Database, DatabaseZap, Download, EllipsisVertical, LoaderCircle, PackageOpen, Upload } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
@@ -14,6 +14,8 @@ import useCloudLibraryStore from '@/stores/cloud-library'
 import useVectorStore from '@/stores/vector'
 import { cn } from '@/lib/utils'
 import { getSyncConfiguration } from './file-tree-action-policy'
+import emitter from '@/lib/emitter'
+import { getSyncPathWritePolicy } from '@/lib/sync/connector-mappings'
 
 export function CloudLibraryMenu({ className }: { className?: string }) {
   const t = useTranslations('article.file.cloudLibrary')
@@ -40,11 +42,35 @@ export function CloudLibraryMenu({ className }: { className?: string }) {
     downloadKnowledgeBase,
   } = useCloudLibraryStore()
   const busy = operation !== null || isProcessing
+  const [canUploadWorkspace, setCanUploadWorkspace] = useState(false)
 
   useEffect(() => {
     void initSyncStaticAssets()
     void initShowCloudFiles()
   }, [initShowCloudFiles, initSyncStaticAssets])
+
+  useEffect(() => {
+    const refreshPolicy = () => {
+      void getSyncPathWritePolicy('', { includeDescendants: true }).then((policy) => {
+        setCanUploadWorkspace(policy.configured && !policy.blockedByReadOnly)
+      })
+    }
+    refreshPolicy()
+    emitter.on('sync-mappings-changed', refreshPolicy)
+    return () => emitter.off('sync-mappings-changed', refreshPolicy)
+  }, [])
+
+  async function ensureWorkspaceUploadAllowed() {
+    const policy = await getSyncPathWritePolicy('', { includeDescendants: true })
+    if (policy.configured && !policy.blockedByReadOnly) return true
+    toast({
+      description: policy.blockedByReadOnly
+        ? tSync('mapping.readOnlyLocalChanges')
+        : tSync('status.unconfigured'),
+      variant: 'destructive',
+    })
+    return false
+  }
 
   async function ensureSyncConfigured() {
     const sync = await getSyncConfiguration()
@@ -84,6 +110,7 @@ export function CloudLibraryMenu({ className }: { className?: string }) {
   }
 
   async function handleUploadAll() {
+    if (!await ensureWorkspaceUploadAllowed()) return
     if (!await ensureSyncConfigured()) return
     const accepted = await confirm(t(syncStaticAssets ? 'uploadFilesWithAssetsWarning' : 'uploadFilesWarning'), {
       title: t('uploadFiles'),
@@ -222,7 +249,7 @@ export function CloudLibraryMenu({ className }: { className?: string }) {
             />
           ),
         },
-        { key: 'upload-files', label: t('uploadFiles'), icon: <Upload />, onSelect: handleUploadAll, disabled: busy },
+        { key: 'upload-files', label: t('uploadFiles'), icon: <Upload />, onSelect: handleUploadAll, disabled: busy || !canUploadWorkspace },
         { key: 'download-files', label: t('downloadFiles'), icon: <Download />, onSelect: handlePullAll, disabled: busy },
         {
           key: 'auto-vector',

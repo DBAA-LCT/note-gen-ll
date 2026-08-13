@@ -12,15 +12,13 @@ import { GitlabSync } from '@/app/core/setting/sync/gitlab-sync'
 import { GiteaSync } from '@/app/core/setting/sync/gitea-sync'
 import { S3Sync } from '@/app/core/setting/sync/s3-sync'
 import { WebDAVSync } from '@/app/core/setting/sync/webdav-sync'
-import { UsePlatformButton } from '@/app/core/setting/sync/components/use-platform-button'
-import { WorkspaceRepoMapping } from '@/app/core/setting/sync/components/workspace-repo-mapping'
+import { ConnectorMappingTree } from '@/app/core/setting/sync/components/connector-mapping-tree'
 import { DataSyncOverview } from '@/app/core/setting/sync/components/data-sync-overview'
 import { MobileSelectDrawer } from '@/app/mobile/components/mobile-select-drawer'
 import { OneDriveCloudFolderSync } from '@/app/mobile/setting/pages/sync/android-cloud-folder-sync'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
-import { RepoNames, SyncStateEnum } from '@/lib/sync/github.types'
-import type { SyncRepoPlatform, WorkspaceSyncRepos } from '@/lib/sync/workspace-repos'
+import { SyncStateEnum } from '@/lib/sync/github.types'
 import useSettingStore from '@/stores/setting'
 import useSyncStore from '@/stores/sync'
 import { SYNC_PLATFORMS, SYNC_PLATFORM_INFO, SyncPlatform, type CloudFolderConfig } from '@/types/sync'
@@ -29,13 +27,6 @@ type MobileSyncPlatform = SyncPlatform | 'oneDrive'
 
 function toSyncPlatform(platformName: MobileSyncPlatform): SyncPlatform {
   return platformName === 'oneDrive' ? 'cloudFolder' : platformName
-}
-
-function isRepoSyncPlatform(platformName: MobileSyncPlatform): platformName is SyncRepoPlatform {
-  return platformName === 'github'
-    || platformName === 'gitee'
-    || platformName === 'gitlab'
-    || platformName === 'gitea'
 }
 
 export default function SyncPage() {
@@ -61,12 +52,9 @@ export default function SyncPage() {
     setExcludeSensitiveConfig,
     autoPullOnOpen,
     setAutoPullOnOpen,
+    syncAccessMode,
     workspacePath,
     workspaceHistory,
-    setGithubCustomSyncRepo,
-    setGiteeCustomSyncRepo,
-    setGitlabCustomSyncRepo,
-    setGiteaCustomSyncRepo,
   } = useSettingStore()
   const {
     syncRepoState,
@@ -81,47 +69,11 @@ export default function SyncPage() {
   const [tab, setTab] = useState<MobileSyncPlatform>(primaryBackupMethod)
   const [isLoading, setIsLoading] = useState(true)
   const [activeCloudFolderProvider, setActiveCloudFolderProvider] = useState<'folder' | 'oneDrive' | null>(null)
-  const [workspaceRepos, setWorkspaceRepos] = useState<Record<string, WorkspaceSyncRepos>>({})
 
   const workspaceOptions = useMemo(
     () => Array.from(new Set([workspacePath, '', ...workspaceHistory])),
     [workspaceHistory, workspacePath],
   )
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadWorkspaceRepos() {
-      const { getWorkspaceSyncRepos } = await import('@/lib/sync/workspace-repos')
-      const entries = await Promise.all(workspaceOptions.map(async (path) => {
-        return [path, await getWorkspaceSyncRepos(path)] as const
-      }))
-      if (!cancelled) setWorkspaceRepos(Object.fromEntries(entries))
-    }
-
-    void loadWorkspaceRepos()
-    return () => {
-      cancelled = true
-    }
-  }, [workspaceOptions])
-
-  async function handleWorkspaceRepoChange(workspacePath: string, repoPlatform: SyncRepoPlatform, repo: string) {
-    const setters: Record<SyncRepoPlatform, (value: string, targetWorkspacePath?: string) => Promise<void>> = {
-      github: setGithubCustomSyncRepo,
-      gitee: setGiteeCustomSyncRepo,
-      gitlab: setGitlabCustomSyncRepo,
-      gitea: setGiteaCustomSyncRepo,
-    }
-
-    await setters[repoPlatform](repo, workspacePath)
-    setWorkspaceRepos(current => ({
-      ...current,
-      [workspacePath]: {
-        ...current[workspacePath],
-        [repoPlatform]: repo,
-      },
-    }))
-  }
 
   useEffect(() => {
     async function loadPrimaryBackupMethod() {
@@ -154,8 +106,9 @@ export default function SyncPage() {
   }, [isAndroid, setPrimaryBackupMethod])
 
   const selectedSyncPlatform = toSyncPlatform(tab)
-  const currentSyncState = getCurrentSyncState(selectedSyncPlatform)
-  const isFileAutoSyncDisabled = currentSyncState !== SyncStateEnum.success
+  const activeWorkspaceSyncState = getCurrentSyncState(primaryBackupMethod)
+  const isProviderUnavailable = activeWorkspaceSyncState !== SyncStateEnum.success
+  const isFileAutoSyncDisabled = isProviderUnavailable || syncAccessMode === 'read-only'
   const isCloudFolderTab = selectedSyncPlatform === 'cloudFolder'
   const supportsCloudFolderFileSync = tab === 'oneDrive'
 
@@ -175,7 +128,6 @@ export default function SyncPage() {
         return webdavConnected ? SyncStateEnum.success : SyncStateEnum.fail
       case 'cloudFolder':
         return cloudFolderConnected
-          && tab === 'oneDrive'
           && activeCloudFolderProvider === 'oneDrive'
           ? SyncStateEnum.success
           : SyncStateEnum.fail
@@ -245,39 +197,24 @@ export default function SyncPage() {
       </p>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold">{t('settings.sync.platformSettings')}</h2>
-        <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <MobileSelectDrawer
-              title={t('settings.sync.selectPlatform')}
-              value={tab}
-              onValueChange={handleTabChange}
-              placeholder={t('settings.sync.selectPlatform')}
-              className="h-11"
-              options={availablePlatforms.map(platformName => ({
-                value: platformName,
-                label: getProviderLabel(platformName),
-              }))}
-            />
-          </div>
-          <div className="shrink-0 [&>button]:h-11">
-            <UsePlatformButton
-              platform={selectedSyncPlatform}
-              disabled={currentSyncState !== SyncStateEnum.success}
-            />
-          </div>
-        </div>
+        <h2 className="text-sm font-semibold">{t('settings.sync.providerConnections')}</h2>
+        <MobileSelectDrawer
+          title={t('settings.sync.selectPlatform')}
+          value={tab}
+          onValueChange={handleTabChange}
+          placeholder={t('settings.sync.selectPlatform')}
+          className="h-11"
+          options={availablePlatforms.map(platformName => ({
+            value: platformName,
+            label: getProviderLabel(platformName),
+          }))}
+        />
         {renderSyncContent()}
-        {isRepoSyncPlatform(tab) ? (
-          <WorkspaceRepoMapping
-            platform={tab}
-            workspaceOptions={workspaceOptions}
-            currentWorkspacePath={workspacePath}
-            workspaceRepos={workspaceRepos}
-            defaultRepoName={RepoNames.sync}
-            onRepoChange={(targetWorkspacePath, repo) => handleWorkspaceRepoChange(targetWorkspacePath, tab, repo)}
-          />
-        ) : null}
+        <ConnectorMappingTree
+          platform={selectedSyncPlatform}
+          workspaceOptions={workspaceOptions}
+          currentWorkspacePath={workspacePath}
+        />
       </section>
 
       <section className="flex flex-col gap-3">
@@ -322,7 +259,7 @@ export default function SyncPage() {
             <Switch
               checked={autoPullOnOpen}
               onCheckedChange={setAutoPullOnOpen}
-              disabled={isFileAutoSyncDisabled || (isCloudFolderTab && !supportsCloudFolderFileSync)}
+              disabled={isProviderUnavailable || (isCloudFolderTab && !supportsCloudFolderFileSync)}
             />
           </ItemActions>
         </Item>

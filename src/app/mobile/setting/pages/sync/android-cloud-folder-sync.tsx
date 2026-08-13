@@ -40,6 +40,7 @@ import { useSkillsStore } from '@/stores/skills'
 import useSyncStore from '@/stores/sync'
 import { toast } from '@/hooks/use-toast'
 import type { CloudFolderConfig, SyncPlatform } from '@/types/sync'
+import { saveWorkspaceProviderConfig } from '@/lib/sync/workspace-sync-config'
 
 type OneDrivePanelStatus =
   | 'disconnected'
@@ -255,14 +256,14 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
     const previousConfig = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
     const previousMethod = await store.get<SyncPlatform>('primaryBackupMethod') || 'github'
     try {
-      await store.set('cloudFolderSyncConfig', configured)
-      await store.save()
+      await saveWorkspaceProviderConfig('cloudFolder', configured)
       await setPrimaryBackupMethod('cloudFolder')
       await setWorkspacePath(preparation.path)
       const transferred = await transferWorkspace(preparation)
       await refreshWorkspaceContent()
-      await store.delete(PENDING_ONE_DRIVE_CONFIG_KEY)
-      await store.save()
+      const latestStore = await Store.load('store.json')
+      await latestStore.delete(PENDING_ONE_DRIVE_CONFIG_KEY)
+      await latestStore.save()
 
       setConfig(configured)
       setAccountConnected(true)
@@ -278,13 +279,15 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
         await releaseAndroidSyncFolder(previousConfig.path).catch(() => undefined)
       }
     } catch (cause) {
-      await store.set('cloudFolderSyncConfig', previousConfig || { path: '' } satisfies CloudFolderConfig)
-      await store.save()
-      await setPrimaryBackupMethod(previousMethod)
       if (useSettingStore.getState().workspacePath !== previousWorkspacePath) {
         await setWorkspacePath(previousWorkspacePath)
         await refreshWorkspaceContent().catch(() => undefined)
       }
+      await saveWorkspaceProviderConfig(
+        'cloudFolder',
+        previousConfig || { path: '' } satisfies CloudFolderConfig,
+      )
+      await setPrimaryBackupMethod(previousMethod)
       throw cause
     } finally {
       autoDataSyncQueue.finishAutoDataSyncRepositoryChange()
@@ -389,10 +392,10 @@ export function OneDriveCloudFolderSync({ onActiveProviderChange }: OneDriveClou
       const store = await Store.load('store.json')
       const activeConfig = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
       await store.delete(PENDING_ONE_DRIVE_CONFIG_KEY)
-      if (activeConfig?.provider === 'oneDrive') {
-        await store.set('cloudFolderSyncConfig', { path: '' } satisfies CloudFolderConfig)
-      }
       await store.save()
+      if (activeConfig?.provider === 'oneDrive') {
+        await saveWorkspaceProviderConfig('cloudFolder', { path: '' } satisfies CloudFolderConfig)
+      }
       setConfig({ path: '' })
       setAccountConnected(false)
       setConnectionMode('none')

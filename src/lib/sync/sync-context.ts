@@ -1,6 +1,7 @@
 import { Store } from '@tauri-apps/plugin-store'
 
 import { getOptionalSyncRepoName } from './repo-utils'
+import { resolvePrimarySyncMapping } from './connector-mappings'
 import type { CloudFolderConfig } from '@/types/sync'
 
 const GIT_SYNC_PROVIDERS = ['github', 'gitee', 'gitlab', 'gitea'] as const
@@ -14,25 +15,36 @@ function isGitSyncProvider(provider: string): provider is GitSyncProvider {
   return GIT_SYNC_PROVIDERS.includes(provider as GitSyncProvider)
 }
 
-export async function getCurrentSyncContext() {
+export async function getCurrentSyncContext(localPath = '') {
   const store = await Store.load('store.json')
   const workspacePath = normalizeWorkspacePath(await store.get<string>('workspacePath') || '')
-  const provider = await store.get<string>('primaryBackupMethod') || 'github'
-  const repo = isGitSyncProvider(provider)
-    ? await getOptionalSyncRepoName(provider)
+  const mapping = await resolvePrimarySyncMapping(localPath, workspacePath)
+  const provider = mapping?.platform || await store.get<string>('primaryBackupMethod') || 'github'
+  const repo = mapping?.remoteTarget || (isGitSyncProvider(provider)
+    ? await getOptionalSyncRepoName(provider, localPath)
     : provider === 'cloudFolder'
       ? (await store.get<CloudFolderConfig>('cloudFolderSyncConfig'))?.path || ''
-      : ''
+      : '')
 
   return {
     workspacePath,
     workspaceKey: workspacePath || '__default__',
     provider,
     repo,
+    mappingId: mapping?.id || '',
+    remoteFilePath: mapping?.remoteFilePath || localPath,
+    accessMode: mapping?.accessMode || 'read-write',
   }
 }
 
 export async function getSyncMetadataKey(path: string) {
-  const context = await getCurrentSyncContext()
-  return JSON.stringify([context.workspaceKey, context.provider, context.repo, path])
+  const context = await getCurrentSyncContext(path)
+  return JSON.stringify([
+    context.workspaceKey,
+    context.provider,
+    context.repo,
+    context.mappingId,
+    context.remoteFilePath,
+    path,
+  ])
 }

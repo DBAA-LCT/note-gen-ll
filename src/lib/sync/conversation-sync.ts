@@ -1,5 +1,6 @@
 import { BaseDirectory, exists, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs'
 import { Store } from '@tauri-apps/plugin-store'
+import { isCurrentWorkspaceSyncReadOnly } from '@/lib/sync/workspace-sync-config'
 import { deleteFile as deleteGithubFile, getFiles as githubGetFiles, uploadFile as uploadGithubFile } from './github'
 import { deleteFile as deleteGiteeFile, getFiles as giteeGetFiles, uploadFile as uploadGiteeFile } from './gitee'
 import { deleteFile as deleteGitlabFile, getFileContent as gitlabGetFileContent, getFiles as gitlabGetFiles, uploadFile as uploadGitlabFile } from './gitlab'
@@ -1346,6 +1347,7 @@ async function readRemoteConversationItems(
 }
 
 export async function uploadConversations() {
+  if (await isCurrentWorkspaceSyncReadOnly()) return false
   const startedAt = Date.now()
   const store = await Store.load('store.json')
   const storage = await createConversationRemoteStorage(store)

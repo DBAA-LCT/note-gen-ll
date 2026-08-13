@@ -199,6 +199,9 @@ export interface Model {
   owned_by: string
 }
 
+export const MIMO_PAY_AS_YOU_GO_BASE_URL = 'https://api.xiaomimimo.com/v1'
+export const MIMO_TOKEN_PLAN_BASE_URL = 'https://token-plan-cn.xiaomimimo.com/v1'
+
 // Define base AI configuration without translations
 const builtinProviderTemplates: AiConfig[] = [
   {
@@ -216,16 +219,31 @@ const builtinProviderTemplates: AiConfig[] = [
     apiKeyUrl: 'https://aistudio.google.com/app/apikey'
   },
   {
+    key: 'mimo',
+    title: 'Xiaomi MiMo',
+    baseURL: MIMO_PAY_AS_YOU_GO_BASE_URL,
+    icon: 'https://mimo.mi.com/favicon.png',
+    apiKeyUrl: 'https://platform.xiaomimimo.com/'
+  },
+  {
+    key: 'kimi',
+    title: 'Kimi',
+    baseURL: 'https://api.moonshot.cn/v1',
+    icon: 'https://platform.kimi.com/favicon.ico',
+    apiKeyUrl: 'https://platform.kimi.com/console/api-keys'
+  },
+  {
+    key: 'glm',
+    title: 'GLM',
+    baseURL: 'https://open.bigmodel.cn/api/paas/v4',
+    icon: 'https://static.bigmodel.cn/wd-paas-front/static/images/favicon.png',
+    apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys'
+  },
+  {
     key: 'ollama',
     title: 'Ollama',
     baseURL: 'http://localhost:11434/v1',
     icon: 'https://s2.loli.net/2025/06/25/legkEpHACDBQ5Xz.png',
-  },
-  {
-    key: 'lmstudio',
-    title: 'LM Studio',
-    baseURL: 'http://localhost:1234/v1',
-    icon: 'https://s2.loli.net/2025/06/25/IifFV4HTQ9dpGZE.png',
   },
 ]
 

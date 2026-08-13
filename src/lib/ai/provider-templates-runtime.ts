@@ -9,6 +9,21 @@ import {
 } from '@/lib/ai/provider-region-policy'
 
 export const PROVIDER_TEMPLATE_CACHE_KEY = 'providerTemplatesCache'
+export const REMOVED_PROVIDER_TEMPLATE_KEYS = new Set([
+  '302',
+  'gitee',
+  'lmstudio',
+  'openrouter',
+  'qiniu',
+  'shengsuanyun',
+  'siliconflow',
+  'ucloud',
+])
+
+export function isRemovedProviderTemplate(config: Pick<AiConfig, 'key' | 'templateKey' | 'templateSource'>) {
+  if (config.templateSource === 'custom') return false
+  return REMOVED_PROVIDER_TEMPLATE_KEYS.has((config.templateKey || config.key).trim().toLowerCase())
+}
 
 export interface ProviderTemplateCache {
   configKey?: ConfigCenterConfigKey
@@ -26,6 +41,25 @@ function mapBuiltinTemplates(templates: AiConfig[]): AiConfig[] {
     templateKey: template.templateKey || template.key,
     templateSource: 'builtin' as const,
   }))
+}
+
+function mergeProviderTemplates(primary: AiConfig[], fallback: AiConfig[]): AiConfig[] {
+  const merged = [...primary]
+  const templateKeys = new Set(primary.map(template => template.templateKey || template.key))
+  const baseURLs = new Set(primary.map(template => template.baseURL).filter(Boolean))
+
+  for (const template of fallback) {
+    const templateKey = template.templateKey || template.key
+    if (templateKeys.has(templateKey) || (template.baseURL && baseURLs.has(template.baseURL))) {
+      continue
+    }
+
+    merged.push(template)
+    templateKeys.add(templateKey)
+    if (template.baseURL) baseURLs.add(template.baseURL)
+  }
+
+  return merged
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -75,6 +109,7 @@ function normalizeProviderTemplatesPayload(payload: unknown): AiConfig[] {
     .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
     .filter((item) => item.enabled !== false)
     .filter((item) => isNonEmptyString(item.key))
+    .filter((item) => !REMOVED_PROVIDER_TEMPLATE_KEYS.has(String(item.key).trim().toLowerCase()))
     .filter((item) => isNonEmptyString(item.title))
     .filter((item) => isValidUrl(item.baseURL))
     .map((item) => ({
@@ -135,7 +170,7 @@ function enforceStorefrontPolicy(
     : templates
 }
 
-export async function getCachedProviderTemplates(): Promise<AiConfig[]> {
+export async function getCachedProviderTemplates(builtinTemplates: AiConfig[] = []): Promise<AiConfig[]> {
   const store = await Store.load('store.json')
   const cached = await store.get<ProviderTemplateCache>(PROVIDER_TEMPLATE_CACHE_KEY)
   const configKey = await getProviderTemplateConfigKey()
@@ -144,7 +179,10 @@ export async function getCachedProviderTemplates(): Promise<AiConfig[]> {
     return []
   }
 
-  return enforceStorefrontPolicy(mapRemoteTemplates(cached.content), configKey)
+  return enforceStorefrontPolicy(mergeProviderTemplates(
+    mapRemoteTemplates(cached.content),
+    mapBuiltinTemplates(builtinTemplates),
+  ), configKey)
 }
 
 async function getProviderTemplateConfigKey(): Promise<ConfigCenterConfigKey> {
@@ -192,11 +230,17 @@ export async function loadProviderTemplates(builtinTemplates: AiConfig[]): Promi
     if (latest) {
       await store.set(PROVIDER_TEMPLATE_CACHE_KEY, latest)
       await store.save()
-      return enforceStorefrontPolicy(mapRemoteTemplates(latest.content), configKey)
+      return enforceStorefrontPolicy(mergeProviderTemplates(
+        mapRemoteTemplates(latest.content),
+        mapBuiltinTemplates(builtinTemplates),
+      ), configKey)
     }
 
     if (matchingCache?.content?.providers?.length) {
-      return enforceStorefrontPolicy(mapRemoteTemplates(matchingCache.content), configKey)
+      return enforceStorefrontPolicy(mergeProviderTemplates(
+        mapRemoteTemplates(matchingCache.content),
+        mapBuiltinTemplates(builtinTemplates),
+      ), configKey)
     }
   } catch (error) {
     console.warn(
@@ -206,7 +250,10 @@ export async function loadProviderTemplates(builtinTemplates: AiConfig[]): Promi
   }
 
   if (matchingCache?.content?.providers?.length) {
-    return enforceStorefrontPolicy(mapRemoteTemplates(matchingCache.content), configKey)
+    return enforceStorefrontPolicy(mergeProviderTemplates(
+      mapRemoteTemplates(matchingCache.content),
+      mapBuiltinTemplates(builtinTemplates),
+    ), configKey)
   }
 
   return enforceStorefrontPolicy(mapBuiltinTemplates(builtinTemplates), configKey)

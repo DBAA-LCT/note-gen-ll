@@ -1,22 +1,6 @@
 {
   "providers": [
     {
-      "key": "siliconflow",
-      "title": "SiliconFlow",
-      "baseURL": "https://api.siliconflow.cn/v1",
-      "apiKeyUrl": "https://cloud.siliconflow.cn/i/O2ciJeZw",
-      "icon": "https://s2.loli.net/2025/09/09/D8Al2raSvewN5xn.jpg",
-      "enabled": true
-    },
-    {
-      "key": "shengsuanyun",
-      "title": "胜算云",
-      "baseURL": "https://router.shengsuanyun.com/api/v1",
-      "apiKeyUrl": "https://www.shengsuanyun.com/?from=CH_YZ0Q43T6",
-      "icon": "https://s2.loli.net/2025/09/15/4qjswKyaRfZ8OxW.png",
-      "enabled": true
-    },
-    {
       "key": "gemini",
       "title": "Gemini",
       "baseURL": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -40,13 +24,6 @@
       "enabled": true
     },
     {
-      "key": "lmstudio",
-      "title": "LM Studio",
-      "baseURL": "http://localhost:1234/v1",
-      "icon": "https://s2.loli.net/2025/06/25/IifFV4HTQ9dpGZE.png",
-      "enabled": true
-    },
-    {
       "key": "deepseek",
       "title": "DeepSeek",
       "baseURL": "https://api.deepseek.com",
@@ -55,43 +32,27 @@
       "enabled": true
     },
     {
-      "key": "openrouter",
-      "title": "OpenRouter",
-      "baseURL": "https://openrouter.ai/api/v1",
-      "apiKeyUrl": "https://openrouter.ai/api-keys",
-      "icon": "https://s2.loli.net/2025/06/25/CTjSDHLl4XdvxM5.png",
+      "key": "kimi",
+      "title": "Kimi",
+      "baseURL": "https://api.moonshot.cn/v1",
+      "apiKeyUrl": "https://platform.kimi.com/console/api-keys",
+      "icon": "https://platform.kimi.com/favicon.ico",
       "enabled": true
     },
     {
-      "key": "qiniu",
-      "title": "七牛云",
-      "baseURL": "https://openai.qiniu.com/v1",
-      "apiKeyUrl": "https://s.qiniu.com/Znm6je",
-      "icon": "https://s2.loli.net/2025/09/15/ALjNPveWrtmsfOY.png",
+      "key": "glm",
+      "title": "GLM",
+      "baseURL": "https://open.bigmodel.cn/api/paas/v4",
+      "apiKeyUrl": "https://open.bigmodel.cn/usercenter/apikeys",
+      "icon": "https://static.bigmodel.cn/wd-paas-front/static/images/favicon.png",
       "enabled": true
     },
     {
-      "key": "302",
-      "title": "302.AI",
-      "baseURL": "https://api.302.ai/v1",
-      "apiKeyUrl": "https://share.302.ai/jfFrIP",
-      "icon": "https://s2.loli.net/2025/06/26/4CJOQ2U9ibvoGpR.png",
-      "enabled": true
-    },
-    {
-      "key": "gitee",
-      "title": "Gitee AI",
-      "baseURL": "https://ai.gitee.com/v1",
-      "apiKeyUrl": "https://ai.gitee.com/",
-      "icon": "https://s2.loli.net/2025/09/15/ih7aTnGPvELFsVc.png",
-      "enabled": true
-    },
-    {
-      "key": "ucloud",
-      "title": "优云智算",
-      "baseURL": "https://api.modelverse.cn/v1",
-      "apiKeyUrl": "https://www.compshare.cn/coding-plan?ytag=GPU_YY_JL_git_note-gen",
-      "icon": "https://files.seeusercontent.com/2026/03/26/L5pg/logo-compshare_.png",
+      "key": "mimo",
+      "title": "Xiaomi MiMo",
+      "baseURL": "https://api.xiaomimimo.com/v1",
+      "apiKeyUrl": "https://platform.xiaomimimo.com/",
+      "icon": "https://mimo.mi.com/favicon.png",
       "enabled": true
     }
   ]

@@ -19,7 +19,8 @@ export default function DownloadFolder({ item, mobile = false }: { item: DirTree
   // 下载远程文件夹下的全部文件类型
   async function handleSyncFolder() {
     if (isSyncing) return
-    const sync = await getSyncConfiguration()
+    const folderPath = computedParentPath(item)
+    const sync = await getSyncConfiguration(folderPath)
     if (!sync.configured) {
       toast({
         title: sync.reason === 'missing-repository'
@@ -41,7 +42,6 @@ export default function DownloadFolder({ item, mobile = false }: { item: DirTree
       return;
     }
 
-    const folderPath = computedParentPath(item)
     let syncError: string | undefined
     setIsSyncing(true);
     setEntryLoading(folderPath, true)

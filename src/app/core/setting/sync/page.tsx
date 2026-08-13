@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { confirm } from '@tauri-apps/plugin-dialog'
-import { Store } from '@tauri-apps/plugin-store'
 import {
   Cloud,
   Database,
@@ -29,9 +28,8 @@ import { GitlabSync } from './gitlab-sync'
 import { S3Sync } from './s3-sync'
 import { WebDAVSync } from './webdav-sync'
 import { CloudFolderSync } from './cloud-folder-sync'
-import { UsePlatformButton } from './components/use-platform-button'
-import { WorkspaceRepoMapping } from './components/workspace-repo-mapping'
 import { DataSyncOverview } from './components/data-sync-overview'
+import { ConnectorMappingTree } from './components/connector-mapping-tree'
 import { SettingType } from '../components/setting-base'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -62,9 +60,8 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
-import { RepoNames, SyncStateEnum } from '@/lib/sync/github.types'
+import { SyncStateEnum } from '@/lib/sync/github.types'
 import { checkSyncProviderStatus } from '@/lib/sync/provider-status'
-import type { SyncRepoPlatform, WorkspaceSyncRepos } from '@/lib/sync/workspace-repos'
 import useSettingStore from '@/stores/setting'
 import useSyncStore from '@/stores/sync'
 import { SYNC_PLATFORMS, SYNC_PLATFORM_INFO, type SyncPlatform } from '@/types/sync'
@@ -90,7 +87,6 @@ export default function SyncPage() {
   const t = useTranslations()
   const {
     primaryBackupMethod,
-    setPrimaryBackupMethod,
     autoSync,
     setAutoSync,
     autoRecordSyncEnabled,
@@ -105,10 +101,6 @@ export default function SyncPage() {
     setAutoPullOnOpen,
     workspacePath,
     workspaceHistory,
-    setGithubCustomSyncRepo,
-    setGiteeCustomSyncRepo,
-    setGitlabCustomSyncRepo,
-    setGiteaCustomSyncRepo,
   } = useSettingStore()
   const {
     syncRepoState,
@@ -125,66 +117,11 @@ export default function SyncPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [checkingPlatforms, setCheckingPlatforms] = useState<Set<SyncPlatform>>(new Set())
   const checkingPlatformsRef = useRef<Set<SyncPlatform>>(new Set())
-  const [workspaceRepos, setWorkspaceRepos] = useState<Record<string, WorkspaceSyncRepos>>({})
 
   const workspaceOptions = useMemo(
     () => Array.from(new Set([workspacePath, '', ...workspaceHistory])),
     [workspaceHistory, workspacePath],
   )
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadWorkspaceRepos() {
-      const { getWorkspaceSyncRepos } = await import('@/lib/sync/workspace-repos')
-      const entries = await Promise.all(workspaceOptions.map(async (path) => {
-        return [path, await getWorkspaceSyncRepos(path)] as const
-      }))
-      if (!cancelled) setWorkspaceRepos(Object.fromEntries(entries))
-    }
-
-    void loadWorkspaceRepos()
-    return () => {
-      cancelled = true
-    }
-  }, [workspaceOptions])
-
-  async function handleWorkspaceRepoChange(workspacePath: string, repoPlatform: SyncRepoPlatform, repo: string) {
-    const setters: Record<SyncRepoPlatform, (value: string, targetWorkspacePath?: string) => Promise<void>> = {
-      github: setGithubCustomSyncRepo,
-      gitee: setGiteeCustomSyncRepo,
-      gitlab: setGitlabCustomSyncRepo,
-      gitea: setGiteaCustomSyncRepo,
-    }
-
-    await setters[repoPlatform](repo, workspacePath)
-    setWorkspaceRepos(current => ({
-      ...current,
-      [workspacePath]: {
-        ...current[workspacePath],
-        [repoPlatform]: repo,
-      },
-    }))
-  }
-
-  useEffect(() => {
-    async function loadPrimaryBackupMethod() {
-      try {
-        const store = await Store.load('store.json')
-        const savedMethod = await store.get<SyncPlatform>('primaryBackupMethod')
-        if (savedMethod) {
-          await setPrimaryBackupMethod(savedMethod)
-          setPlatform(savedMethod)
-        }
-      } catch (error) {
-        console.error('Failed to load primary backup method:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    void loadPrimaryBackupMethod()
-  }, [setPrimaryBackupMethod])
 
   const checkPlatformStatus = useCallback(async (targetPlatform: SyncPlatform) => {
     if (checkingPlatformsRef.current.has(targetPlatform)) return
@@ -200,9 +137,18 @@ export default function SyncPage() {
   }, [])
 
   useEffect(() => {
-    if (isLoading) return
-    void checkPlatformStatus(platform)
-  }, [checkPlatformStatus, isLoading, platform, workspacePath])
+    let cancelled = false
+    async function loadConnectorStatuses() {
+      if (!cancelled) setIsLoading(false)
+      await Promise.allSettled(SYNC_PLATFORMS.map(checkPlatformStatus))
+    }
+    void loadConnectorStatuses()
+    return () => { cancelled = true }
+  }, [checkPlatformStatus])
+
+  useEffect(() => {
+    if (!isLoading) void checkPlatformStatus(platform)
+  }, [checkPlatformStatus, isLoading, platform])
 
   function getSyncState(targetPlatform: SyncPlatform) {
     if (checkingPlatforms.has(targetPlatform)) return SyncStateEnum.checking
@@ -226,7 +172,8 @@ export default function SyncPage() {
   }
 
   const currentSyncState = getSyncState(platform)
-  const isAutoSyncDisabled = currentSyncState !== SyncStateEnum.success
+  const isProviderUnavailable = currentSyncState !== SyncStateEnum.success
+  const isAutoSyncDisabled = isProviderUnavailable
   const currentPlatformInfo = SYNC_PLATFORM_INFO[platform]
   const currentPlatformName = platform === 'cloudFolder'
     ? t('settings.sync.cloudFolder.title')
@@ -293,6 +240,27 @@ export default function SyncPage() {
     return <Badge variant="destructive">{t('settings.sync.status.disconnected')}</Badge>
   }
 
+  function renderCompactStatus(state: SyncStateEnum) {
+    const checking = state === SyncStateEnum.checking || state === SyncStateEnum.creating
+    const connected = state === SyncStateEnum.success
+    const label = checking
+      ? t('settings.sync.checking')
+      : connected
+        ? t('settings.sync.status.connected')
+        : t('settings.sync.status.disconnected')
+    return (
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground" title={label}>
+        <span className={cn(
+          'size-2 rounded-full',
+          checking && 'animate-pulse bg-amber-500',
+          connected && 'bg-emerald-500',
+          !checking && !connected && 'bg-muted-foreground/35',
+        )} />
+        <span className="sr-only">{label}</span>
+      </span>
+    )
+  }
+
   if (isLoading) {
     return (
       <SettingType id="sync" icon={<FileUp />} title={t('settings.sync.title')} desc={t('settings.sync.desc')}>
@@ -305,16 +273,15 @@ export default function SyncPage() {
 
   return (
     <SettingType id="sync" icon={<FileUp />} title={t('settings.sync.title')} desc={t('settings.sync.desc')}>
-      <div className="grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 lg:grid-cols-[230px_minmax(0,1fr)]">
         <Card size="sm" className="lg:sticky lg:top-2">
           <CardHeader>
-            <CardTitle>{t('settings.sync.platformSettings')}</CardTitle>
+            <CardTitle>{t('settings.sync.providerConnections')}</CardTitle>
           </CardHeader>
           <CardContent>
             <ItemGroup className="gap-1">
               {SYNC_PLATFORMS.map((itemPlatform) => {
                 const platformInfo = SYNC_PLATFORM_INFO[itemPlatform]
-                const isCurrentPlatform = primaryBackupMethod === itemPlatform
                 const isSelectedPlatform = platform === itemPlatform
                 return (
                   <Item
@@ -340,11 +307,9 @@ export default function SyncPage() {
                             : platformInfo.name}
                         </ItemTitle>
                       </ItemContent>
-                      {isCurrentPlatform ? (
-                        <ItemActions>
-                          <Badge>{t('settings.sync.currentPlatform')}</Badge>
-                        </ItemActions>
-                      ) : null}
+                      <ItemActions>
+                        {renderCompactStatus(getSyncState(itemPlatform))}
+                      </ItemActions>
                     </button>
                   </Item>
                 )
@@ -364,13 +329,7 @@ export default function SyncPage() {
                 </div>
               </div>
               <CardAction>
-                <div className="flex items-center gap-2">
-                  {renderStatusBadge(currentSyncState)}
-                  <UsePlatformButton
-                    platform={platform}
-                    disabled={currentSyncState !== SyncStateEnum.success}
-                  />
-                </div>
+                {renderStatusBadge(currentSyncState)}
               </CardAction>
             </CardHeader>
           </Card>
@@ -389,16 +348,11 @@ export default function SyncPage() {
 
             <TabsContent value="connection" className="flex flex-col gap-4">
               {renderSyncContent()}
-              {platform !== 's3' && platform !== 'webdav' && platform !== 'cloudFolder' ? (
-                <WorkspaceRepoMapping
-                  platform={platform}
-                  workspaceOptions={workspaceOptions}
-                  currentWorkspacePath={workspacePath}
-                  workspaceRepos={workspaceRepos}
-                  defaultRepoName={RepoNames.sync}
-                  onRepoChange={(targetWorkspacePath, repo) => handleWorkspaceRepoChange(targetWorkspacePath, platform, repo)}
-                />
-              ) : null}
+              <ConnectorMappingTree
+                platform={platform}
+                workspaceOptions={workspaceOptions}
+                currentWorkspacePath={workspacePath}
+              />
             </TabsContent>
 
             <TabsContent value="options" className="flex flex-col gap-4">
@@ -419,7 +373,7 @@ export default function SyncPage() {
                         <Select
                           value={autoSync}
                           onValueChange={setAutoSync}
-                          disabled={isAutoSyncDisabled || platform === 'cloudFolder'}
+                          disabled={isAutoSyncDisabled || primaryBackupMethod === 'cloudFolder'}
                         >
                           <SelectTrigger className="w-45">
                             <SelectValue placeholder={t('settings.sync.autoSyncOptions.placeholder')} />
@@ -451,7 +405,7 @@ export default function SyncPage() {
                         <Switch
                           checked={autoPullOnOpen}
                           onCheckedChange={setAutoPullOnOpen}
-                          disabled={isAutoSyncDisabled || platform === 'cloudFolder'}
+                          disabled={isProviderUnavailable || primaryBackupMethod === 'cloudFolder'}
                         />
                       </ItemActions>
                     </Item>

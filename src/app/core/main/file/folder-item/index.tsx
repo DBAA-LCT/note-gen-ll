@@ -50,6 +50,7 @@ import { rewriteWorkspaceMarkdownMediaPaths } from '@/lib/markdown-media-path'
 import { listDailyReports } from '@/lib/learning/repository'
 import { removeLearningReportMarkdown } from '@/lib/learning/report'
 import useLearningStore from '@/stores/learning'
+import { getSyncPathWritePolicy } from '@/lib/sync/connector-mappings'
 
 export function FolderItem({
   item,
@@ -108,7 +109,13 @@ export function FolderItem({
 
   const iconSize = getIconSize(fileManagerTextSize)
   const syncStatus = providedSyncStatus ?? getFileTreeSyncStatus(item)
-  const syncStatusTitle = item.syncError ?? t(`syncStatus.${syncStatus}`)
+  const tSync = useTranslations('settings.sync')
+  const [isReadOnlySync, setIsReadOnlySync] = useState(false)
+  const path = computedParentPath(item)
+  const syncStatusTitle = item.syncError
+    ?? (isReadOnlySync && syncStatus === 'dirty'
+      ? tSync('mapping.readOnlyLocalChanges')
+      : t(`syncStatus.${syncStatus}`))
 
   const {
     activeFilePath,
@@ -143,9 +150,24 @@ export function FolderItem({
     cleanTabsByDeletedFolder: state.cleanTabsByDeletedFolder,
     setSelectedFilePaths: state.setSelectedFilePaths,
   })))
+
+  useEffect(() => {
+    let cancelled = false
+    const refreshPolicy = () => {
+      setIsReadOnlySync(false)
+      void getSyncPathWritePolicy(path, { includeDescendants: true }).then((policy) => {
+        if (!cancelled) setIsReadOnlySync(policy.blockedByReadOnly)
+      })
+    }
+    refreshPolicy()
+    emitter.on('sync-mappings-changed', refreshPolicy)
+    return () => {
+      cancelled = true
+      emitter.off('sync-mappings-changed', refreshPolicy)
+    }
+  }, [path])
   const { setClipboardItem, clipboardItem, clipboardItems, clipboardOperation } = useClipboardStore()
 
-  const path = computedParentPath(item)
   const normalizedFolderPath = path.replace(/\\/g, '/')
   const isLegacyReportRoot = normalizedFolderPath === '学习报告'
   const isLearningReportRoot = isLegacyReportRoot || normalizedFolderPath === '规划报告'
@@ -1048,6 +1070,7 @@ export function FolderItem({
                     knowledge={renderFolderVectorIcon()}
                     syncStatus={syncStatus}
                     syncTitle={syncStatusTitle}
+                    readOnly={isReadOnlySync}
                   />
                   {isMobile && (
                     <MobileActionMenu className="ml-1">

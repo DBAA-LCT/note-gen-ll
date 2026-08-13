@@ -1,0 +1,46 @@
+
+> note-goal@0.1.0 tauri C:\Users\Leonard\Documents\note-gen-ll
+> tauri "dev"
+
+
+> note-goal@0.1.0 dev C:\Users\Leonard\Documents\note-gen-ll
+> next dev --turbopack -p 3456 -H 0.0.0.0
+
+   ▲ Next.js 15.3.2 (Turbopack)
+   - Local:        http://localhost:3456
+   - Network:      http://0.0.0.0:3456
+   - Experiments (use with caution):
+     · turbo
+
+ ✓ Starting...
+ ✓ Ready in 10.7s
+ ○ Compiling / ...
+ ✓ Compiled / in 44.1s
+ GET / 200 in 44835ms
+ ○ Compiling /favicon.ico ...
+ GET /favicon.ico 200 in 5792ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 5719ms
+ ✓ Compiled /favicon.ico in 58.4s
+ GET /core/main 200 in 58626ms
+ ✓ Compiled in 46.6s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 13951ms
+ GET /favicon.ico 200 in 694ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 1345ms
+ ✓ Compiled in 36.3s
+ ✓ Compiled in 31.2s
+ ✓ Compiled in 45.2s
+ ✓ Compiled in 52.3s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET / 200 in 1888ms
+ GET /favicon.ico 200 in 1316ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 1292ms
+ ○ Compiling /core/main ...
+ ✓ Compiled in 476.9s
+ ✓ Compiled /core/main in 178.9s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 180905ms
+ GET / 200 in 1123ms
+ GET /favicon.ico 200 in 5973ms
+ GET /core/main 200 in 7513ms
+ ✓ Compiled in 25.2s

@@ -1,4 +1,4 @@
-import { CircleAlert, CloudCheck, CloudDownload, CloudUpload, LoaderCircle } from 'lucide-react'
+import { CircleAlert, CloudCheck, CloudDownload, CloudUpload, LoaderCircle, LockKeyhole } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import type { FileTreeSyncStatus } from './file-tree-action-policy'
@@ -9,12 +9,14 @@ export function FileTreeDecorations({
   syncStatus,
   syncTitle,
   alwaysShowSynced = false,
+  readOnly = false,
 }: {
   iconSize: string
   knowledge?: ReactNode
   syncStatus: FileTreeSyncStatus
   syncTitle: string
   alwaysShowSynced?: boolean
+  readOnly?: boolean
 }) {
   const syncDecoration = (() => {
     if (syncStatus === 'loading') {
@@ -24,6 +26,7 @@ export function FileTreeDecorations({
       return <CircleAlert className={`${iconSize} text-destructive`} />
     }
     if (syncStatus === 'dirty') {
+      if (readOnly) return <LockKeyhole className={`${iconSize} text-amber-600`} />
       return <CloudUpload className={`${iconSize} text-muted-foreground`} />
     }
     if (syncStatus === 'remote-only') {

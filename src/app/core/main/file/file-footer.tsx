@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import {
   ChevronsUpDown,
+  Cloud,
   FolderCheck,
   FolderOpen,
   FolderPlus,
+  Network,
   Trash2,
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
@@ -41,6 +43,13 @@ import useSettingStore from '@/stores/setting'
 import { useSkillsStore } from '@/stores/skills'
 
 import { useSyncAvailability } from './use-sync-availability'
+import {
+  getConnectorMappings,
+  type ConnectorSyncMapping,
+} from '@/lib/sync/connector-mappings'
+import { getWorkspaceSyncKey } from '@/lib/sync/workspace-sync-config'
+import emitter from '@/lib/emitter'
+import { SYNC_PLATFORM_INFO } from '@/types/sync'
 
 export function FileFooter() {
   const {
@@ -58,10 +67,12 @@ export function FileFooter() {
   } = useArticleStore()
   const tFile = useTranslations('settings.file')
   const tContext = useTranslations('article.file.context')
+  const tSync = useTranslations('settings.sync')
   const sync = useSyncAvailability()
   const [open, setOpen] = useState(false)
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false)
   const [defaultWorkspacePath, setDefaultWorkspacePath] = useState('')
+  const [workspaceMappings, setWorkspaceMappings] = useState<ConnectorSyncMapping[]>([])
 
   const defaultWorkspaceName = tFile('workspace.defaultPath')
   const currentWorkspaceName = useMemo(
@@ -78,6 +89,45 @@ export function FileFooter() {
       : sync.status === 'unavailable'
         ? tContext('syncUnavailable', { platform: sync.platform })
         : tContext('syncNotConfigured')
+  const remoteSummary = useMemo(() => {
+    if (!workspaceMappings.length) return tSync('mapping.noRemote')
+    const uniqueRemotes = Array.from(new Map(workspaceMappings.map(mapping => [
+      `${mapping.platform}\0${mapping.remoteTarget}`,
+      mapping,
+    ])).values())
+    const first = uniqueRemotes[0]
+    const platformName = first.platform === 'cloudFolder'
+      ? tSync('cloudFolder.title')
+      : SYNC_PLATFORM_INFO[first.platform].name
+    const target = first.remoteTarget
+    if (uniqueRemotes.length === 1) return `${platformName} · ${target}`
+    return tSync('mapping.remoteSummary', {
+      remote: `${platformName} · ${target}`,
+      count: uniqueRemotes.length - 1,
+    })
+  }, [tSync, workspaceMappings])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadMappings = () => {
+      void getConnectorMappings().then((mappings) => {
+        if (cancelled) return
+        const workspaceKey = getWorkspaceSyncKey(workspacePath)
+        setWorkspaceMappings(mappings
+          .filter(mapping => (
+            mapping.enabled
+            && getWorkspaceSyncKey(mapping.localWorkspacePath) === workspaceKey
+          ))
+          .sort((a, b) => a.localPath.length - b.localPath.length))
+      })
+    }
+    loadMappings()
+    emitter.on('sync-mappings-changed', loadMappings)
+    return () => {
+      cancelled = true
+      emitter.off('sync-mappings-changed', loadMappings)
+    }
+  }, [workspacePath])
 
   useEffect(() => {
     void getDefaultArticleAbsolutePath('')
@@ -164,7 +214,7 @@ export function FileFooter() {
                 size="xs"
                 disabled={switchingWorkspace}
                 className="w-full min-w-0 flex-1 justify-start border-0 bg-transparent px-1.5 text-xs font-normal text-muted-foreground focus-visible:border-transparent focus-visible:ring-1 focus-visible:ring-ring/30"
-                aria-label={`${currentWorkspaceName}, ${syncStatusText}`}
+                aria-label={`${currentWorkspaceName}, ${remoteSummary}, ${syncStatusText}`}
               >
                 <span
                   className={cn(
@@ -184,12 +234,17 @@ export function FileFooter() {
                 <span className="min-w-0 flex-1 truncate text-left">
                   {currentWorkspaceName}
                 </span>
+                <span className="flex max-w-[55%] shrink min-w-0 items-center gap-1 truncate rounded bg-muted/70 px-1 py-0.5 text-[10px] text-muted-foreground">
+                  <Cloud className="size-2.5 shrink-0" />
+                  <span className="truncate">{remoteSummary}</span>
+                </span>
                 <ChevronsUpDown data-icon="inline-end" className="opacity-50" />
               </Button>
             </PopoverTrigger>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4} className="max-w-sm">
             <span className="block break-all">{currentWorkspacePath}</span>
+            <span className="block break-all text-xs">{remoteSummary}</span>
             <span className="block text-xs opacity-70">{syncStatusText}</span>
           </TooltipContent>
         </Tooltip>
@@ -204,6 +259,42 @@ export function FileFooter() {
             <CommandInput placeholder={tFile('workspace.searchPlaceholder')} />
             <CommandList className="[scrollbar-gutter:auto]">
               <CommandEmpty>{tFile('workspace.noResults')}</CommandEmpty>
+              <CommandGroup heading={tSync('mapping.currentWorkspaceRemotes')}>
+                {workspaceMappings.length ? workspaceMappings.map((mapping) => {
+                  const platformName = mapping.platform === 'cloudFolder'
+                    ? tSync('cloudFolder.title')
+                    : SYNC_PLATFORM_INFO[mapping.platform].name
+                  const remotePath = [mapping.remoteTarget, mapping.remotePath].filter(Boolean).join('/')
+                  return (
+                    <CommandItem
+                      key={mapping.id}
+                      value={`${platformName} ${remotePath} ${mapping.localPath}`}
+                      disabled
+                      className="items-start opacity-100 aria-disabled:opacity-100"
+                    >
+                      <Network className="mt-0.5 text-emerald-600" />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5 font-medium text-foreground">
+                          <span>{platformName}</span>
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {remotePath}
+                        </span>
+                        <span className="block truncate text-[10px] text-muted-foreground/70">
+                          {mapping.localPath || tSync('mapping.workspaceRoot')}
+                          {' → '}
+                          {mapping.remotePath || tSync('mapping.remoteRoot')}
+                        </span>
+                      </span>
+                    </CommandItem>
+                  )
+                }) : (
+                  <div className="px-2 py-2 text-xs text-muted-foreground">
+                    {tSync('mapping.noRemote')}
+                  </div>
+                )}
+              </CommandGroup>
+              <CommandSeparator />
               <CommandGroup heading={tFile('workspace.actions')}>
                 <CommandItem
                   value={tFile('workspace.select')}

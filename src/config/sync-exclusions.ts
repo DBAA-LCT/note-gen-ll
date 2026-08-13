@@ -18,6 +18,14 @@ export const DEFAULT_SYNC_EXCLUDE_PATTERNS: SyncExcludePattern[] = [
   { pattern: '*.lock', description: '锁定文件' },
 ]
 
+let activeWorkspaceExcludePatterns: string[] | null = null
+
+export function setActiveWorkspaceExcludePatterns(patterns: string[]) {
+  activeWorkspaceExcludePatterns = patterns
+    .map(pattern => pattern.trim().replace(/\\/g, '/'))
+    .filter(Boolean)
+}
+
 // 检查路径是否应该排除在同步之外
 export function shouldExclude(path: string): boolean {
   const excludePatterns = getExcludePatterns()
@@ -33,25 +41,31 @@ export function shouldExclude(path: string): boolean {
 
 // 通配符匹配
 function matchPattern(pattern: string, path: string): boolean {
-  // 目录模式（以 / 结尾）
-  if (pattern.endsWith('/')) {
-    return path.startsWith(pattern)
+  const normalizedPath = path.replace(/\\/g, '/').replace(/^\.\//, '')
+  const normalizedPattern = pattern.replace(/\\/g, '/').replace(/^\.\//, '')
+
+  if (normalizedPattern.includes('*')) {
+    const escaped = normalizedPattern.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    const expression = escaped
+      .replace(/\*\*/g, '__DOUBLE_STAR__')
+      .replace(/\*/g, '[^/]*')
+      .replace(/__DOUBLE_STAR__/g, '.*')
+    return new RegExp(`(^|/)${expression}($|/)`).test(normalizedPath)
   }
 
-  // 文件名模式
-  if (pattern.startsWith('*.')) {
-    const ext = pattern.slice(1) // *.tmp -> .tmp
-    return path.endsWith(ext) || path.includes(`.tmp${ext}`) // 处理 .tmp.txt 的情况
+  // 目录模式（以 / 结尾）
+  if (normalizedPattern.endsWith('/')) {
+    const directory = normalizedPattern.slice(0, -1)
+    return normalizedPath === directory || normalizedPath.startsWith(`${directory}/`)
   }
 
   // 简单字符串匹配
-  return path === pattern || path.includes(pattern)
+  return normalizedPath === normalizedPattern || normalizedPath.split('/').includes(normalizedPattern)
 }
 
 // 获取排除模式（从配置读取或使用默认值）
 export function getExcludePatterns(): string[] {
-  // TODO: 从配置读取用户自定义的排除规则
-  return DEFAULT_SYNC_EXCLUDE_PATTERNS.map(p => p.pattern)
+  return activeWorkspaceExcludePatterns || DEFAULT_SYNC_EXCLUDE_PATTERNS.map(p => p.pattern)
 }
 
 // ==================== 设置同步排除规则 ====================
@@ -125,6 +139,11 @@ export const ALWAYS_SYNC_EXCLUDED_FIELDS: string[] = [
   'workspaceHistory',
   'assetsPath',
   'workspaceSyncRepos',
+  'workspaceSyncConfigs',
+  'syncConnectorMappings',
+  'syncConnectorMappingsMigrated',
+  'syncExcludePatterns',
+  'syncAccessMode',
   'githubCustomSyncRepo',
   'giteeCustomSyncRepo',
   'gitlabCustomSyncRepo',

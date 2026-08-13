@@ -13,10 +13,13 @@ import useSyncStore from '@/stores/sync';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { InputGroup, InputGroupButton, InputGroupInput } from '@/components/ui/input-group';
 import { Item, ItemActions, ItemContent, ItemTitle } from '@/components/ui/item';
+import { saveWorkspaceProviderConfig } from '@/lib/sync/workspace-sync-config';
+import useSettingStore from '@/stores/setting';
 
 export function WebDAVSync() {
   const t = useTranslations();
   const { webdavConnected, setWebDAVConnected } = useSyncStore();
+  const workspacePath = useSettingStore(state => state.workspacePath);
 
   const [config, setConfig] = useState<WebDAVConfig>({
     url: '',
@@ -32,6 +35,7 @@ export function WebDAVSync() {
   // 初始化配置
   useEffect(() => {
     const initConfig = async () => {
+      setIsInitialized(false);
       try {
         const store = await Store.load('store.json');
         const savedConfig = await store.get<WebDAVConfig>('webdavSyncConfig');
@@ -41,13 +45,13 @@ export function WebDAVSync() {
           if (savedConfig.url && savedConfig.username && savedConfig.password) {
             testConnection(savedConfig);
           }
-        }
+        } else setConfig({ url: '', username: '', password: '', pathPrefix: '' });
       } finally {
         setIsInitialized(true);
       }
     };
     initConfig();
-  }, []);
+  }, [workspacePath]);
 
   // 测试连接
   const testConnection = async (configToTest?: WebDAVConfig) => {
@@ -74,9 +78,7 @@ export function WebDAVSync() {
 
     const timer = setTimeout(async () => {
       try {
-        const store = await Store.load('store.json');
-        await store.set('webdavSyncConfig', config);
-        await store.save();
+        await saveWorkspaceProviderConfig('webdav', config);
       } catch (error) {
         console.error('Failed to auto-save WebDAV config:', error);
       }

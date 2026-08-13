@@ -50,6 +50,7 @@ interface Events {
   'sync-content-updated': { path: string; content: string };
   'sync-push-started': { path: string };
   'sync-push-completed': { path: string; success: boolean; sha?: string };
+  'sync-mappings-changed': unknown;
   'sync-sha-mismatch': {
     path: string
     workspacePath: string

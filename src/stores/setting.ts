@@ -14,7 +14,7 @@ import type { SpeechMode } from '@/lib/speech/types'
 import { applyNoteGenDefaultConfig, loadNoteGenDefaultConfig } from '@/lib/ai/notegen-default-models-runtime'
 import { excludeBuiltInOpenAIProviders, isMainlandChinaRegion } from '@/lib/ai/provider-region-policy'
 import { enqueueAutoDataSync, isAutoDataSyncApplyingRemote } from '@/lib/sync/auto-data-sync-queue'
-import { shouldExcludeFromSync } from '@/config/sync-exclusions'
+import { setActiveWorkspaceExcludePatterns, shouldExcludeFromSync } from '@/config/sync-exclusions'
 import {
   AGENT_CORE_PROMPT_VERSION,
   isManagedAgentSystemPrompt,
@@ -22,6 +22,11 @@ import {
 import { APP_FONT_SYSTEM_VALUE, applyAppFontFamily } from '@/lib/font-settings'
 import type { AgentPermissionMode } from '@/lib/agent/types'
 import { getWorkspaceSyncRepos, setWorkspaceSyncRepo } from '@/lib/sync/workspace-repos'
+import {
+  getWorkspaceSyncConfig,
+  switchWorkspaceSyncConfig,
+  updateWorkspaceSyncConfig,
+} from '@/lib/sync/workspace-sync-config'
 import {
   DEFAULT_EDITOR_CONTENT_WIDTH,
   DEFAULT_EDITOR_LINE_HEIGHT,
@@ -212,6 +217,12 @@ interface SettingState {
   // 自动拉取相关设置
   autoPullOnOpen: boolean
   setAutoPullOnOpen: (autoPullOnOpen: boolean) => Promise<void>
+
+  syncExcludePatterns: string[]
+  setSyncExcludePatterns: (patterns: string[]) => Promise<void>
+
+  syncAccessMode: 'read-write' | 'read-only'
+  setSyncAccessMode: (mode: 'read-write' | 'read-only') => Promise<void>
 
   // Gitee 相关设置
   giteeAccessToken: string
@@ -959,9 +970,16 @@ const useSettingStore = create<SettingState>((set, get) => ({
       ? hydratedSettings.workspacePath
       : get().workspacePath
     const workspaceRepos = await getWorkspaceSyncRepos(workspacePath)
+    const workspaceSyncConfig = await getWorkspaceSyncConfig(workspacePath)
+    setActiveWorkspaceExcludePatterns(workspaceSyncConfig.excludePatterns)
 
     set({
       ...hydratedSettings,
+      primaryBackupMethod: workspaceSyncConfig.platform,
+      syncAccessMode: workspaceSyncConfig.accessMode,
+      autoSync: workspaceSyncConfig.autoSync,
+      autoPullOnOpen: workspaceSyncConfig.autoPullOnOpen,
+      syncExcludePatterns: workspaceSyncConfig.excludePatterns,
       githubCustomSyncRepo: workspaceRepos.github || '',
       giteeCustomSyncRepo: workspaceRepos.gitee || '',
       gitlabCustomSyncRepo: workspaceRepos.gitlab || '',
@@ -1195,8 +1213,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   autoSync: '5',
   setAutoSync: async (autoSync: string) => {
     set({ autoSync })
-    const store = await Store.load('store.json');
-    await store.set('autoSync', autoSync)
+    await updateWorkspaceSyncConfig({ autoSync })
   },
 
   autoRecordSyncEnabled: true,
@@ -1256,8 +1273,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
   autoPullOnOpen: true,
   setAutoPullOnOpen: async (autoPullOnOpen: boolean) => {
     set({ autoPullOnOpen })
-    const store = await Store.load('store.json');
-    await store.set('autoPullOnOpen', autoPullOnOpen)
+    await updateWorkspaceSyncConfig({ autoPullOnOpen })
 
     // 同步更新 sync-manager 的配置
     try {
@@ -1266,6 +1282,34 @@ const useSettingStore = create<SettingState>((set, get) => ({
       await manager.updateConfig({ autoPullOnOpen })
     } catch {
       // 静默处理
+    }
+  },
+
+  syncExcludePatterns: ['.notegen/', '*.tmp', '*.bak', '*.swp', 'Thumbs.db', '.DS_Store', '*.lock'],
+  setSyncExcludePatterns: async (patterns: string[]) => {
+    const normalized = Array.from(new Set(patterns.map(pattern => pattern.trim()).filter(Boolean)))
+    setActiveWorkspaceExcludePatterns(normalized)
+    set({ syncExcludePatterns: normalized })
+    await updateWorkspaceSyncConfig({ excludePatterns: normalized })
+  },
+
+  syncAccessMode: 'read-write',
+  setSyncAccessMode: async (syncAccessMode) => {
+    const [{ getSyncPushQueue }, autoDataSyncQueue] = await Promise.all([
+      import('@/lib/sync/sync-push-queue'),
+      import('@/lib/sync/auto-data-sync-queue'),
+    ])
+    const syncPushQueue = getSyncPushQueue()
+    await Promise.all([
+      syncPushQueue.prepareForWorkspaceSwitch(),
+      autoDataSyncQueue.prepareAutoDataSyncForRepositoryChange(),
+    ])
+    try {
+      await updateWorkspaceSyncConfig({ accessMode: syncAccessMode })
+      set({ syncAccessMode })
+    } finally {
+      syncPushQueue.finishWorkspaceSwitch()
+      autoDataSyncQueue.finishAutoDataSyncRepositoryChange()
     }
   },
 
@@ -1285,16 +1329,29 @@ const useSettingStore = create<SettingState>((set, get) => ({
     try {
       const { invalidateMemoryCache } = await import('@/lib/memory/cache-version')
       invalidateMemoryCache()
-      const store = await Store.load('store.json');
-      await store.set('workspacePath', path)
+      const previousWorkspacePath = get().workspacePath
+      const workspaceSyncConfig = await switchWorkspaceSyncConfig(previousWorkspacePath, path)
       const workspaceRepos = await getWorkspaceSyncRepos(path)
+      setActiveWorkspaceExcludePatterns(workspaceSyncConfig.excludePatterns)
       set({
         workspacePath: path,
+        primaryBackupMethod: workspaceSyncConfig.platform,
+        syncAccessMode: workspaceSyncConfig.accessMode,
+        autoSync: workspaceSyncConfig.autoSync,
+        autoPullOnOpen: workspaceSyncConfig.autoPullOnOpen,
+        syncExcludePatterns: workspaceSyncConfig.excludePatterns,
         githubCustomSyncRepo: workspaceRepos.github || '',
         giteeCustomSyncRepo: workspaceRepos.gitee || '',
         gitlabCustomSyncRepo: workspaceRepos.gitlab || '',
         giteaCustomSyncRepo: workspaceRepos.gitea || '',
       })
+
+      try {
+        const { getSyncManager } = await import('@/lib/sync/sync-manager')
+        await getSyncManager().updateConfig({ autoPullOnOpen: workspaceSyncConfig.autoPullOnOpen })
+      } catch {
+        // The manager may not be initialized yet during application startup.
+      }
 
       const { default: useSyncStore } = await import('@/stores/sync')
       const { SyncStateEnum } = await import('@/lib/sync/github.types')
@@ -1455,9 +1512,7 @@ const useSettingStore = create<SettingState>((set, get) => ({
     ])
 
     try {
-      const store = await Store.load('store.json')
-      await store.set('primaryBackupMethod', method)
-      await store.save()
+      await updateWorkspaceSyncConfig({ platform: method })
       set({ primaryBackupMethod: method })
     } finally {
       syncPushQueue.finishWorkspaceSwitch()

@@ -1,7 +1,6 @@
 import { Store } from '@tauri-apps/plugin-store'
 
 import { SyncStateEnum } from '@/lib/sync/github.types'
-import { getOptionalSyncRepoName } from '@/lib/sync/repo-utils'
 import { testS3Connection } from '@/lib/sync/s3'
 import { testWebDAVConnection } from '@/lib/sync/webdav'
 import { testCloudFolderConnection } from '@/lib/sync/cloud-folder'
@@ -10,33 +9,49 @@ import type { CloudFolderConfig, S3Config, SyncPlatform, WebDAVConfig } from '@/
 
 type GitSyncPlatform = 'github' | 'gitee' | 'gitlab' | 'gitea'
 
-interface ProviderCheckTarget {
-  workspacePath: string
-  repo: string
-}
+export async function testGitSyncProviderConnection(platform: GitSyncPlatform): Promise<boolean> {
+  const syncStore = useSyncStore.getState()
 
-async function getProviderCheckTarget(store: Store, platform: GitSyncPlatform): Promise<ProviderCheckTarget> {
-  return {
-    workspacePath: await store.get<string>('workspacePath') || '',
-    repo: await getOptionalSyncRepoName(platform),
+  try {
+    switch (platform) {
+      case 'github': {
+        const { getUserInfo } = await import('@/lib/sync/github')
+        const response = await getUserInfo()
+        if (!response || !response.data) return false
+        syncStore.setUserInfo(response.data)
+        return true
+      }
+      case 'gitee': {
+        const { getUserInfo } = await import('@/lib/sync/gitee')
+        const user = await getUserInfo()
+        if (!user) return false
+        syncStore.setGiteeUserInfo(user)
+        return true
+      }
+      case 'gitlab': {
+        const { getUserInfo } = await import('@/lib/sync/gitlab')
+        const user = await getUserInfo()
+        if (!user) return false
+        syncStore.setGitlabUserInfo(user)
+        return true
+      }
+      case 'gitea': {
+        const { getUserInfo } = await import('@/lib/sync/gitea')
+        const user = await getUserInfo()
+        if (!user) return false
+        syncStore.setGiteaUserInfo(user)
+        return true
+      }
+    }
+  } catch (error) {
+    console.error(`Failed to test ${platform} connection:`, error)
+    return false
   }
-}
-
-async function isProviderCheckTargetCurrent(
-  store: Store,
-  platform: GitSyncPlatform,
-  target: ProviderCheckTarget,
-) {
-  const currentWorkspacePath = await store.get<string>('workspacePath') || ''
-  if (currentWorkspacePath !== target.workspacePath) return false
-  return await getOptionalSyncRepoName(platform) === target.repo
 }
 
 async function checkGithubStatus(store: Store) {
   const syncStore = useSyncStore.getState()
   const accessToken = await store.get<string>('accessToken')
-  const target = await getProviderCheckTarget(store, 'github')
-  if (!await isProviderCheckTargetCurrent(store, 'github', target)) return
 
   syncStore.setSyncRepoInfo(undefined)
   if (!accessToken) {
@@ -46,33 +61,22 @@ async function checkGithubStatus(store: Store) {
 
   syncStore.setSyncRepoState(SyncStateEnum.checking)
   try {
-    const { checkSyncRepoState, getUserInfo } = await import('@/lib/sync/github')
+    const { getUserInfo } = await import('@/lib/sync/github')
     const userResponse = await getUserInfo()
-    if (userResponse) syncStore.setUserInfo(userResponse.data)
-    if (!await isProviderCheckTargetCurrent(store, 'github', target)) return
-
-    if (!target.repo) {
-      syncStore.setSyncRepoState(SyncStateEnum.fail)
-      return
+    if (!userResponse || !('data' in userResponse) || !userResponse.data) {
+      throw new Error('GitHub connection is unavailable')
     }
-    const repo = await checkSyncRepoState(target.repo)
-    if (!await isProviderCheckTargetCurrent(store, 'github', target)) return
-    syncStore.setSyncRepoInfo(repo)
-    syncStore.setSyncRepoState(repo ? SyncStateEnum.success : SyncStateEnum.fail)
+    syncStore.setUserInfo(userResponse.data)
+    syncStore.setSyncRepoState(SyncStateEnum.success)
   } catch (error) {
     console.error('Failed to check GitHub status:', error)
-    if (await isProviderCheckTargetCurrent(store, 'github', target)) {
-      syncStore.setSyncRepoState(SyncStateEnum.fail)
-    }
+    syncStore.setSyncRepoState(SyncStateEnum.fail)
   }
 }
 
 async function checkGiteeStatus(store: Store) {
   const syncStore = useSyncStore.getState()
   const accessToken = await store.get<string>('giteeAccessToken')
-  const target = await getProviderCheckTarget(store, 'gitee')
-  if (!await isProviderCheckTargetCurrent(store, 'gitee', target)) return
-
   syncStore.setGiteeSyncRepoInfo(undefined)
   if (!accessToken) {
     syncStore.setGiteeSyncRepoState(SyncStateEnum.fail)
@@ -81,33 +85,20 @@ async function checkGiteeStatus(store: Store) {
 
   syncStore.setGiteeSyncRepoState(SyncStateEnum.checking)
   try {
-    const { checkSyncRepoState, getUserInfo } = await import('@/lib/sync/gitee')
+    const { getUserInfo } = await import('@/lib/sync/gitee')
     const userInfo = await getUserInfo()
+    if (!userInfo) throw new Error('Gitee connection is unavailable')
     syncStore.setGiteeUserInfo(userInfo)
-    if (!await isProviderCheckTargetCurrent(store, 'gitee', target)) return
-
-    if (!target.repo) {
-      syncStore.setGiteeSyncRepoState(SyncStateEnum.fail)
-      return
-    }
-    const repo = await checkSyncRepoState(target.repo)
-    if (!await isProviderCheckTargetCurrent(store, 'gitee', target)) return
-    syncStore.setGiteeSyncRepoInfo(repo)
-    syncStore.setGiteeSyncRepoState(repo ? SyncStateEnum.success : SyncStateEnum.fail)
+    syncStore.setGiteeSyncRepoState(SyncStateEnum.success)
   } catch (error) {
     console.error('Failed to check Gitee status:', error)
-    if (await isProviderCheckTargetCurrent(store, 'gitee', target)) {
-      syncStore.setGiteeSyncRepoState(SyncStateEnum.fail)
-    }
+    syncStore.setGiteeSyncRepoState(SyncStateEnum.fail)
   }
 }
 
 async function checkGitlabStatus(store: Store) {
   const syncStore = useSyncStore.getState()
   const accessToken = await store.get<string>('gitlabAccessToken')
-  const target = await getProviderCheckTarget(store, 'gitlab')
-  if (!await isProviderCheckTargetCurrent(store, 'gitlab', target)) return
-
   syncStore.setGitlabSyncProjectInfo(undefined)
   if (!accessToken) {
     syncStore.setGitlabSyncProjectState(SyncStateEnum.fail)
@@ -116,33 +107,20 @@ async function checkGitlabStatus(store: Store) {
 
   syncStore.setGitlabSyncProjectState(SyncStateEnum.checking)
   try {
-    const { checkSyncProjectState, getUserInfo } = await import('@/lib/sync/gitlab')
+    const { getUserInfo } = await import('@/lib/sync/gitlab')
     const userInfo = await getUserInfo()
+    if (!userInfo) throw new Error('GitLab connection is unavailable')
     syncStore.setGitlabUserInfo(userInfo)
-    if (!await isProviderCheckTargetCurrent(store, 'gitlab', target)) return
-
-    if (!target.repo) {
-      syncStore.setGitlabSyncProjectState(SyncStateEnum.fail)
-      return
-    }
-    const project = await checkSyncProjectState(target.repo)
-    if (!await isProviderCheckTargetCurrent(store, 'gitlab', target)) return
-    syncStore.setGitlabSyncProjectInfo(project ?? undefined)
-    syncStore.setGitlabSyncProjectState(project ? SyncStateEnum.success : SyncStateEnum.fail)
+    syncStore.setGitlabSyncProjectState(SyncStateEnum.success)
   } catch (error) {
     console.error('Failed to check GitLab status:', error)
-    if (await isProviderCheckTargetCurrent(store, 'gitlab', target)) {
-      syncStore.setGitlabSyncProjectState(SyncStateEnum.fail)
-    }
+    syncStore.setGitlabSyncProjectState(SyncStateEnum.fail)
   }
 }
 
 async function checkGiteaStatus(store: Store) {
   const syncStore = useSyncStore.getState()
   const accessToken = await store.get<string>('giteaAccessToken')
-  const target = await getProviderCheckTarget(store, 'gitea')
-  if (!await isProviderCheckTargetCurrent(store, 'gitea', target)) return
-
   syncStore.setGiteaSyncRepoInfo(undefined)
   if (!accessToken) {
     syncStore.setGiteaSyncRepoState(SyncStateEnum.fail)
@@ -151,24 +129,14 @@ async function checkGiteaStatus(store: Store) {
 
   syncStore.setGiteaSyncRepoState(SyncStateEnum.checking)
   try {
-    const { checkSyncRepoState, getUserInfo } = await import('@/lib/sync/gitea')
+    const { getUserInfo } = await import('@/lib/sync/gitea')
     const userInfo = await getUserInfo()
+    if (!userInfo) throw new Error('Gitea connection is unavailable')
     syncStore.setGiteaUserInfo(userInfo)
-    if (!await isProviderCheckTargetCurrent(store, 'gitea', target)) return
-
-    if (!target.repo) {
-      syncStore.setGiteaSyncRepoState(SyncStateEnum.fail)
-      return
-    }
-    const repo = await checkSyncRepoState(target.repo)
-    if (!await isProviderCheckTargetCurrent(store, 'gitea', target)) return
-    syncStore.setGiteaSyncRepoInfo(repo ?? undefined)
-    syncStore.setGiteaSyncRepoState(repo ? SyncStateEnum.success : SyncStateEnum.fail)
+    syncStore.setGiteaSyncRepoState(SyncStateEnum.success)
   } catch (error) {
     console.error('Failed to check Gitea status:', error)
-    if (await isProviderCheckTargetCurrent(store, 'gitea', target)) {
-      syncStore.setGiteaSyncRepoState(SyncStateEnum.fail)
-    }
+    syncStore.setGiteaSyncRepoState(SyncStateEnum.fail)
   }
 }
 

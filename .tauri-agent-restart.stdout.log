@@ -1,0 +1,231 @@
+
+> note-goal@0.1.0 tauri C:\Users\Leonard\Documents\note-gen-ll
+> tauri "dev"
+
+
+> note-goal@0.1.0 dev C:\Users\Leonard\Documents\note-gen-ll
+> next dev --turbopack -p 3456 -H 0.0.0.0
+
+   ▲ Next.js 15.3.2 (Turbopack)
+   - Local:        http://localhost:3456
+   - Network:      http://0.0.0.0:3456
+   - Experiments (use with caution):
+     · turbo
+
+ ✓ Starting...
+ ✓ Ready in 17.8s
+ ○ Compiling / ...
+ ✓ Compiled / in 102.3s
+ GET / 200 in 104411ms
+ ○ Compiling /favicon.ico ...
+ GET /favicon.ico 200 in 6661ms
+ ✓ Compiled /favicon.ico in 73.6s
+ GET /core/main 200 in 73481ms
+ GET / 200 in 695ms
+ GET /favicon.ico 200 in 658ms
+ GET /core/main 200 in 773ms
+ GET / 200 in 692ms
+ GET /favicon.ico 200 in 6184ms
+ GET /core/main 200 in 8288ms
+ ✓ Compiled in 36.3s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 11455ms
+ GET /favicon.ico 200 in 580ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 684ms
+ ✓ Compiled in 20.4s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 7383ms
+ GET /favicon.ico 200 in 473ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 442ms
+ ✓ Compiled in 23.7s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 7745ms
+ GET /favicon.ico 200 in 477ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 492ms
+ ✓ Compiled in 37.3s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 7275ms
+ GET /favicon.ico 200 in 598ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 638ms
+ GET / 200 in 1540ms
+ GET /favicon.ico 200 in 1500ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 1539ms
+ GET /core/main 200 in 14810ms
+ ✓ Compiled in 59.9s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 13510ms
+ GET /favicon.ico 200 in 545ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 657ms
+ GET / 200 in 1451ms
+ GET /favicon.ico 200 in 637ms
+ GET /core/main 200 in 10704ms
+ ✓ Compiled in 31.6s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 11189ms
+ GET /favicon.ico 200 in 1287ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 1303ms
+ ✓ Compiled in 42s
+ ✓ Compiled in 61s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 7852ms
+ GET /favicon.ico 200 in 666ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 985ms
+ GET / 200 in 574ms
+ GET /favicon.ico 200 in 576ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 600ms
+ ✓ Compiled in 48.2s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 6251ms
+ GET /favicon.ico 200 in 905ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 721ms
+ ✓ Compiled in 23.4s
+ ○ Compiling /core/main ...
+ ✓ Compiled /core/main in 53.2s
+ ✓ Compiled in 109.6s
+ GET / 200 in 64897ms
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 68541ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 5414ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 1824ms
+ GET /core/main 200 in 5328ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 852ms
+ GET /favicon.ico 200 in 592ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 703ms
+ ○ Compiling /core/setting/sync ...
+ ✓ Compiled /core/setting/sync in 48.2s
+ GET /core/setting/sync 200 in 48514ms
+ ✓ Compiled in 35.8s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 9415ms
+ GET /favicon.ico 200 in 763ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 773ms
+ ✓ Compiled in 25.2s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 5427ms
+ GET /favicon.ico 200 in 641ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 1005ms
+ ✓ Compiled in 27.5s
+ GET /core/setting/sync 200 in 33394ms
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 9739ms
+ GET /favicon.ico 200 in 632ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 754ms
+ ○ Compiling /core/main ...
+ ✓ Compiled in 83.7s
+ ✓ Compiled /core/main in 16.7s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 25332ms
+ GET /core/main 200 in 9376ms
+ GET /favicon.ico 200 in 700ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 724ms
+ ✓ Compiled in 118.1s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 9492ms
+ GET /favicon.ico 200 in 776ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 1018ms
+ ✓ Compiled in 25.4s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 2328ms
+ GET /favicon.ico 200 in 488ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 520ms
+ GET / 200 in 427ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 455ms
+ GET / 200 in 1446ms
+ GET /favicon.ico 200 in 689ms
+ GET /core/main 200 in 7876ms
+ ✓ Compiled in 19.3s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 4998ms
+ GET /favicon.ico 200 in 668ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 641ms
+ GET / 200 in 780ms
+ GET /favicon.ico 200 in 544ms
+ GET /core/main 200 in 1203ms
+ GET / 200 in 835ms
+ GET /favicon.ico 200 in 6196ms
+ GET /core/main 200 in 6661ms
+ ✓ Compiled in 28.8s
+ ○ Compiling /core/main ...
+ ✓ Compiled in 64.7s
+ ✓ Compiled /core/main in 35.9s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 46302ms
+ GET /core/main 200 in 11079ms
+ GET /favicon.ico 200 in 652ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 706ms
+ ✓ Compiled in 29.2s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 5305ms
+ GET /favicon.ico 200 in 558ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 556ms
+ ✓ Compiled in 35.4s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 7923ms
+ GET /favicon.ico 200 in 690ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 678ms
+ ✓ Compiled in 32.5s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 7849ms
+ GET /favicon.ico 200 in 568ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 727ms
+ ○ Compiling /core/main ...
+ ✓ Compiled in 72.8s
+ ✓ Compiled /core/main in 29.5s
+ GET /core/main 200 in 33414ms
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 4532ms
+ GET /favicon.ico 200 in 594ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 702ms
+ ○ Compiling /core/setting/sync ...
+ ✓ Compiled /core/setting/sync in 4.3s
+ GET /core/setting/sync 200 in 6010ms
+ ○ Compiling /core/main ...
+ ✓ Compiled in 199s
+ ✓ Compiled /core/main in 26.8s
+ GET /core/main 200 in 31378ms
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 5196ms
+ GET /favicon.ico 200 in 547ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 734ms
+ ✓ Compiled in 26.8s
+ ✓ Compiled in 16.2s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 4763ms
+ GET /favicon.ico 200 in 557ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 628ms
+ ✓ Compiled in 29.1s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 4571ms
+ GET /favicon.ico 200 in 668ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 733ms
+ ✓ Compiled /core/setting/sync in 138ms
+ GET /core/setting/sync 200 in 495ms
+ ✓ Compiled in 49.3s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 3488ms
+ GET /favicon.ico 200 in 565ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 682ms
+ ✓ Compiled in 19.1s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 4731ms
+ GET /favicon.ico 200 in 498ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 589ms
+ ○ Compiling /core/main ...
+ ✓ Compiled in 51.4s
+ ✓ Compiled /core/main in 17.6s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 30134ms
+ GET /core/main 200 in 7830ms
+ GET /favicon.ico 200 in 637ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 911ms
+ ✓ Compiled in 37.4s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 33909ms
+ GET /favicon.ico 200 in 747ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 703ms
+ ✓ Compiled in 23.7s
+Warning: Please use the `legacy` build in Node.js environments.
+ GET /core/main 200 in 12920ms
+ GET /favicon.ico 200 in 670ms
+ GET /favicon.ico?favicon.ea8722f4.ico 200 in 949ms
+ ✓ Compiled in 23.5s

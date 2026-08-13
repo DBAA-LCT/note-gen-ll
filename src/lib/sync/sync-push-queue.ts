@@ -1,13 +1,11 @@
 'use client'
 
 import { Store } from '@tauri-apps/plugin-store'
-import { getSyncRepoName } from '@/lib/sync/repo-utils'
 import { getWorkspacePath, getFilePathOptions } from '@/lib/workspace'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import emitter from '@/lib/emitter'
 import { pullRemoteFile, setLocalRecordedSha, getLocalRecordedSha } from './auto-sync'
 import { getRemoteFileInfo } from './auto-sync'
-import { isSyncConfigured } from './sync-manager'
 import useSettingStore from '@/stores/setting'
 import useSyncStore from '@/stores/sync'
 import { CloudFolderConfig, S3Config, WebDAVConfig } from '@/types/sync'
@@ -15,6 +13,11 @@ import { debugSyncPerf } from './remote-file'
 import { generateGitSyncCommitMessage } from './commit-message'
 import { getSyncMetadataKey } from './sync-context'
 import { supportsCloudFolderWorkspace } from './cloud-folder'
+import {
+  resolvePrimarySyncMapping,
+  resolveSyncMappings,
+  type ResolvedSyncMapping,
+} from './connector-mappings'
 
 type SyncProvider = 'gitee' | 'github' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
 
@@ -201,11 +204,6 @@ class SyncPushQueue {
    * 防抖调度 - 用户停止输入后执行推送
    */
   private scheduleFlush() {
-    // 如果自动同步被禁用，直接返回
-    if (!this.IDLE_THRESHOLD) {
-      return
-    }
-
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer)
     }
@@ -214,7 +212,7 @@ class SyncPushQueue {
       const now = Date.now()
       const timeSinceInput = now - this.lastInputTime
 
-      if (timeSinceInput >= this.IDLE_THRESHOLD) {
+      if (timeSinceInput >= (this.IDLE_THRESHOLD || 10000)) {
         // 用户停止输入超过等待时间，执行推送
         this.flush()
       } else {
@@ -232,11 +230,6 @@ class SyncPushQueue {
    */
   private async flush() {
     if (this.isProcessing || this.queue.length === 0) {
-      return
-    }
-
-    if (!await isSyncConfigured()) {
-      this.clear()
       return
     }
 
@@ -291,7 +284,30 @@ class SyncPushQueue {
       && this.workspaceSwitchPauseDepth === 0
   }
 
-  private async pushToRemote(path: string, task: PushTask): Promise<{ success: boolean; sha?: string }> {
+  private async pushToRemote(
+    path: string,
+    task: PushTask,
+    selectedMapping?: ResolvedSyncMapping,
+  ): Promise<{ success: boolean; sha?: string }> {
+    if (!selectedMapping) {
+      const mappings = (await resolveSyncMappings(path)).filter(mapping => (
+        mapping.accessMode !== 'read-only' && mapping.syncMode === 'automatic'
+      ))
+      if (mappings.length > 1) {
+        const results = []
+        for (const mapping of mappings) results.push(await this.pushToRemote(path, task, mapping))
+        return {
+          success: results.every(result => result.success),
+          sha: results.find(result => result.sha)?.sha,
+        }
+      }
+      selectedMapping = mappings[0]
+    }
+    const mapping = selectedMapping
+    if (!mapping || mapping.accessMode === 'read-only' || mapping.syncMode !== 'automatic') {
+      return { success: false }
+    }
+    const remotePath = mapping.remoteFilePath
     const maxRetries = 3
     const syncStartedAt = getPerfNow()
     let previousPerfAt = syncStartedAt
@@ -308,10 +324,6 @@ class SyncPushQueue {
       previousPerfAt = now
     }
 
-    if (!await isSyncConfigured()) {
-      logPerf('skipped', { reason: 'sync-not-configured' })
-      return { success: false }
-    }
     const taskSyncMetadataKey = await getSyncMetadataKey(path)
     if (!this.isTaskCurrent(task)) return { success: false }
 
@@ -322,11 +334,10 @@ class SyncPushQueue {
           attempt,
           maxRetries,
         })
-        const store = await Store.load('store.json')
-        const provider = (await store.get<string>('primaryBackupMethod') || 'github') as SyncProvider
+        const provider = mapping.platform as SyncProvider
         providerForLog = provider
         const repo = (provider !== 's3' && provider !== 'webdav' && provider !== 'cloudFolder')
-          ? await getSyncRepoName(provider)
+          ? mapping.remoteTarget
           : undefined
         logPerf('loadConfig', {
           attempt,
@@ -415,7 +426,7 @@ class SyncPushQueue {
             const githubModule = await import('@/lib/sync/github') as any
             logPerf('loadProviderModule', { attempt, module: 'github' })
             // 每次尝试都重新获取远程 SHA，因为远程可能在变化
-            const fileInfo = await githubModule.getFiles({ path, repo })
+            const fileInfo = await githubModule.getFiles({ path: remotePath, repo })
             logPerf('getRemoteFile', {
               attempt,
               isDirectory: Array.isArray(fileInfo),
@@ -443,7 +454,7 @@ class SyncPushQueue {
               sha: fileInfo?.sha,
               message: commitMessage,
               repo,
-              path
+              path: remotePath
             })
             logPerf('uploadFile', {
               attempt,
@@ -461,7 +472,7 @@ class SyncPushQueue {
             const giteeModule = await import('@/lib/sync/gitee') as any
             logPerf('loadProviderModule', { attempt, module: 'gitee' })
             // 每次尝试都重新获取远程 SHA
-            const fileInfo = await giteeModule.getFiles({ path, repo})
+            const fileInfo = await giteeModule.getFiles({ path: remotePath, repo})
             logPerf('getRemoteFile', {
               attempt,
               isDirectory: Array.isArray(fileInfo),
@@ -489,7 +500,7 @@ class SyncPushQueue {
               sha: fileInfo?.sha,
               message: commitMessage,
               repo,
-              path
+              path: remotePath
             })
             logPerf('uploadFile', {
               attempt,
@@ -508,7 +519,7 @@ class SyncPushQueue {
             const gitlabModule = await import('@/lib/sync/gitlab') as any
             logPerf('loadProviderModule', { attempt, module: 'gitlab' })
             // 先获取远程文件的 SHA（blob_id），uploadFile 会用它获取 last_commit_id
-            const fileInfo = await gitlabModule.getFiles({ path, repo })
+            const fileInfo = await gitlabModule.getFiles({ path: remotePath, repo })
             logPerf('getRemoteFile', {
               attempt,
               isDirectory: Array.isArray(fileInfo),
@@ -531,7 +542,7 @@ class SyncPushQueue {
               sha: fileInfo?.sha, // GitLab 会用 sha 获取 last_commit_id
               message: commitMessage,
               repo,
-              path
+              path: remotePath
             })
             logPerf('uploadFile', {
               attempt,
@@ -553,7 +564,7 @@ class SyncPushQueue {
             const giteaModule = await import('@/lib/sync/gitea') as any
             logPerf('loadProviderModule', { attempt, module: 'gitea' })
             // 先获取远程文件的 SHA
-            const fileInfo = await giteaModule.getFiles({ path, repo })
+            const fileInfo = await giteaModule.getFiles({ path: remotePath, repo })
             logPerf('getRemoteFile', {
               attempt,
               isDirectory: Array.isArray(fileInfo),
@@ -576,7 +587,7 @@ class SyncPushQueue {
               sha: fileInfo?.sha, // 传递 SHA 以便 Gitea 进行冲突检测
               message: commitMessage,
               repo,
-              path
+              path: remotePath
             })
             logPerf('uploadFile', {
               attempt,
@@ -597,6 +608,7 @@ class SyncPushQueue {
           case 's3': {
             const s3Module = await import('@/lib/sync/s3') as any
             const s3Config = await getS3Config()
+            if (s3Config) s3Config.bucket = mapping.remoteTarget || s3Config.bucket
             logPerf('loadProviderModule', { attempt, module: 's3', hasConfig: Boolean(s3Config) })
             if (!s3Config) {
               console.warn('[SyncPushQueue] S3 未配置')
@@ -617,7 +629,7 @@ class SyncPushQueue {
             })
 
             // S3 不需要 SHA 检查，直接上传
-            const result = await s3Module.s3Upload(s3Config, path, content, proxy)
+            const result = await s3Module.s3Upload(s3Config, remotePath, content, proxy)
             logPerf('uploadFile', {
               attempt,
               hasResult: Boolean(result),
@@ -636,6 +648,7 @@ class SyncPushQueue {
           case 'webdav': {
             const webdavModule = await import('@/lib/sync/webdav') as any
             const webdavConfig = await getWebDAVConfig()
+            if (webdavConfig) webdavConfig.url = mapping.remoteTarget || webdavConfig.url
             logPerf('loadProviderModule', { attempt, module: 'webdav', hasConfig: Boolean(webdavConfig) })
             if (!webdavConfig) {
               console.warn('[SyncPushQueue] WebDAV 未配置')
@@ -656,7 +669,7 @@ class SyncPushQueue {
             })
 
             // WebDAV 不需要 SHA 检查，直接上传
-            const result = await webdavModule.webdavUpload(webdavConfig, path, content, proxy)
+            const result = await webdavModule.webdavUpload(webdavConfig, remotePath, content, proxy)
             logPerf('uploadFile', {
               attempt,
               hasResult: Boolean(result),
@@ -674,12 +687,13 @@ class SyncPushQueue {
           }
           case 'cloudFolder': {
             const config = await getCloudFolderWorkspaceConfig()
+            if (config) config.path = mapping.remoteTarget || config.path
             if (!config) {
               emitter.emit('sync-push-completed', { path, success: false })
               return { success: false }
             }
             const { androidCloudFolderWorkspaceUpload } = await import('@/lib/sync/cloud-folder')
-            const result = await androidCloudFolderWorkspaceUpload(config, path, content)
+            const result = await androidCloudFolderWorkspaceUpload(config, remotePath, content)
             success = true
             uploadedSha = result.etag
             break
@@ -823,6 +837,9 @@ class SyncPushQueue {
     expectedWorkspacePath = useSettingStore.getState().workspacePath,
   ): Promise<{ success: boolean; sha?: string }> {
     try {
+      const mapping = await resolvePrimarySyncMapping(path)
+      if (!mapping || mapping.accessMode === 'read-only') return { success: false }
+      const remotePath = mapping.remoteFilePath
       if (
         this.workspaceSwitchPauseDepth > 0
         || expectedWorkspacePath !== useSettingStore.getState().workspacePath
@@ -830,14 +847,10 @@ class SyncPushQueue {
         return { success: false }
       }
 
-      if (!await isSyncConfigured()) {
-        return { success: false }
-      }
-
       const store = await Store.load('store.json')
-      const provider = (await store.get<string>('primaryBackupMethod') || 'github') as SyncProvider
+      const provider = mapping.platform as SyncProvider
       const repo = (provider !== 's3' && provider !== 'webdav' && provider !== 'cloudFolder')
-        ? await getSyncRepoName(provider)
+        ? mapping.remoteTarget
         : undefined
 
       // 从磁盘读取最新内容
@@ -866,7 +879,7 @@ class SyncPushQueue {
             sha: undefined, // 强制上传，不带 sha
             message: commitMessage,
             repo,
-            path
+            path: remotePath
           })
           if (result && result.data) {
             success = true
@@ -883,7 +896,7 @@ class SyncPushQueue {
             sha: undefined, // 强制上传
             message: commitMessage,
             repo,
-            path
+            path: remotePath
           })
           if (result && result.data) {
             success = true
@@ -900,7 +913,7 @@ class SyncPushQueue {
             sha: undefined,
             message: commitMessage,
             repo,
-            path
+            path: remotePath
           })
           success = true
           uploadedSha = await this.getRemoteSha(path)
@@ -914,7 +927,7 @@ class SyncPushQueue {
             sha: undefined,
             message: commitMessage,
             repo,
-            path
+            path: remotePath
           })
           success = true
           uploadedSha = await this.getRemoteSha(path)
@@ -923,6 +936,7 @@ class SyncPushQueue {
         case 's3': {
           const s3Module = await import('@/lib/sync/s3') as any
           const s3Config = await getS3Config()
+          if (s3Config) s3Config.bucket = mapping.remoteTarget || s3Config.bucket
           if (!s3Config) {
             console.warn('[SyncPushQueue] S3 未配置')
             emitter.emit('sync-push-completed', { path, success: false })
@@ -933,7 +947,7 @@ class SyncPushQueue {
           const proxy = await getProxyConfig()
 
           // S3 强制推送：直接上传，不检查 ETag
-          const result = await s3Module.s3Upload(s3Config, path, content, proxy)
+          const result = await s3Module.s3Upload(s3Config, remotePath, content, proxy)
           if (result && result.etag) {
             success = true
             uploadedSha = result.etag
@@ -945,6 +959,7 @@ class SyncPushQueue {
         case 'webdav': {
           const webdavModule = await import('@/lib/sync/webdav') as any
           const webdavConfig = await getWebDAVConfig()
+          if (webdavConfig) webdavConfig.url = mapping.remoteTarget || webdavConfig.url
           if (!webdavConfig) {
             console.warn('[SyncPushQueue] WebDAV 未配置')
             emitter.emit('sync-push-completed', { path, success: false })
@@ -955,7 +970,7 @@ class SyncPushQueue {
           const proxy = await getProxyConfig()
 
           // WebDAV 强制推送：直接上传，不检查 ETag
-          const result = await webdavModule.webdavUpload(webdavConfig, path, content, proxy)
+          const result = await webdavModule.webdavUpload(webdavConfig, remotePath, content, proxy)
           if (result && result.etag) {
             success = true
             uploadedSha = result.etag
@@ -966,12 +981,13 @@ class SyncPushQueue {
         }
         case 'cloudFolder': {
           const config = await getCloudFolderWorkspaceConfig()
+          if (config) config.path = mapping.remoteTarget || config.path
           if (!config) {
             emitter.emit('sync-push-completed', { path, success: false })
             return { success: false }
           }
           const { androidCloudFolderWorkspaceUpload } = await import('@/lib/sync/cloud-folder')
-          const result = await androidCloudFolderWorkspaceUpload(config, path, content)
+          const result = await androidCloudFolderWorkspaceUpload(config, remotePath, content)
           success = true
           uploadedSha = result.etag
           break
