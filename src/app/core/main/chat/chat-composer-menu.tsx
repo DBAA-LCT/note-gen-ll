@@ -294,6 +294,9 @@ export const ChatComposerMenu = forwardRef<
   const commandMenuLabel = agentEngine === "native"
     ? t("commands.title")
     : `${getAgentEngineName(agentEngine)} 指令`
+  const emptyMessage = mode === "command" && agentEngine === "codex"
+    ? "当前接入使用 Codex exec 模式，不支持 Codex 交互界面的斜杠指令；模型和权限请使用输入框工具栏。"
+    : t("empty")
 
   return (
     <div
@@ -307,7 +310,7 @@ export const ChatComposerMenu = forwardRef<
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="px-2 py-4 text-center text-xs text-muted-foreground">
-          {t("empty")}
+          {emptyMessage}
         </div>
       ) : (
         <div className="flex flex-col gap-0.5">

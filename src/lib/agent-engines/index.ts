@@ -76,7 +76,7 @@ export async function listAgentEngineCommands(engine: ExternalAgentEngineId, exe
       claude: [['context', '查看 Claude Code 上下文占用'], ['init', '初始化 CLAUDE.md'], ['review', '审查当前代码改动'], ['security-review', '执行安全审查'], ['usage', '查看 Claude Code 用量']],
       workbuddy: [['help', '查看 WorkBuddy 帮助'], ['doctor', '检查 WorkBuddy 环境'], ['status', '查看当前状态'], ['context', '查看上下文占用'], ['init', '初始化项目配置']],
       opencode: [['init', '初始化 OpenCode 项目配置'], ['undo', '撤销上一次修改'], ['redo', '重做上一次修改'], ['share', '分享当前会话'], ['help', '查看 OpenCode 帮助']],
-      codex: [['status', '查看 Codex 状态'], ['review', '审查当前代码改动'], ['init', '初始化 AGENTS.md'], ['diff', '查看工作区差异'], ['compact', '压缩当前会话上下文']],
+      codex: [],
     }
     return fallback[engine].map(([name, description]) => ({ name, description, source: 'builtin' }))
   }

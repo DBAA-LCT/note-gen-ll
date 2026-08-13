@@ -490,7 +490,9 @@ pub async fn list_agent_engine_commands(engine: String, executable: Option<Strin
         }
         "workbuddy" => &["help", "doctor", "status", "context", "cost", "init", "compact", "insights"],
         "opencode" => &["init", "undo", "redo", "share", "help"],
-        "codex" => &["status", "model", "permissions", "review", "init", "compact", "diff", "mcp"],
+        // NoteGoal currently invokes `codex exec`, whose non-interactive prompt
+        // does not expose the slash commands implemented by the Codex TUI.
+        "codex" => &[],
         _ => &[],
     };
     for name in builtin_names { push_command(&mut commands, &engine, name, "builtin", None, None); }
