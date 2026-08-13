@@ -25,6 +25,7 @@ import {
   type ExternalAgentEngineId,
 } from '@/lib/agent-engines'
 import useChatStore from '@/stores/chat'
+import { getDefaultArticleAbsolutePath, getWorkspacePath } from '@/lib/workspace'
 import { ModelSelect } from './model-select'
 
 export function AgentModelSelect() {
@@ -59,7 +60,11 @@ export function AgentModelSelect() {
     setLoadingModels(true)
     setError('')
     try {
-      setModels(await listAgentEngineModels(engine, currentSettings.engines[engine].executable))
+      const engineSettings = currentSettings.engines[engine]
+      const noteWorkspace = await getWorkspacePath()
+      const workspace = engineSettings.workspace?.trim()
+        || (noteWorkspace.isCustom ? noteWorkspace.path : await getDefaultArticleAbsolutePath(''))
+      setModels(await listAgentEngineModels(engine, engineSettings.executable, workspace))
     } catch (reason) {
       setModels([])
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -93,10 +98,19 @@ export function AgentModelSelect() {
   }
 
   const engine = settings.selected
-  const selectedModel = settings.engines[engine].model || ''
-  const visibleModels = selectedModel && !models.some(model => model.id === selectedModel)
-    ? [{ id: selectedModel, name: selectedModel }, ...models]
-    : models
+  const configuredModel = settings.engines[engine].model || ''
+  const selectedModel = engine === 'workbuddy' && configuredModel === 'auto' ? '' : configuredModel
+  const lastUsedModel = settings.engines[engine].lastUsedModel || ''
+  const currentAgentModel = models.find(model => model.isCurrent)
+  const baseModels = engine === 'workbuddy' ? models.filter(model => model.id !== 'auto') : models
+  const visibleModels = selectedModel && !baseModels.some(model => model.id === selectedModel)
+    ? [{ id: selectedModel, name: selectedModel }, ...baseModels]
+    : baseModels
+  const automaticLabel = lastUsedModel
+    ? `${lastUsedModel}（自动）`
+    : currentAgentModel
+      ? `${currentAgentModel.name}（Agent 当前）`
+      : `${getAgentEngineName(engine)} 默认模型`
 
   return (
     <Popover
@@ -116,22 +130,29 @@ export function AgentModelSelect() {
         >
           <BotMessageSquare data-icon="inline-start" />
           <span className="truncate">
-            {selectedModel || `${getAgentEngineName(engine)} 默认模型`}
+            {selectedModel || automaticLabel}
           </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" side="top" className="w-[360px] p-0">
         <Command>
-          <CommandInput placeholder={`搜索 ${getAgentEngineName(engine)} 的本地模型…`} className="h-9" />
+          <CommandInput placeholder={`搜索 ${getAgentEngineName(engine)} 可用模型…`} className="h-9" />
           <CommandList>
-            <CommandEmpty>{loadingModels ? '正在读取本地模型…' : '没有找到已配置的模型'}</CommandEmpty>
+            <CommandEmpty>{loadingModels ? '正在读取 Agent 账号模型…' : '没有读取到可用模型'}</CommandEmpty>
             <CommandGroup heading={`${getAgentEngineName(engine)} 模型`}>
               <CommandItem
                 value="CLI 默认模型 default"
                 data-checked={!selectedModel}
                 onSelect={() => void selectModel('')}
               >
-                <span className="font-medium">跟随 CLI 默认模型</span>
+                <div className="min-w-0">
+                  <div className="font-medium">跟随 Agent 自动选择</div>
+                  {lastUsedModel ? (
+                    <div className="truncate text-xs text-muted-foreground">上次实际使用：{lastUsedModel}</div>
+                  ) : currentAgentModel ? (
+                    <div className="truncate text-xs text-muted-foreground">Agent 当前设置：{currentAgentModel.name}</div>
+                  ) : null}
+                </div>
               </CommandItem>
               {visibleModels.map(model => (
                 <CommandItem
@@ -145,13 +166,15 @@ export function AgentModelSelect() {
                     {model.name !== model.id ? (
                       <div className="truncate text-xs text-muted-foreground">{model.id}</div>
                     ) : null}
+                    {model.description ? <div className="truncate text-xs text-muted-foreground">{model.description}</div> : null}
                   </div>
+                  {model.isCurrent ? <span className="ml-auto shrink-0 text-xs text-emerald-600">当前</span> : null}
                 </CommandItem>
               ))}
             </CommandGroup>
             {loadingModels ? (
               <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-                <LoaderCircle className="size-3.5 animate-spin" />正在读取本地模型配置…
+                <LoaderCircle className="size-3.5 animate-spin" />正在连接 Agent 并读取账号模型…
               </div>
             ) : null}
             {error ? <div className="px-3 py-2 text-xs text-destructive">{error}</div> : null}

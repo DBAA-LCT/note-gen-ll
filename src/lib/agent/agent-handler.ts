@@ -10,7 +10,7 @@ import type { AgentApprovalDecision, AgentChange, AgentPermissionMode, AgentRunt
 import type { RuntimeChatAttachment } from '@/lib/chat-attachments'
 import type { AgentImageAttachment } from '@/lib/chat-image-context'
 import { retainCompletedAgentTraceEvents } from './trace-retention'
-import { cancelExternalAgent, loadAgentEngineSettings, runExternalAgent } from '@/lib/agent-engines'
+import { cancelExternalAgent, loadAgentEngineSettings, runExternalAgent, saveAgentEngineSettings } from '@/lib/agent-engines'
 
 export interface AgentHandlerConfig {
   activeChatId?: number
@@ -119,6 +119,18 @@ export class AgentHandler {
             model: engineConfig.model,
             permissionMode: engineConfig.permissionMode,
           })
+          if (result.model && result.model !== engineConfig.lastUsedModel) {
+            const nextSettings = {
+              ...engineSettings,
+              engines: {
+                ...engineSettings.engines,
+                [engine]: { ...engineConfig, lastUsedModel: result.model },
+              },
+            }
+            await saveAgentEngineSettings(nextSettings).catch(error => {
+              console.warn('[Agent Handler] Failed to save the actual external model:', error)
+            })
+          }
           store.setAgentState({
             isRunning: false,
             isThinking: false,

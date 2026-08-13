@@ -6,8 +6,10 @@ use std::process::Stdio;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
 use tauri::State;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
+use tokio::time::{timeout, Duration};
 
 #[derive(Default)]
 pub struct AgentEngineManager {
@@ -50,6 +52,8 @@ pub struct AgentEngineInspection {
 pub struct AgentEngineModel {
     id: String,
     name: String,
+    description: Option<String>,
+    is_current: bool,
 }
 
 fn default_command(engine: &str) -> Result<&'static str, String> {
@@ -103,7 +107,106 @@ fn push_model(models: &mut Vec<AgentEngineModel>, id: &str, name: Option<&str>) 
     models.push(AgentEngineModel {
         id: id.to_string(),
         name: name.map(str::trim).filter(|value| !value.is_empty()).unwrap_or(id).to_string(),
+        description: None,
+        is_current: false,
     });
+}
+
+fn workbuddy_models_from_acp(value: &serde_json::Value) -> Vec<AgentEngineModel> {
+    let result = value.get("result").unwrap_or(value);
+    let current_model = result.pointer("/models/currentModelId")
+        .or_else(|| result.get("currentModelId"))
+        .and_then(serde_json::Value::as_str);
+    let available = result.pointer("/models/availableModels")
+        .or_else(|| result.get("availableModels"))
+        .and_then(serde_json::Value::as_array);
+    let mut models = Vec::new();
+
+    if let Some(items) = available {
+        for item in items {
+            let Some(id) = item.get("modelId").or_else(|| item.get("id")).and_then(serde_json::Value::as_str) else { continue; };
+            let id = id.trim();
+            if id.is_empty() || models.iter().any(|model: &AgentEngineModel| model.id == id) { continue; }
+            models.push(AgentEngineModel {
+                id: id.to_string(),
+                name: item.get("name").and_then(serde_json::Value::as_str).map(str::trim).filter(|name| !name.is_empty()).unwrap_or(id).to_string(),
+                description: item.get("description").and_then(serde_json::Value::as_str).map(str::trim).filter(|description| !description.is_empty()).map(str::to_string),
+                is_current: current_model == Some(id),
+            });
+        }
+    }
+
+    if models.is_empty() {
+        if let Some(options) = result.get("configOptions").and_then(serde_json::Value::as_array) {
+            if let Some(model_option) = options.iter().find(|option| option.get("id").and_then(serde_json::Value::as_str) == Some("model")) {
+                let selected = model_option.get("currentValue").and_then(serde_json::Value::as_str);
+                if let Some(items) = model_option.get("options").and_then(serde_json::Value::as_array) {
+                    for item in items {
+                        let Some(id) = item.get("value").and_then(serde_json::Value::as_str) else { continue; };
+                        let id = id.trim();
+                        if id.is_empty() { continue; }
+                        models.push(AgentEngineModel {
+                            id: id.to_string(),
+                            name: item.get("name").and_then(serde_json::Value::as_str).unwrap_or(id).to_string(),
+                            description: item.get("description").and_then(serde_json::Value::as_str).map(str::to_string),
+                            is_current: selected == Some(id),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    models
+}
+
+async fn list_workbuddy_models_via_acp(executable: &str, workspace: Option<&str>) -> Result<Vec<AgentEngineModel>, String> {
+    let (program, mut args) = command_with_script_support(executable);
+    args.push("--acp".to_string());
+    let mut command = Command::new(&program);
+    command.args(&args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
+    if let Some(workspace) = workspace.map(str::trim).filter(|path| !path.is_empty()) {
+        let path = Path::new(workspace);
+        if !path.is_dir() { return Err(format!("Agent workspace does not exist: {}", path.display())); }
+        command.current_dir(path);
+    }
+    let mut child = command.spawn().map_err(|error| format!("Failed to start WorkBuddy ACP: {error}"))?;
+    let mut stdin = child.stdin.take().ok_or("Failed to open WorkBuddy ACP input")?;
+    let stdout = child.stdout.take().ok_or("Failed to open WorkBuddy ACP output")?;
+    let initialize = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "protocolVersion": 1, "clientCapabilities": {} }
+    });
+    stdin.write_all(format!("{initialize}\n").as_bytes()).await.map_err(|error| format!("Failed to initialize WorkBuddy ACP: {error}"))?;
+    stdin.flush().await.map_err(|error| error.to_string())?;
+
+    let cwd = workspace.map(str::trim).filter(|path| !path.is_empty())
+        .map(str::to_string)
+        .or_else(|| std::env::current_dir().ok().map(|path| path.to_string_lossy().to_string()))
+        .ok_or("Failed to determine WorkBuddy workspace")?;
+    let mut lines = BufReader::new(stdout).lines();
+    let response = timeout(Duration::from_secs(45), async {
+        let mut session_requested = false;
+        while let Some(line) = lines.next_line().await.map_err(|error| error.to_string())? {
+            let Ok(message) = serde_json::from_str::<serde_json::Value>(&line) else { continue; };
+            if message.get("id").and_then(serde_json::Value::as_i64) == Some(1) && !session_requested {
+                if let Some(error) = message.get("error") { return Err(format!("WorkBuddy ACP initialization failed: {error}")); }
+                let request = serde_json::json!({
+                    "jsonrpc": "2.0", "id": 2, "method": "session/new",
+                    "params": { "cwd": cwd, "mcpServers": [] }
+                });
+                stdin.write_all(format!("{request}\n").as_bytes()).await.map_err(|error| error.to_string())?;
+                stdin.flush().await.map_err(|error| error.to_string())?;
+                session_requested = true;
+            } else if message.get("id").and_then(serde_json::Value::as_i64) == Some(2) {
+                if let Some(error) = message.get("error") { return Err(format!("WorkBuddy ACP session failed: {error}")); }
+                return Ok(message);
+            }
+        }
+        Err("WorkBuddy ACP closed before returning its model list".to_string())
+    }).await.map_err(|_| "Timed out while reading WorkBuddy account models".to_string())??;
+    let _ = child.kill().await;
+    let models = workbuddy_models_from_acp(&response);
+    if models.is_empty() { Err("WorkBuddy ACP returned an empty model list".to_string()) } else { Ok(models) }
 }
 
 fn read_json_file(path: &Path) -> Option<serde_json::Value> {
@@ -202,7 +305,7 @@ pub async fn inspect_agent_engine(engine: String, executable: Option<String>) ->
 }
 
 #[tauri::command]
-pub async fn list_agent_engine_models(engine: String, executable: Option<String>) -> Result<Vec<AgentEngineModel>, String> {
+pub async fn list_agent_engine_models(engine: String, executable: Option<String>, workspace: Option<String>) -> Result<Vec<AgentEngineModel>, String> {
     if engine == "opencode" {
         let value = resolved_executable(&engine, executable.as_deref())?;
         let (program, mut args) = command_with_script_support(&value);
@@ -218,6 +321,10 @@ pub async fn list_agent_engine_models(engine: String, executable: Option<String>
             if id.contains('/') { push_model(&mut models, id, None); }
         }
         return Ok(models);
+    }
+    if engine == "workbuddy" {
+        let value = resolved_executable(&engine, executable.as_deref())?;
+        return list_workbuddy_models_via_acp(&value, workspace.as_deref()).await;
     }
     Ok(models_from_local_config(&engine))
 }

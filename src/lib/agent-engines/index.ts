@@ -3,10 +3,10 @@ import { Store } from '@tauri-apps/plugin-store'
 
 export type AgentEngineId = 'native' | 'opencode' | 'claude' | 'codex' | 'workbuddy'
 export type ExternalAgentEngineId = Exclude<AgentEngineId, 'native'>
-export interface AgentEngineConfig { installed: boolean; executable?: string; model?: string; workspace?: string; permissionMode: 'workspace-write' | 'read-only' }
+export interface AgentEngineConfig { installed: boolean; executable?: string; model?: string; lastUsedModel?: string; workspace?: string; permissionMode: 'workspace-write' | 'read-only' }
 export interface AgentEngineSettings { selected: AgentEngineId; engines: Record<ExternalAgentEngineId, AgentEngineConfig> }
 export interface AgentEngineInspection { engine: ExternalAgentEngineId; available: boolean; executable?: string; version?: string; error?: string }
-export interface AgentEngineModel { id: string; name: string }
+export interface AgentEngineModel { id: string; name: string; description?: string; isCurrent?: boolean }
 
 const STORE_KEY = 'agentEngines.v1'
 export const AGENT_ENGINE_CATALOG = [
@@ -51,8 +51,8 @@ export function getAgentWorkspaceName(path?: string) {
 export async function inspectAgentEngine(engine: ExternalAgentEngineId, executable?: string) {
   return invoke<AgentEngineInspection>('inspect_agent_engine', { engine, executable: executable || null })
 }
-export async function listAgentEngineModels(engine: ExternalAgentEngineId, executable?: string) {
-  return invoke<AgentEngineModel[]>('list_agent_engine_models', { engine, executable: executable || null })
+export async function listAgentEngineModels(engine: ExternalAgentEngineId, executable?: string, workspace?: string) {
+  return invoke<AgentEngineModel[]>('list_agent_engine_models', { engine, executable: executable || null, workspace: workspace || null })
 }
 function textFromJson(value: unknown): string {
   if (Array.isArray(value)) {
@@ -91,11 +91,40 @@ function textFromJson(value: unknown): string {
   }
   return ''
 }
-function parseAgentOutput(stdout: string): string {
-  const trimmed = stdout.trim(); if (!trimmed) return ''
-  try { const text = textFromJson(JSON.parse(trimmed)); if (text) return text } catch { /* JSONL */ }
-  const chunks = trimmed.split(/\r?\n/).map(line => { try { return textFromJson(JSON.parse(line)) } catch { return '' } }).filter(Boolean)
-  return chunks.length ? chunks[chunks.length - 1] : trimmed
+function modelFromJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    for (let index = value.length - 1; index >= 0; index -= 1) {
+      const model = modelFromJson(value[index])
+      if (model) return model
+    }
+    return ''
+  }
+  if (!value || typeof value !== 'object') return ''
+  const item = value as Record<string, unknown>
+  const providerData = item.providerData
+  if (providerData && typeof providerData === 'object' && typeof (providerData as Record<string, unknown>).model === 'string') {
+    return (providerData as Record<string, string>).model
+  }
+  if (item.role === 'assistant' && typeof item.model === 'string') return item.model
+  for (const key of ['message', 'item', 'part']) {
+    const model = modelFromJson(item[key])
+    if (model) return model
+  }
+  return ''
+}
+function parseAgentOutput(stdout: string): { content: string; model?: string } {
+  const trimmed = stdout.trim(); if (!trimmed) return { content: '' }
+  try {
+    const parsed = JSON.parse(trimmed)
+    const content = textFromJson(parsed)
+    if (content) return { content, model: modelFromJson(parsed) || undefined }
+  } catch { /* JSONL */ }
+  const parsedLines = trimmed.split(/\r?\n/).flatMap(line => { try { return [JSON.parse(line) as unknown] } catch { return [] } })
+  const chunks = parsedLines.map(textFromJson).filter(Boolean)
+  return {
+    content: chunks.length ? chunks[chunks.length - 1] : trimmed,
+    model: modelFromJson(parsedLines) || undefined,
+  }
 }
 export async function runExternalAgent(input: { runId: string; engine: ExternalAgentEngineId; prompt: string; workspace: string; executable?: string; model?: string; permissionMode: 'workspace-write' | 'read-only' }) {
   let result: { exitCode: number; stdout: string; stderr: string; cancelled: boolean }
@@ -108,10 +137,10 @@ export async function runExternalAgent(input: { runId: string; engine: ExternalA
     }
     throw error
   }
-  const content = parseAgentOutput(result.stdout)
-  if (result.cancelled) return { content, stopped: true }
+  const parsed = parseAgentOutput(result.stdout)
+  if (result.cancelled) return { ...parsed, stopped: true }
   if (result.exitCode !== 0) throw new Error(result.stderr.trim() || `${input.engine} exited with code ${result.exitCode}`)
-  if (!content) throw new Error(`${input.engine} 没有返回可显示的内容`)
-  return { content, stopped: false }
+  if (!parsed.content) throw new Error(`${input.engine} 没有返回可显示的内容`)
+  return { ...parsed, stopped: false }
 }
 export async function cancelExternalAgent(runId: string) { return invoke<boolean>('cancel_agent_engine', { runId }) }
