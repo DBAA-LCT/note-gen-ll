@@ -93,6 +93,7 @@ interface ChatSendProps {
   mentionedFiles?: MarkdownFile[];
   mentionedRecords?: QuoteData[];
   dockStyle?: boolean;
+  composerEnabled?: boolean;
 }
 
 export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
@@ -106,6 +107,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
   mentionedFiles = [],
   mentionedRecords = [],
   dockStyle = false,
+  composerEnabled = true,
 }, ref) => {
   const { primaryModel, agentPermissionMode } = useSettingStore()
   const { currentTagId } = useTagStore()
@@ -1273,7 +1275,7 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
     variant={dockStyle ? "ghost" : showStop ? "destructive" : "default"}
     size={dockStyle ? "icon" : "sm"}
     icon={showStop ? <Square className="fill-current" /> : <Send />}
-    disabled={!showStop && (!primaryModel || !hasInput)}
+    disabled={!showStop && (!composerEnabled || !hasInput)}
     tooltipText={showStop
       ? t('record.chat.input.stop')
       : loading

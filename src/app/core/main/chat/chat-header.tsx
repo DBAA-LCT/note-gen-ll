@@ -19,6 +19,7 @@ import relativeTime from 'dayjs/plugin/relativeTime'
 import 'dayjs/locale/zh-cn'
 import 'dayjs/locale/en'
 import useSettingStore from '@/stores/setting'
+import { loadAgentEngineSettings, saveAgentEngineConversation } from '@/lib/agent-engines'
 
 dayjs.extend(relativeTime)
 
@@ -69,6 +70,17 @@ export function ChatHeader() {
   const dropdownTitle = currentConversation && currentConversation.messageCount > 0
     ? currentConversation.title
     : tEmpty('conversationHistory')
+
+  const startAgentConversation = async () => {
+    await startNewConversation()
+    const engine = (await loadAgentEngineSettings()).selected
+    await saveAgentEngineConversation(engine, null)
+  }
+
+  const startTemporaryAgentConversation = () => {
+    startTemporaryConversation()
+    void loadAgentEngineSettings().then(settings => saveAgentEngineConversation(settings.selected, null))
+  }
 
   return (
     <header className="h-12 w-full flex items-center justify-between border-b px-4 gap-2">
@@ -162,7 +174,7 @@ export function ChatHeader() {
           icon={<MessageSquareDashed />}
           tooltipText={t('record.chat.input.temporaryChat')}
           side="bottom"
-          onClick={startTemporaryConversation}
+          onClick={startTemporaryAgentConversation}
           disabled={loading || isTemporaryConversation}
           variant={isTemporaryConversation ? 'secondary' : 'ghost'}
         />
@@ -170,7 +182,7 @@ export function ChatHeader() {
           icon={<MessageSquarePlus />}
           tooltipText={t('record.chat.input.newChat')}
           side="bottom"
-          onClick={() => startNewConversation()}
+          onClick={() => void startAgentConversation()}
           disabled={isDisabled}
         />
       </div>

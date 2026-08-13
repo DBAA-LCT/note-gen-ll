@@ -20,14 +20,12 @@ import type { PendingQuote } from "@/stores/chat"
 import { AgentApprovalPanel } from "./agent-approval-panel"
 import { cancelPendingAgentAction, confirmPendingAgentAction } from "./agent-approval-actions"
 import { AgentPermissionModeSelect } from "./agent-permission-mode"
-import { AgentEngineIndicator } from "./agent-engine-indicator"
 import { ContextUsageIndicator } from "./context-usage-indicator"
 import { readFile, readTextFile, writeFile, BaseDirectory, exists, mkdir, stat } from "@tauri-apps/plugin-fs"
 import { ShineBorder } from "@/components/ui/shine-border"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { buildTypingFrames } from './onboarding-typing'
-import { ChatToolsPopover } from './chat-tools-popover'
 import { AttachmentAddMenu } from './attachment-add-menu'
 import { PendingFileAttachments } from './chat-file-attachments'
 import {
@@ -50,6 +48,13 @@ import { getMarkListItemContent } from '@/app/core/main/mark/mark-list-item-cont
 import { getRecordIdFromTabPath } from '@/app/core/main/mark/mark-record-tab'
 import { getMarkById, type Mark } from '@/db/marks'
 import type { SkillMetadata } from '@/lib/skills/types'
+import {
+  getAgentEngineName,
+  loadAgentEngineSettings,
+  type AgentEngineId,
+  type AgentEngineSettings,
+} from '@/lib/agent-engines'
+import { AgentComposerTools } from './agent-composer-tools'
 
 const MAX_IMAGE_ATTACHMENTS = 6
 const MAX_IMAGE_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024
@@ -104,6 +109,12 @@ function createImageAttachmentId(prefix: string) {
 export const ChatInput = React.memo(function ChatInput() {
   const [text, setText] = useState("")
   const { primaryModel } = useSettingStore()
+  const [activeEngine, setActiveEngine] = useState<AgentEngineId>('native')
+  const [composerReady, setComposerReady] = useState(false)
+  const [agentDrafts, setAgentDrafts] = useLocalStorage<Partial<Record<AgentEngineId, string>>>('agent-composer-drafts.v1', {})
+  const draftsRef = useRef(agentDrafts || {})
+  const activeEngineRef = useRef<AgentEngineId>('native')
+  const textRef = useRef('')
   const {
     loading,
     setLinkedResource: setChatLinkedResource,
@@ -270,6 +281,51 @@ export const ChatInput = React.memo(function ChatInput() {
     visibleMentionedContexts,
     visibleActiveTabContext,
   ])
+
+  const composerEnabled = activeEngine !== 'native' || Boolean(primaryModel)
+  const composerPlaceholder = activeEngine === 'native'
+    ? defaultPlaceholder
+    : `向 ${getAgentEngineName(activeEngine)} 提问…`
+
+  useEffect(() => {
+    draftsRef.current = agentDrafts || {}
+  }, [agentDrafts])
+
+  useEffect(() => {
+    if (!composerReady) return
+    textRef.current = text
+    const currentDrafts = draftsRef.current
+    if (currentDrafts[activeEngine] === text) return
+    const nextDrafts = { ...currentDrafts, [activeEngine]: text }
+    draftsRef.current = nextDrafts
+    setAgentDrafts(nextDrafts)
+  }, [activeEngine, composerReady, setAgentDrafts, text])
+
+  useEffect(() => {
+    const switchComposer = (nextSettings: AgentEngineSettings) => {
+      const previousEngine = activeEngineRef.current
+      const nextDrafts = { ...draftsRef.current, [previousEngine]: textRef.current }
+      draftsRef.current = nextDrafts
+      setAgentDrafts(nextDrafts)
+      activeEngineRef.current = nextSettings.selected
+      setActiveEngine(nextSettings.selected)
+      setText(nextDrafts[nextSettings.selected] || '')
+      setComposerReady(true)
+      setComposerMenu(null)
+      setAttachedImages([])
+      setFileAttachments([])
+      setSelectedSkills([])
+      setMentionedContexts([])
+    }
+
+    void loadAgentEngineSettings().then(switchComposer)
+    const handleChange = (event: Event) => {
+      const next = (event as CustomEvent<AgentEngineSettings>).detail
+      if (next?.selected && next.selected !== activeEngineRef.current) switchComposer(next)
+    }
+    window.addEventListener('agent-engine-settings-changed', handleChange)
+    return () => window.removeEventListener('agent-engine-settings-changed', handleChange)
+  }, [setAgentDrafts])
 
   useEffect(() => {
     let cancelled = false
@@ -819,7 +875,7 @@ export const ChatInput = React.memo(function ChatInput() {
   }
 
   function handleImageDragEnter(e: React.DragEvent<HTMLDivElement>) {
-    if (!primaryModel || !hasFileTransfer(e.dataTransfer)) {
+    if (!composerEnabled || !hasFileTransfer(e.dataTransfer)) {
       return
     }
 
@@ -833,7 +889,7 @@ export const ChatInput = React.memo(function ChatInput() {
   }
 
   function handleImageDragOver(e: React.DragEvent<HTMLDivElement>) {
-    if (!primaryModel || !hasFileTransfer(e.dataTransfer)) {
+    if (!composerEnabled || !hasFileTransfer(e.dataTransfer)) {
       return
     }
 
@@ -866,7 +922,7 @@ export const ChatInput = React.memo(function ChatInput() {
     imageDragDepthRef.current = 0
     setIsImageDragOver(false)
 
-    if (!primaryModel) {
+    if (!composerEnabled) {
       return
     }
 
@@ -1282,10 +1338,10 @@ ${previewLines.join('\n')}
                 : "min-h-[36px] max-h-[240px] text-xs placeholder:text-sm md:placeholder:text-sm md:text-sm"
             )}
             rows={1}
-            disabled={!primaryModel}
+            disabled={!composerEnabled}
             value={text}
             onChange={handleComposerTextChange}
-            placeholder={loading ? steeringPlaceholder : defaultPlaceholder}
+            placeholder={loading ? steeringPlaceholder : composerPlaceholder}
             onKeyDown={(e) => {
               const textarea = e.target as HTMLTextAreaElement
               const cursorPosition = textarea.selectionStart
@@ -1359,13 +1415,13 @@ ${previewLines.join('\n')}
           <div className="flex min-w-0 flex-1 items-center gap-1">
             <AttachmentAddMenu
               mobile={isMobile}
-              disabled={!primaryModel}
+              disabled={!composerEnabled}
               onSelectImages={isMobile ? handleSelectFromGallery : handleSelectLocalImages}
               onSelectFiles={handleSelectLocalFiles}
               onSelectFolders={handleSelectLocalFolders}
             />
             {!isMobile ? (
-              <ChatToolsPopover />
+              <AgentComposerTools />
             ) : (
               <div className="flex overflow-x-auto scrollbar-hide md:overflow-visible gap-1">
                 <ChatToolsDrawer />
@@ -1378,8 +1434,7 @@ ${previewLines.join('\n')}
               additionalContext={contextUsageAdditionalContext}
               imageCount={attachedImages.length}
             />
-            <AgentEngineIndicator />
-            <AgentPermissionModeSelect />
+            {activeEngine === 'native' ? <AgentPermissionModeSelect /> : null}
             <ChatSend
               inputValue={text}
               onSent={handleSent}
@@ -1401,6 +1456,7 @@ ${previewLines.join('\n')}
                 context.kind === 'record' ? [context.record] : []
               )}
               dockStyle={isMobile}
+              composerEnabled={composerEnabled}
               ref={chatSendRef}
             />
           </div>

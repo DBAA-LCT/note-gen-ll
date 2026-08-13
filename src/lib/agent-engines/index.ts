@@ -9,6 +9,7 @@ export interface AgentEngineInspection { engine: ExternalAgentEngineId; availabl
 export interface AgentEngineModel { id: string; name: string; description?: string; isCurrent?: boolean }
 
 const STORE_KEY = 'agentEngines.v1'
+const CONVERSATION_STORE_KEY = 'agentEngineConversations.v1'
 export const AGENT_ENGINE_CATALOG = [
   { id: 'opencode', name: 'OpenCode', description: '开源、可定制的本地编码 Agent', installUrl: 'https://opencode.ai/docs/' },
   { id: 'claude', name: 'Claude Code', description: 'Anthropic 官方本地 Agent', installUrl: 'https://docs.anthropic.com/en/docs/claude-code/overview' },
@@ -37,6 +38,18 @@ export async function loadAgentEngineSettings(): Promise<AgentEngineSettings> {
 export async function saveAgentEngineSettings(settings: AgentEngineSettings) {
   const store = await Store.load('store.json'); await store.set(STORE_KEY, settings); await store.save()
   window.dispatchEvent(new CustomEvent('agent-engine-settings-changed', { detail: settings }))
+}
+export async function loadAgentEngineConversations(): Promise<Partial<Record<AgentEngineId, number>>> {
+  const store = await Store.load('store.json')
+  return await store.get<Partial<Record<AgentEngineId, number>>>(CONVERSATION_STORE_KEY) || {}
+}
+export async function saveAgentEngineConversation(engine: AgentEngineId, conversationId: number | null) {
+  const store = await Store.load('store.json')
+  const conversations = await store.get<Partial<Record<AgentEngineId, number>>>(CONVERSATION_STORE_KEY) || {}
+  if (conversationId == null) delete conversations[engine]
+  else conversations[engine] = conversationId
+  await store.set(CONVERSATION_STORE_KEY, conversations)
+  await store.save()
 }
 
 export function getAgentEngineName(engine: AgentEngineId) {
