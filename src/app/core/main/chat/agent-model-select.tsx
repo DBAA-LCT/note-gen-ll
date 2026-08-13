@@ -126,7 +126,7 @@ export function AgentModelSelect() {
           variant="ghost"
           size="xs"
           disabled={chatLoading}
-          className="h-5 min-w-0 max-w-[65%] gap-1 px-1 text-xs font-normal text-muted-foreground"
+          className="h-7 min-w-0 max-w-44 gap-1 px-1.5 text-xs font-normal text-muted-foreground"
           title={`切换 ${getAgentEngineName(engine)} 模型`}
         >
           <AgentEngineMark engine={engine} className="size-4 rounded-[4px]" />

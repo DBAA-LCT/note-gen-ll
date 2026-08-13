@@ -1,23 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Settings2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import {
   DEFAULT_AGENT_ENGINE_SETTINGS,
-  getAgentEngineName,
   loadAgentEngineSettings,
   type AgentEngineSettings,
 } from '@/lib/agent-engines'
-import { useSettingsDialogStore } from '@/stores/settings-dialog'
 import { AgentModelSelect } from './agent-model-select'
 import { ChatToolsPopover } from './chat-tools-popover'
 import { ExternalAgentPermission } from './external-agent-permission'
-import { AgentEngineBadge } from './agent-engine-brand'
 
 export function AgentComposerTools() {
   const [settings, setSettings] = useState<AgentEngineSettings>(DEFAULT_AGENT_ENGINE_SETTINGS)
-  const openSettings = useSettingsDialogStore(state => state.openSettings)
 
   useEffect(() => {
     void loadAgentEngineSettings().then(setSettings)
@@ -34,21 +28,9 @@ export function AgentComposerTools() {
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-0.5">
-      <AgentEngineBadge engine={settings.selected} compact />
+    <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
       <AgentModelSelect />
       <ExternalAgentPermission />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-8 text-muted-foreground"
-        title={`管理 ${getAgentEngineName(settings.selected)}`}
-        aria-label={`管理 ${getAgentEngineName(settings.selected)}`}
-        onClick={() => openSettings('agentEngines')}
-      >
-        <Settings2 className="size-4" />
-      </Button>
     </div>
   )
 }

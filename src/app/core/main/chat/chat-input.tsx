@@ -55,6 +55,7 @@ import {
   type AgentEngineSettings,
 } from '@/lib/agent-engines'
 import { AgentComposerTools } from './agent-composer-tools'
+import { AgentEngineMark } from './agent-engine-brand'
 
 const MAX_IMAGE_ATTACHMENTS = 6
 const MAX_IMAGE_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024
@@ -1329,10 +1330,16 @@ ${previewLines.join('\n')}
         <ImageAttachments images={attachedImages} onRemove={removeImage} />
         <PendingFileAttachments attachments={fileAttachments} onRemove={removeFileAttachment} />
         <div className="relative w-full flex items-start">
+          {activeEngine !== 'native' ? (
+            <AgentEngineMark
+              engine={activeEngine}
+              className="pointer-events-none absolute right-4 top-1/2 size-16 -translate-y-1/2 rounded-2xl opacity-[0.07] saturate-75"
+            />
+          ) : null}
           <Textarea
             ref={textareaRef}
             className={cn(
-              "relative flex-1 resize-none overflow-y-auto border-none p-2 shadow-none focus-visible:ring-0",
+              "relative z-10 flex-1 resize-none overflow-y-auto border-none bg-transparent p-2 shadow-none focus-visible:ring-0 dark:bg-transparent",
               isMobile
                 ? "min-h-[40px] max-h-[220px] bg-transparent text-sm placeholder:text-sm"
                 : "min-h-[36px] max-h-[240px] text-xs placeholder:text-sm md:placeholder:text-sm md:text-sm"
@@ -1411,8 +1418,8 @@ ${previewLines.join('\n')}
           />
         </div>
         
-        <div className="flex justify-between items-center w-full">
-          <div className="flex min-w-0 flex-1 items-center gap-1">
+        <div className="flex w-full min-w-0 items-center justify-between gap-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
             <AttachmentAddMenu
               mobile={isMobile}
               disabled={!composerEnabled}
@@ -1428,7 +1435,7 @@ ${previewLines.join('\n')}
               </div>
             )}
           </div>
-          <div className="flex shrink-0 items-center justify-end gap-2 pr-1">
+          <div className="flex shrink-0 items-center justify-end gap-1 pr-1">
             <ContextUsageIndicator
               currentUserInput={text}
               additionalContext={contextUsageAdditionalContext}

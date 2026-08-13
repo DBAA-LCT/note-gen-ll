@@ -52,13 +52,13 @@ export function ExternalAgentPermission() {
         <Button
           type="button"
           variant="ghost"
-          size="sm"
+          size="icon"
           disabled={loading}
-          className="h-8 gap-1.5 px-2 text-xs text-muted-foreground"
+          className="size-7 shrink-0 text-muted-foreground"
           title="切换 Agent 工作区权限"
+          aria-label={mode === 'read-only' ? 'Agent 权限：只读' : 'Agent 权限：可编辑工作区'}
         >
           <Icon className="size-4" />
-          <span className="hidden md:inline">{mode === 'read-only' ? '只读' : '可编辑'}</span>
         </Button>
       }
       items={[
