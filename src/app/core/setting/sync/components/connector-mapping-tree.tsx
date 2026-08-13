@@ -120,9 +120,11 @@ export function ConnectorMappingTree({
   }
 
   function beginEdit(mapping: ConnectorSyncMapping) {
-    const { id: _id, platform: _platform, ...nextDraft } = mapping
+    const nextDraft = { ...mapping } as Partial<ConnectorSyncMapping>
+    delete nextDraft.id
+    delete nextDraft.platform
     setEditingId(mapping.id)
-    setDraft({ ...nextDraft, accessMode: 'read-write' })
+    setDraft({ ...nextDraft as MappingDraft, accessMode: 'read-write' })
     setShowEditor(true)
   }
 

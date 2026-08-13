@@ -421,9 +421,6 @@ export async function deleteRemoteFolder(item: DirTree, localDeleted: boolean) {
   const store = await Store.load("store.json");
   const platform = mapping.platform;
   const remoteFolderPath = mapping.remoteFilePath;
-  const loadedFileEntries = collectFolderFileEntries(item);
-  const loadedFilePaths = loadedFileEntries.map(entry => entry.path).filter(isStringPath);
-
   if (localDeleted && !hasRemoteFolderData(item)) {
     return {
       attempted: false,

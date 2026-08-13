@@ -6,7 +6,6 @@ import { BaseDirectory, exists, rename, writeTextFile } from "@tauri-apps/plugin
 import { Archive, Copy, Database, Download, File, FileCode, FileJson, FileLock2, FileText, FileUp, FolderOpen, ImageIcon, LoaderCircle, RefreshCwOff, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ask } from '@tauri-apps/plugin-dialog';
-import { Store } from '@tauri-apps/plugin-store';
 import { cloneDeep } from "lodash-es";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { computedParentPath, getCurrentFolder } from "@/lib/path";

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 620" role="img" aria-label="NoteGoal">
+  <defs>
+    <linearGradient id="notegoal-gradient" x1="130" y1="310" x2="490" y2="310" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.34" stop-color="#f7fcff"/>
+      <stop offset="0.62" stop-color="#9eddf7"/>
+      <stop offset="1" stop-color="#35b8ed"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="10" y="10" width="600" height="600" rx="100" fill="#000000"/>
+
+  <path
+    fill="url(#notegoal-gradient)"
+    fill-rule="evenodd"
+    d="M130 130H256L490 364V490H364L130 256V130ZM184 184V234L386 436H436V386L234 184H184Z"
+  />
+  <path
+    fill="url(#notegoal-gradient)"
+    d="M310 130H490V310L436 256V184H364L310 130ZM130 310L184 364V436H256L310 490H130V310Z"
+  />
+</svg>

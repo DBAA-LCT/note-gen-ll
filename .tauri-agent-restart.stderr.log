@@ -173,3 +173,4 @@ Yjs was already imported. This breaks constructor checks and will lead to issues
  ⚠ Fast Refresh had to perform a full reload when ./messages/zh.json (json) changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
  ⚠ Fast Refresh had to perform a full reload when ./messages/zh.json (json) changed. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
 Yjs was already imported. This breaks constructor checks and will lead to issues! - https://github.com/yjs/yjs/issues/438
+[0813/153240.985:ERROR:ui\gfx\win\window_impl.cc:172] Failed to unregister class Chrome_WidgetWin_0. Error = 1412

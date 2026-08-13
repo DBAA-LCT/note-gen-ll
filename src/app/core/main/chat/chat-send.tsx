@@ -109,7 +109,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
   dockStyle = false,
   composerEnabled = true,
 }, ref) => {
-  const { primaryModel, agentPermissionMode } = useSettingStore()
+  const { agentPermissionMode } = useSettingStore()
   const { currentTagId } = useTagStore()
   const {
     insert,

@@ -847,7 +847,6 @@ class SyncPushQueue {
         return { success: false }
       }
 
-      const store = await Store.load('store.json')
       const provider = mapping.platform as SyncProvider
       const repo = (provider !== 's3' && provider !== 'webdav' && provider !== 'cloudFolder')
         ? mapping.remoteTarget
