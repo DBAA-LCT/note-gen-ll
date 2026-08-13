@@ -1,9 +1,17 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { LoaderCircle, Settings } from 'lucide-react'
+import { Check, LoaderCircle, MoreHorizontal, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   AGENT_ENGINE_CATALOG,
   DEFAULT_AGENT_ENGINE_SETTINGS,
@@ -19,14 +27,7 @@ import {
 } from '@/lib/agent-engines'
 import useChatStore from '@/stores/chat'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
-
-const TAB_LABELS: Record<AgentEngineId, string> = {
-  native: '聊天',
-  claude: 'Claude Code',
-  codex: 'Codex',
-  opencode: 'OpenCode',
-  workbuddy: 'WorkBuddy',
-}
+import { AGENT_ENGINE_VISUALS, AgentEngineMark } from './agent-engine-brand'
 
 export function AgentWorkspaceTabs() {
   const [settings, setSettings] = useState<AgentEngineSettings>(DEFAULT_AGENT_ENGINE_SETTINGS)
@@ -114,48 +115,72 @@ export function AgentWorkspaceTabs() {
     }
   }
 
-  const tabs: AgentEngineId[] = ['native', 'claude', 'codex', 'opencode', 'workbuddy']
+  const onlineEngines = AGENT_ENGINE_CATALOG
+    .map(item => item.id)
+    .filter(engine => inspections[engine]?.available === true)
+  const visibleTabs: AgentEngineId[] = settings.selected === 'native'
+    ? ['native']
+    : ['native', settings.selected]
 
   return (
     <div className="flex h-11 w-full shrink-0 items-stretch border-b bg-background/95">
       <div className="flex min-w-0 flex-1 overflow-x-auto px-2 scrollbar-hide">
-        {tabs.map(engine => {
+        {visibleTabs.map(engine => {
           const active = settings.selected === engine
-          const available = engine === 'native' || inspections[engine]?.available === true
-          const engineChecking = engine !== 'native' && checking && !inspections[engine]
+          const visual = AGENT_ENGINE_VISUALS[engine]
           return (
             <button
               key={engine}
               type="button"
-              disabled={loading || !available || engineChecking}
+              disabled={loading}
               onClick={() => void selectEngine(engine)}
               className={cn(
-                'relative flex h-11 shrink-0 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45',
-                active && 'text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary'
+                'relative flex h-11 shrink-0 items-center gap-2 px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45',
+                active && `text-foreground after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full ${visual.activeClassName}`
               )}
-              title={available ? `切换到 ${TAB_LABELS[engine]}` : `${TAB_LABELS[engine]} 离线，请先安装或检测 CLI`}
+              title={`切换到 ${visual.label}`}
             >
-              {engineChecking ? (
-                <LoaderCircle className="size-3 animate-spin" />
-              ) : (
-                <span className={cn('size-1.5 rounded-full', available ? 'bg-emerald-500' : 'bg-muted-foreground/35')} />
-              )}
-              <span>{TAB_LABELS[engine]}</span>
+              <AgentEngineMark engine={engine} />
+              <span>{visual.label}</span>
             </button>
           )
         })}
       </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="m-1.5 size-8 shrink-0 text-muted-foreground"
-        title="管理 Agent 引擎"
-        aria-label="管理 Agent 引擎"
-        onClick={() => openSettings('agentEngines')}
-      >
-        <Settings className="size-4" />
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="m-1.5 size-8 shrink-0 text-muted-foreground"
+            title="切换 Agent"
+            aria-label="切换 Agent"
+            disabled={loading}
+          >
+            {checking ? <LoaderCircle className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="text-xs text-muted-foreground">在线 Agent</DropdownMenuLabel>
+          {onlineEngines.length ? onlineEngines.map(engine => {
+            const visual = AGENT_ENGINE_VISUALS[engine]
+            return (
+              <DropdownMenuItem key={engine} onSelect={() => void selectEngine(engine)} className="gap-2 py-2">
+                <AgentEngineMark engine={engine} />
+                <span className="min-w-0 flex-1 truncate font-medium">{visual.label}</span>
+                {settings.selected === engine ? <Check className="size-4 text-primary" /> : null}
+              </DropdownMenuItem>
+            )
+          }) : (
+            <DropdownMenuItem disabled>暂未检测到在线的外部 Agent</DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => openSettings('agentEngines')} className="gap-2">
+            <Settings className="size-4" />
+            <span>管理 Agent 引擎</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }

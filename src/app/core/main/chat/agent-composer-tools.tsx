@@ -13,6 +13,7 @@ import { useSettingsDialogStore } from '@/stores/settings-dialog'
 import { AgentModelSelect } from './agent-model-select'
 import { ChatToolsPopover } from './chat-tools-popover'
 import { ExternalAgentPermission } from './external-agent-permission'
+import { AgentEngineBadge } from './agent-engine-brand'
 
 export function AgentComposerTools() {
   const [settings, setSettings] = useState<AgentEngineSettings>(DEFAULT_AGENT_ENGINE_SETTINGS)
@@ -28,10 +29,18 @@ export function AgentComposerTools() {
     return () => window.removeEventListener('agent-engine-settings-changed', handleChange)
   }, [])
 
-  if (settings.selected === 'native') return <ChatToolsPopover />
+  if (settings.selected === 'native') {
+    return (
+      <div className="flex min-w-0 items-center gap-0.5">
+        <AgentEngineBadge engine="native" compact />
+        <ChatToolsPopover />
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-w-0 items-center gap-0.5">
+      <AgentEngineBadge engine={settings.selected} compact />
       <AgentModelSelect />
       <ExternalAgentPermission />
       <Button
