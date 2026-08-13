@@ -30,12 +30,7 @@ export function AgentComposerTools() {
   }, [])
 
   if (settings.selected === 'native') {
-    return (
-      <div className="flex min-w-0 items-center gap-0.5">
-        <AgentEngineBadge engine="native" compact />
-        <ChatToolsPopover />
-      </div>
-    )
+    return <ChatToolsPopover />
   }
 
   return (

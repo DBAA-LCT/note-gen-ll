@@ -140,8 +140,12 @@ export function AgentWorkspaceTabs() {
               )}
               title={`切换到 ${visual.label}`}
             >
-              <AgentEngineMark engine={engine} />
-              <span>{visual.label}</span>
+              {engine === 'native' ? (
+                <span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
+              ) : (
+                <AgentEngineMark engine={engine} />
+              )}
+              <span>{engine === 'native' ? '聊天' : visual.label}</span>
             </button>
           )
         })}
