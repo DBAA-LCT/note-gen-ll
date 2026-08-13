@@ -114,7 +114,7 @@ export class AgentHandler {
             runId: this.externalRunId,
             engine,
             prompt,
-            workspace: this.config.workspaceId || '.',
+            workspace: engineConfig.workspace?.trim() || this.config.workspaceId || '.',
             executable: engineConfig.executable,
             model: engineConfig.model,
             permissionMode: engineConfig.permissionMode,

@@ -3,7 +3,7 @@ import { Store } from '@tauri-apps/plugin-store'
 
 export type AgentEngineId = 'native' | 'opencode' | 'claude' | 'codex' | 'workbuddy'
 export type ExternalAgentEngineId = Exclude<AgentEngineId, 'native'>
-export interface AgentEngineConfig { installed: boolean; executable?: string; model?: string; permissionMode: 'workspace-write' | 'read-only' }
+export interface AgentEngineConfig { installed: boolean; executable?: string; model?: string; workspace?: string; permissionMode: 'workspace-write' | 'read-only' }
 export interface AgentEngineSettings { selected: AgentEngineId; engines: Record<ExternalAgentEngineId, AgentEngineConfig> }
 export interface AgentEngineInspection { engine: ExternalAgentEngineId; available: boolean; executable?: string; version?: string; error?: string }
 export interface AgentEngineModel { id: string; name: string }
@@ -42,6 +42,11 @@ export async function saveAgentEngineSettings(settings: AgentEngineSettings) {
 export function getAgentEngineName(engine: AgentEngineId) {
   if (engine === 'native') return 'NoteGoal 内置'
   return AGENT_ENGINE_CATALOG.find(item => item.id === engine)?.name || engine
+}
+export function getAgentWorkspaceName(path?: string) {
+  const normalized = path?.trim().replace(/[\\/]+$/, '')
+  if (!normalized) return 'NoteGoal 工作区'
+  return normalized.split(/[\\/]/).filter(Boolean).pop() || normalized
 }
 export async function inspectAgentEngine(engine: ExternalAgentEngineId, executable?: string) {
   return invoke<AgentEngineInspection>('inspect_agent_engine', { engine, executable: executable || null })

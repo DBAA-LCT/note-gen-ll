@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Bot, ChevronDown, LoaderCircle, Settings } from 'lucide-react'
+import { Bot, ChevronDown, FolderOpen, LoaderCircle, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -19,6 +19,7 @@ import {
   AGENT_ENGINE_CATALOG,
   DEFAULT_AGENT_ENGINE_SETTINGS,
   getAgentEngineName,
+  getAgentWorkspaceName,
   inspectAgentEngine,
   loadAgentEngineSettings,
   saveAgentEngineSettings,
@@ -125,8 +126,13 @@ export function AgentEngineIndicator() {
           : '离线 · 未检测到可用 CLI',
       available: inspections[item.id]?.available === true,
       checking: checking && !inspections[item.id],
+      workspaceName: getAgentWorkspaceName(settings.engines[item.id].workspace),
     })),
   ]
+
+  const selectedWorkspace = settings.selected === 'native'
+    ? ''
+    : getAgentWorkspaceName(settings.engines[settings.selected].workspace)
 
   return (
     <Popover
@@ -142,7 +148,7 @@ export function AgentEngineIndicator() {
           variant="ghost"
           size="sm"
           disabled={loading}
-          className="h-8 max-w-44 gap-1.5 px-2 text-xs text-muted-foreground"
+          className="h-8 max-w-64 gap-1.5 px-2 text-xs text-muted-foreground"
           aria-label={`当前 Agent：${getAgentEngineName(settings.selected)}`}
           title="切换 Agent 引擎"
         >
@@ -150,6 +156,12 @@ export function AgentEngineIndicator() {
           <span className="hidden max-w-28 truncate md:inline">
             {getAgentEngineName(settings.selected)}
           </span>
+          {selectedWorkspace ? (
+            <span className="hidden min-w-0 items-center gap-1 border-l pl-1.5 lg:flex" title={settings.engines[settings.selected as ExternalAgentEngineId].workspace || 'NoteGoal 当前工作区'}>
+              <FolderOpen className="size-3" />
+              <span className="max-w-24 truncate">{selectedWorkspace}</span>
+            </span>
+          ) : null}
           <ChevronDown className="hidden size-3 md:block" />
         </Button>
       </PopoverTrigger>
@@ -180,6 +192,12 @@ export function AgentEngineIndicator() {
                       )}
                     </div>
                     <p className="truncate text-xs text-muted-foreground">{item.description}</p>
+                    {'workspaceName' in item ? (
+                      <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                        <FolderOpen className="size-3 shrink-0" />
+                        <span className="truncate">{item.workspaceName}</span>
+                      </p>
+                    ) : null}
                   </div>
                 </CommandItem>
               ))}
