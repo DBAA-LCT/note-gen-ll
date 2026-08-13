@@ -29,6 +29,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import AgentEngines from "./agent-engines";
 
 function getPlatformAvatarFallback(config: AiConfig) {
   const characterCount = config.templateSource === 'custom' ? 1 : 2
@@ -396,6 +397,7 @@ export default function AiPage({ mobile = false }: { mobile?: boolean }) {
 
   return (
     <SettingType id="ai" icon={<BotMessageSquare />} title={t('title')} desc={t('desc')}>
+      <AgentEngines />
       {userCustomModels.length === 0 && <DefaultModelsSection />}
       <div className="grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
             <Card size="sm" className="lg:sticky lg:top-2">

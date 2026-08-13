@@ -10,6 +10,7 @@ import type { AgentApprovalDecision, AgentChange, AgentPermissionMode, AgentRunt
 import type { RuntimeChatAttachment } from '@/lib/chat-attachments'
 import type { AgentImageAttachment } from '@/lib/chat-image-context'
 import { retainCompletedAgentTraceEvents } from './trace-retention'
+import { cancelExternalAgent, loadAgentEngineSettings, runExternalAgent } from '@/lib/agent-engines'
 
 export interface AgentHandlerConfig {
   activeChatId?: number
@@ -53,6 +54,7 @@ export interface AgentHandlerConfig {
 
 export class AgentHandler {
   private runtime: AgentRuntime | null = null
+  private externalRunId: string | null = null
   private stopped = false
   private readonly config: AgentHandlerConfig
   private steeringPending = false
@@ -95,6 +97,51 @@ export class AgentHandler {
       selectedSkills: this.config.selectedSkills,
       currentStepStartTime: Date.now(),
     })
+
+    const engineSettings = await loadAgentEngineSettings()
+    if (engineSettings.selected !== 'native') {
+      const engine = engineSettings.selected
+      const engineConfig = engineSettings.engines[engine]
+      if (engineConfig.installed) {
+        this.externalRunId = crypto.randomUUID()
+        store.setAgentState({ status: 'thinking', isRunning: true, isThinking: true })
+        const history = Array.isArray(contextOrMessages)
+          ? contextOrMessages.map(message => `${message.role}: ${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`).join('\n\n')
+          : contextOrMessages || ''
+        const prompt = history ? `${history}\n\nuser: ${userInput}` : userInput
+        try {
+          const result = await runExternalAgent({
+            runId: this.externalRunId,
+            engine,
+            prompt,
+            workspace: this.config.workspaceId || '.',
+            executable: engineConfig.executable,
+            permissionMode: engineConfig.permissionMode,
+          })
+          store.setAgentState({
+            isRunning: false,
+            isThinking: false,
+            status: result.stopped ? 'stopped' : 'completed',
+            isFinalAnswerMode: true,
+            finalAnswerContent: result.content,
+          })
+          this.config.onFinalAnswerRender?.(result.content)
+          this.config.onComplete?.(result.content, [], result.stopped)
+          return result.content
+        } catch (error) {
+          store.setAgentState({ isRunning: false, isThinking: false, status: this.stopped ? 'stopped' : 'failed' })
+          const message = error instanceof Error ? error.message : String(error)
+          if (this.stopped) {
+            this.config.onComplete?.('', [], true)
+            return ''
+          }
+          await this.config.onError?.(message)
+          throw error
+        } finally {
+          this.externalRunId = null
+        }
+      }
+    }
 
     this.runtime = new AgentRuntime()
     if (this.steeringPending) {
@@ -238,6 +285,7 @@ export class AgentHandler {
 
   stop() {
     this.stopped = true
+    if (this.externalRunId) void cancelExternalAgent(this.externalRunId)
     const state = useChatStore.getState()
     const pending = state.agentState.pendingConfirmation
     if (pending) {
