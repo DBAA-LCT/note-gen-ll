@@ -3,9 +3,10 @@ import { Store } from '@tauri-apps/plugin-store'
 
 export type AgentEngineId = 'native' | 'opencode' | 'claude' | 'codex' | 'workbuddy'
 export type ExternalAgentEngineId = Exclude<AgentEngineId, 'native'>
-export interface AgentEngineConfig { installed: boolean; executable?: string; permissionMode: 'workspace-write' | 'read-only' }
+export interface AgentEngineConfig { installed: boolean; executable?: string; model?: string; permissionMode: 'workspace-write' | 'read-only' }
 export interface AgentEngineSettings { selected: AgentEngineId; engines: Record<ExternalAgentEngineId, AgentEngineConfig> }
 export interface AgentEngineInspection { engine: ExternalAgentEngineId; available: boolean; executable?: string; version?: string; error?: string }
+export interface AgentEngineModel { id: string; name: string }
 
 const STORE_KEY = 'agentEngines.v1'
 export const AGENT_ENGINE_CATALOG = [
@@ -44,6 +45,9 @@ export function getAgentEngineName(engine: AgentEngineId) {
 }
 export async function inspectAgentEngine(engine: ExternalAgentEngineId, executable?: string) {
   return invoke<AgentEngineInspection>('inspect_agent_engine', { engine, executable: executable || null })
+}
+export async function listAgentEngineModels(engine: ExternalAgentEngineId, executable?: string) {
+  return invoke<AgentEngineModel[]>('list_agent_engine_models', { engine, executable: executable || null })
 }
 function textFromJson(value: unknown): string {
   if (Array.isArray(value)) {
@@ -88,7 +92,7 @@ function parseAgentOutput(stdout: string): string {
   const chunks = trimmed.split(/\r?\n/).map(line => { try { return textFromJson(JSON.parse(line)) } catch { return '' } }).filter(Boolean)
   return chunks.length ? chunks[chunks.length - 1] : trimmed
 }
-export async function runExternalAgent(input: { runId: string; engine: ExternalAgentEngineId; prompt: string; workspace: string; executable?: string; permissionMode: 'workspace-write' | 'read-only' }) {
+export async function runExternalAgent(input: { runId: string; engine: ExternalAgentEngineId; prompt: string; workspace: string; executable?: string; model?: string; permissionMode: 'workspace-write' | 'read-only' }) {
   let result: { exitCode: number; stdout: string; stderr: string; cancelled: boolean }
   try {
     result = await invoke<typeof result>('run_agent_engine', { request: input })

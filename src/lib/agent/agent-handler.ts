@@ -116,6 +116,7 @@ export class AgentHandler {
             prompt,
             workspace: this.config.workspaceId || '.',
             executable: engineConfig.executable,
+            model: engineConfig.model,
             permissionMode: engineConfig.permissionMode,
           })
           store.setAgentState({

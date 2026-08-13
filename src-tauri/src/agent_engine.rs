@@ -22,6 +22,7 @@ pub struct AgentEngineRequest {
     prompt: String,
     workspace: String,
     executable: Option<String>,
+    model: Option<String>,
     permission_mode: Option<String>,
 }
 
@@ -42,6 +43,13 @@ pub struct AgentEngineInspection {
     executable: Option<String>,
     version: Option<String>,
     error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentEngineModel {
+    id: String,
+    name: String,
 }
 
 fn default_command(engine: &str) -> Result<&'static str, String> {
@@ -81,6 +89,77 @@ fn resolved_executable(engine: &str, custom: Option<&str>) -> Result<String, Str
         .unwrap_or(default_command(engine)?.to_string());
     if value.contains('\0') { return Err("Invalid Agent executable path".to_string()); }
     Ok(value)
+}
+
+fn user_home_dir() -> Option<PathBuf> {
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(PathBuf::from)
+}
+
+fn push_model(models: &mut Vec<AgentEngineModel>, id: &str, name: Option<&str>) {
+    let id = id.trim();
+    if id.is_empty() || models.iter().any(|item| item.id == id) { return; }
+    models.push(AgentEngineModel {
+        id: id.to_string(),
+        name: name.map(str::trim).filter(|value| !value.is_empty()).unwrap_or(id).to_string(),
+    });
+}
+
+fn read_json_file(path: &Path) -> Option<serde_json::Value> {
+    let content = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&content).ok()
+}
+
+fn models_from_local_config(engine: &str) -> Vec<AgentEngineModel> {
+    let Some(home) = user_home_dir() else { return Vec::new(); };
+    let mut models = Vec::new();
+    match engine {
+        "workbuddy" => {
+            if let Some(value) = read_json_file(&home.join(".codebuddy/models.json")) {
+                if let Some(items) = value.get("models").and_then(serde_json::Value::as_array) {
+                    for item in items {
+                        if let Some(id) = item.get("id").and_then(serde_json::Value::as_str) {
+                            push_model(&mut models, id, item.get("name").and_then(serde_json::Value::as_str));
+                        }
+                    }
+                }
+            }
+            if let Some(value) = read_json_file(&home.join(".codebuddy/settings.json")) {
+                if let Some(model) = value.get("model").and_then(serde_json::Value::as_str) {
+                    push_model(&mut models, model, None);
+                }
+            }
+        }
+        "claude" => {
+            if let Some(value) = read_json_file(&home.join(".claude/settings.json")) {
+                if let Some(model) = value.get("model").and_then(serde_json::Value::as_str) {
+                    push_model(&mut models, model, None);
+                }
+                if let Some(env) = value.get("env").and_then(serde_json::Value::as_object) {
+                    for (key, value) in env {
+                        if key.ends_with("_MODEL") {
+                            if let Some(model) = value.as_str() { push_model(&mut models, model, None); }
+                        }
+                    }
+                }
+            }
+        }
+        "codex" => {
+            if let Some(value) = read_json_file(&home.join(".codex/models_cache.json")) {
+                if let Some(items) = value.get("models").and_then(serde_json::Value::as_array) {
+                    for item in items {
+                        if item.get("visibility").and_then(serde_json::Value::as_str) == Some("hide") { continue; }
+                        if let Some(id) = item.get("slug").and_then(serde_json::Value::as_str) {
+                            push_model(&mut models, id, item.get("display_name").and_then(serde_json::Value::as_str));
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    models
 }
 
 #[cfg(windows)]
@@ -123,8 +202,31 @@ pub async fn inspect_agent_engine(engine: String, executable: Option<String>) ->
 }
 
 #[tauri::command]
+pub async fn list_agent_engine_models(engine: String, executable: Option<String>) -> Result<Vec<AgentEngineModel>, String> {
+    if engine == "opencode" {
+        let value = resolved_executable(&engine, executable.as_deref())?;
+        let (program, mut args) = command_with_script_support(&value);
+        args.push("models".to_string());
+        let output = Command::new(&program).args(&args).stdin(Stdio::null()).output().await
+            .map_err(|error| format!("Failed to list OpenCode models: {error}"))?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
+        let mut models = Vec::new();
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            let id = line.trim();
+            if id.contains('/') { push_model(&mut models, id, None); }
+        }
+        return Ok(models);
+    }
+    Ok(models_from_local_config(&engine))
+}
+
+#[tauri::command]
 pub async fn run_agent_engine(manager: State<'_, AgentEngineManager>, request: AgentEngineRequest) -> Result<AgentEngineResult, String> {
-    if request.run_id.len() > 80 || request.prompt.len() > 2_000_000 { return Err("Invalid Agent request".to_string()); }
+    if request.run_id.len() > 80 || request.prompt.len() > 2_000_000 || request.model.as_deref().is_some_and(|model| model.len() > 300 || model.contains('\0')) {
+        return Err("Invalid Agent request".to_string());
+    }
     let workspace = PathBuf::from(&request.workspace);
     if !workspace.is_dir() {
         return Err(format!("Agent workspace does not exist: {}", workspace.display()));
@@ -135,19 +237,31 @@ pub async fn run_agent_engine(manager: State<'_, AgentEngineManager>, request: A
     match request.engine.as_str() {
         "opencode" => {
             args.extend(["run", "--format", "json"].map(str::to_string));
+            if let Some(model) = request.model.as_deref().map(str::trim).filter(|model| !model.is_empty()) {
+                args.extend(["--model".to_string(), model.to_string()]);
+            }
             args.push(request.prompt.clone());
         }
         "claude" => {
             args.extend(["-p", "--output-format", "json", "--permission-mode", if writable { "acceptEdits" } else { "plan" }].map(str::to_string));
+            if let Some(model) = request.model.as_deref().map(str::trim).filter(|model| !model.is_empty()) {
+                args.extend(["--model".to_string(), model.to_string()]);
+            }
             args.push(request.prompt.clone());
         }
         "codex" => {
             args.extend(["exec", "--json", "--skip-git-repo-check", "--sandbox", if writable { "workspace-write" } else { "read-only" }, "-C"].map(str::to_string));
             args.push(workspace.to_string_lossy().to_string());
+            if let Some(model) = request.model.as_deref().map(str::trim).filter(|model| !model.is_empty()) {
+                args.extend(["--model".to_string(), model.to_string()]);
+            }
             args.push(request.prompt.clone());
         }
         "workbuddy" => {
             args.extend(["--print", "--output-format", "json", "--permission-mode", if writable { "acceptEdits" } else { "plan" }].map(str::to_string));
+            if let Some(model) = request.model.as_deref().map(str::trim).filter(|model| !model.is_empty()) {
+                args.extend(["--model".to_string(), model.to_string()]);
+            }
             args.push(request.prompt.clone());
         }
         _ => return Err("Unsupported Agent engine".to_string()),
