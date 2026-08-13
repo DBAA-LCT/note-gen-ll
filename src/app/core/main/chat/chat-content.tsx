@@ -597,7 +597,10 @@ const Message = React.memo(function Message({ chat }: { chat: Chat }) {
               streaming={isGeneratingMessage}
             />
             {!isGeneratingMessage && (
-              <MessageControl chat={chat}>
+              <MessageControl
+                chat={chat}
+                canRegenerate={chat.id === latestAssistantChatId && !loading && !agentState.isRunning}
+              >
                 <MarkText chat={chat} />
               </MessageControl>
             )}
