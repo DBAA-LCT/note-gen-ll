@@ -15,7 +15,6 @@ import {
   Package,
   Search,
   FilePlus2,
-  Terminal,
   WandSparkles,
   type LucideIcon,
 } from "lucide-react"
@@ -39,6 +38,7 @@ import {
   type AgentEngineCommand,
   type AgentEngineId,
 } from "@/lib/agent-engines"
+import { AgentEngineMark } from "./agent-engine-brand"
 
 export type ComposerMenuMode = "command" | "resource"
 
@@ -64,7 +64,8 @@ interface ComposerMenuItem {
   label: string
   description: string
   searchText?: string
-  icon: LucideIcon
+  icon?: LucideIcon
+  engine?: AgentEngineId
   iconClassName?: string
   meta?: string
   onSelect: () => void
@@ -177,7 +178,7 @@ export const ChatComposerMenu = forwardRef<
               : `${engineName} 指令`,
           label: `/${command.name}`,
           description: command.description,
-          icon: command.source === "project" || command.source === "personal" ? Package : Terminal,
+          engine: agentEngine,
           meta: command.argumentHint,
           onSelect: () => onCommandSelect(`/${command.name}${command.argumentHint ? " " : ""}`),
         }))
@@ -341,10 +342,14 @@ export const ChatComposerMenu = forwardRef<
                     onMouseDown={event => event.preventDefault()}
                     onClick={() => selectItem(item)}
                   >
-                    <Icon
-                      data-icon="inline-start"
-                      className={item.iconClassName}
-                    />
+                    {item.engine ? (
+                      <AgentEngineMark engine={item.engine} className="size-4 rounded-[4px]" />
+                    ) : Icon ? (
+                      <Icon
+                        data-icon="inline-start"
+                        className={item.iconClassName}
+                      />
+                    ) : null}
                     <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
                       <span className="shrink-0 truncate text-xs font-medium">
                         {item.label}

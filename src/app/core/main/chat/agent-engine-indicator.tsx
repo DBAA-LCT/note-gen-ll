@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Bot, ChevronDown, FolderOpen, LoaderCircle, Settings } from 'lucide-react'
+import { ChevronDown, FolderOpen, LoaderCircle, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -30,6 +30,7 @@ import {
 } from '@/lib/agent-engines'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
 import useChatStore from '@/stores/chat'
+import { AgentEngineMark } from './agent-engine-brand'
 
 export function AgentEngineIndicator() {
   const [open, setOpen] = useState(false)
@@ -152,7 +153,7 @@ export function AgentEngineIndicator() {
           aria-label={`当前 Agent：${getAgentEngineName(settings.selected)}`}
           title="切换 Agent 引擎"
         >
-          <Bot className="size-4" />
+          <AgentEngineMark engine={settings.selected} className="size-4 rounded-[4px]" />
           <span className="hidden max-w-28 truncate md:inline">
             {getAgentEngineName(settings.selected)}
           </span>
@@ -178,7 +179,7 @@ export function AgentEngineIndicator() {
                   onSelect={() => void selectEngine(item.id)}
                   className="items-start"
                 >
-                  <Bot className="mt-0.5 size-4" />
+                  <AgentEngineMark engine={item.id} className="mt-0.5 size-5 rounded-[5px]" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-medium">{item.name}</span>

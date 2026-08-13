@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { BotMessageSquare, LoaderCircle } from 'lucide-react'
+import { LoaderCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -27,6 +27,7 @@ import {
 import useChatStore from '@/stores/chat'
 import { getDefaultArticleAbsolutePath, getWorkspacePath } from '@/lib/workspace'
 import { ModelSelect } from './model-select'
+import { AgentEngineMark } from './agent-engine-brand'
 
 export function AgentModelSelect() {
   const [settings, setSettings] = useState<AgentEngineSettings>(DEFAULT_AGENT_ENGINE_SETTINGS)
@@ -128,7 +129,7 @@ export function AgentModelSelect() {
           className="h-5 min-w-0 max-w-[65%] gap-1 px-1 text-xs font-normal text-muted-foreground"
           title={`切换 ${getAgentEngineName(engine)} 模型`}
         >
-          <BotMessageSquare data-icon="inline-start" />
+          <AgentEngineMark engine={engine} className="size-4 rounded-[4px]" />
           <span className="truncate">
             {selectedModel || automaticLabel}
           </span>
