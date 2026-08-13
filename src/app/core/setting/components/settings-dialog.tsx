@@ -35,6 +35,7 @@ import BackupPage from '../backup/page'
 import TemplatePage from '../template/page'
 import WebSearchSettingPage from '../webSearch/page'
 import LearningSettingPage from '../learning/page'
+import AgentEnginesPage from '../agentEngines/page'
 import { SettingTab } from './setting-tab'
 
 const settingPages: Record<SettingSection, ComponentType> = {
@@ -46,6 +47,7 @@ const settingPages: Record<SettingSection, ComponentType> = {
   backup: BackupPage,
   imageHosting: ImageHostingPage,
   ai: AiPage,
+  agentEngines: AgentEnginesPage,
   webSearch: WebSearchSettingPage,
   rag: RagSettingPage,
   mcp: McpSettingPage,

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import baseConfig from '../config'
 import { useMessages, useTranslations } from 'next-intl'
-import { Search } from 'lucide-react'
+import { Bot, Search } from 'lucide-react'
 import { Empty, EmptyDescription } from '@/components/ui/empty'
 import {
   InputGroup,
@@ -28,7 +28,13 @@ export function SettingTab() {
   const config = useMemo(() => {
     const settingMessages = messages.settings as Record<string, unknown> | undefined
 
-    return baseConfig.map(item => {
+    const desktopConfig = baseConfig.flatMap(item => (
+      'anchor' in item && item.anchor === 'ai'
+        ? [item, { icon: <Bot className="size-4" />, anchor: 'agentEngines' as const }]
+        : [item]
+    ))
+
+    return desktopConfig.map(item => {
       if ('group' in item) {
         return {
           ...item,
@@ -37,9 +43,15 @@ export function SettingTab() {
       }
       return {
         ...item,
-        title: item.anchor === 'learning' ? '规划' : t(item.anchor === 'ai' ? 'ai.menuTitle' : `${item.anchor}.title`),
+        title: item.anchor === 'learning'
+          ? '规划'
+          : item.anchor === 'agentEngines'
+            ? 'Agent 引擎'
+            : t(item.anchor === 'ai' ? 'ai.menuTitle' : `${item.anchor}.title`),
         searchTerms: item.anchor === 'learning'
           ? ['目标', '任务', '专注', '复盘', '日报']
+          : item.anchor === 'agentEngines'
+            ? ['Agent', 'OpenCode', 'Claude Code', 'Codex', 'WorkBuddy', '本地 CLI']
           : collectSearchTerms(settingMessages?.[item.anchor]),
       }
     })

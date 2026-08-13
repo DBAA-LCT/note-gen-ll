@@ -1,11 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
 import { Store } from '@tauri-apps/plugin-store'
-import { getAISettings } from '@/lib/ai/utils'
-import type { AiConfig } from '@/app/core/setting/config'
 
 export type AgentEngineId = 'native' | 'opencode' | 'claude' | 'codex' | 'workbuddy'
 export type ExternalAgentEngineId = Exclude<AgentEngineId, 'native'>
-export interface AgentEngineConfig { installed: boolean; executable?: string; permissionMode: 'workspace-write' | 'read-only'; modelSource: 'agent-default' | 'system-primary' | 'system-model'; modelId?: string }
+export interface AgentEngineConfig { installed: boolean; executable?: string; permissionMode: 'workspace-write' | 'read-only' }
 export interface AgentEngineSettings { selected: AgentEngineId; engines: Record<ExternalAgentEngineId, AgentEngineConfig> }
 export interface AgentEngineInspection { engine: ExternalAgentEngineId; available: boolean; executable?: string; version?: string; error?: string }
 
@@ -18,10 +16,10 @@ export const AGENT_ENGINE_CATALOG = [
 ] satisfies Array<{ id: ExternalAgentEngineId; name: string; description: string; installUrl: string }>
 export const DEFAULT_AGENT_ENGINE_SETTINGS: AgentEngineSettings = {
   selected: 'native', engines: {
-    opencode: { installed: false, permissionMode: 'workspace-write', modelSource: 'agent-default' },
-    claude: { installed: false, permissionMode: 'workspace-write', modelSource: 'agent-default' },
-    codex: { installed: false, permissionMode: 'workspace-write', modelSource: 'agent-default' },
-    workbuddy: { installed: false, permissionMode: 'workspace-write', modelSource: 'agent-default' },
+    opencode: { installed: false, permissionMode: 'workspace-write' },
+    claude: { installed: false, permissionMode: 'workspace-write' },
+    codex: { installed: false, permissionMode: 'workspace-write' },
+    workbuddy: { installed: false, permissionMode: 'workspace-write' },
   },
 }
 
@@ -58,25 +56,7 @@ function parseAgentOutput(stdout: string): string {
   const chunks = trimmed.split(/\r?\n/).map(line => { try { return textFromJson(JSON.parse(line)) } catch { return '' } }).filter(Boolean)
   return chunks.length ? chunks[chunks.length - 1] : trimmed
 }
-export interface SystemAgentModel { id: string; label: string; model: string }
-export async function loadSystemAgentModels(): Promise<SystemAgentModel[]> {
-  const store = await Store.load('store.json')
-  const configs = await store.get<AiConfig[]>('aiModelList') || []
-  return configs.flatMap(config => (config.models || [])
-    .filter(model => model.modelType === 'chat' && model.model.trim())
-    .map(model => ({ id: `${config.key}::${model.id}`, label: `${config.title} / ${model.model}`, model: model.model })))
-}
-export async function resolveAgentModel(config: AgentEngineConfig) {
-  if (config.modelSource === 'agent-default') return undefined
-  if (config.modelSource === 'system-primary') return getAISettings('primaryModel')
-  const store = await Store.load('store.json')
-  const configs = await store.get<AiConfig[]>('aiModelList') || []
-  const [configKey, modelId] = (config.modelId || '').split('::')
-  const provider = configs.find(item => item.key === configKey)
-  const model = provider?.models?.find(item => item.id === modelId)
-  return provider && model ? { ...provider, model: model.model } : undefined
-}
-export async function runExternalAgent(input: { runId: string; engine: ExternalAgentEngineId; prompt: string; workspace: string; executable?: string; permissionMode: 'workspace-write' | 'read-only'; model?: string; baseUrl?: string; apiKey?: string }) {
+export async function runExternalAgent(input: { runId: string; engine: ExternalAgentEngineId; prompt: string; workspace: string; executable?: string; permissionMode: 'workspace-write' | 'read-only' }) {
   const result = await invoke<{ exitCode: number; stdout: string; stderr: string; cancelled: boolean }>('run_agent_engine', { request: input })
   const content = parseAgentOutput(result.stdout)
   if (result.cancelled) return { content, stopped: true }
