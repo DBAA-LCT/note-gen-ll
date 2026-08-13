@@ -1467,6 +1467,7 @@ ${previewLines.join('\n')}
         ref={composerMenuRef}
         mode={composerMenu?.mode ?? null}
         query={composerMenu?.query ?? ''}
+        agentEngine={activeEngine}
         onClose={closeComposerMenu}
         onCommandSelect={prompt => replaceComposerMenuToken(prompt)}
         onFileSelect={file => {

@@ -32,7 +32,7 @@ use ai::{
     cancel_ai_request, AiRequestManager,
 };
 #[cfg(not(target_os = "android"))]
-use agent_engine::{cancel_agent_engine, inspect_agent_engine, list_agent_engine_models, run_agent_engine, AgentEngineManager};
+use agent_engine::{cancel_agent_engine, inspect_agent_engine, list_agent_engine_commands, list_agent_engine_models, run_agent_engine, AgentEngineManager};
 use backup::{export_app_data, import_app_data, import_app_data_from_file};
 use backup_manager::{create_managed_backup, list_managed_backups, restore_managed_backup};
 use cloud_folder_sync::{
@@ -137,6 +137,8 @@ pub fn run() {
             install_skill_python_dependencies,
             #[cfg(not(target_os = "android"))]
             inspect_agent_engine,
+            #[cfg(not(target_os = "android"))]
+            list_agent_engine_commands,
             #[cfg(not(target_os = "android"))]
             list_agent_engine_models,
             #[cfg(not(target_os = "android"))]

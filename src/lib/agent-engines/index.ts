@@ -7,6 +7,7 @@ export interface AgentEngineConfig { installed: boolean; executable?: string; mo
 export interface AgentEngineSettings { selected: AgentEngineId; engines: Record<ExternalAgentEngineId, AgentEngineConfig> }
 export interface AgentEngineInspection { engine: ExternalAgentEngineId; available: boolean; executable?: string; version?: string; error?: string }
 export interface AgentEngineModel { id: string; name: string; description?: string; isCurrent?: boolean }
+export interface AgentEngineCommand { name: string; description: string; argumentHint?: string; source: 'builtin' | 'claude' | 'personal' | 'project' | string }
 
 const STORE_KEY = 'agentEngines.v1'
 const CONVERSATION_STORE_KEY = 'agentEngineConversations.v1'
@@ -66,6 +67,19 @@ export async function inspectAgentEngine(engine: ExternalAgentEngineId, executab
 }
 export async function listAgentEngineModels(engine: ExternalAgentEngineId, executable?: string, workspace?: string) {
   return invoke<AgentEngineModel[]>('list_agent_engine_models', { engine, executable: executable || null, workspace: workspace || null })
+}
+export async function listAgentEngineCommands(engine: ExternalAgentEngineId, executable?: string, workspace?: string) {
+  try {
+    return await invoke<AgentEngineCommand[]>('list_agent_engine_commands', { engine, executable: executable || null, workspace: workspace || null })
+  } catch {
+    const fallback: Record<ExternalAgentEngineId, Array<[string, string]>> = {
+      claude: [['context', '查看 Claude Code 上下文占用'], ['init', '初始化 CLAUDE.md'], ['review', '审查当前代码改动'], ['security-review', '执行安全审查'], ['usage', '查看 Claude Code 用量']],
+      workbuddy: [['help', '查看 WorkBuddy 帮助'], ['doctor', '检查 WorkBuddy 环境'], ['status', '查看当前状态'], ['context', '查看上下文占用'], ['init', '初始化项目配置']],
+      opencode: [['init', '初始化 OpenCode 项目配置'], ['undo', '撤销上一次修改'], ['redo', '重做上一次修改'], ['share', '分享当前会话'], ['help', '查看 OpenCode 帮助']],
+      codex: [['status', '查看 Codex 状态'], ['review', '审查当前代码改动'], ['init', '初始化 AGENTS.md'], ['diff', '查看工作区差异'], ['compact', '压缩当前会话上下文']],
+    }
+    return fallback[engine].map(([name, description]) => ({ name, description, source: 'builtin' }))
+  }
 }
 function textFromJson(value: unknown): string {
   if (Array.isArray(value)) {

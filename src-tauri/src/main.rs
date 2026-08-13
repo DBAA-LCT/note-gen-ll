@@ -40,7 +40,7 @@ use cloud_folder_sync::{
     delete_cloud_folder_sync_file, list_cloud_folder_sync_files, migrate_workspace_to_cloud_folder,
     read_cloud_folder_sync_file, test_cloud_folder_sync, write_cloud_folder_sync_file,
 };
-use agent_engine::{cancel_agent_engine, inspect_agent_engine, list_agent_engine_models, run_agent_engine, AgentEngineManager};
+use agent_engine::{cancel_agent_engine, inspect_agent_engine, list_agent_engine_commands, list_agent_engine_models, run_agent_engine, AgentEngineManager};
 use device::get_device_id;
 use fonts::list_system_fonts;
 use fuzzy_search::{fuzzy_search, fuzzy_search_parallel};
@@ -138,6 +138,7 @@ fn main() {
             inspect_skill_python,
             install_skill_python_dependencies,
             inspect_agent_engine,
+            list_agent_engine_commands,
             list_agent_engine_models,
             run_agent_engine,
             cancel_agent_engine,

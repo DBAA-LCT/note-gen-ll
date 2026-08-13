@@ -15,6 +15,7 @@ import {
   Package,
   Search,
   FilePlus2,
+  Terminal,
   WandSparkles,
   type LucideIcon,
 } from "lucide-react"
@@ -31,6 +32,13 @@ import { getAllMarkdownFiles, type MarkdownFile } from "@/lib/files"
 import { cn } from "@/lib/utils"
 import { useSkillsStore } from "@/stores/skills"
 import type { SkillMetadata } from "@/lib/skills/types"
+import {
+  getAgentEngineName,
+  listAgentEngineCommands,
+  loadAgentEngineSettings,
+  type AgentEngineCommand,
+  type AgentEngineId,
+} from "@/lib/agent-engines"
 
 export type ComposerMenuMode = "command" | "resource"
 
@@ -42,6 +50,7 @@ export interface ChatComposerMenuHandle {
 interface ChatComposerMenuProps {
   mode: ComposerMenuMode | null
   query: string
+  agentEngine: AgentEngineId
   onClose: () => void
   onCommandSelect: (prompt: string) => void
   onFileSelect: (file: MarkdownFile) => void
@@ -83,6 +92,7 @@ export const ChatComposerMenu = forwardRef<
 >(function ChatComposerMenu({
   mode,
   query,
+  agentEngine,
   onClose,
   onCommandSelect,
   onFileSelect,
@@ -98,6 +108,8 @@ export const ChatComposerMenu = forwardRef<
   const [files, setFiles] = useState<MarkdownFile[]>([])
   const [records, setRecords] = useState<Mark[]>([])
   const [loading, setLoading] = useState(false)
+  const [commandLoading, setCommandLoading] = useState(false)
+  const [agentCommands, setAgentCommands] = useState<AgentEngineCommand[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const selectedItemRef = useRef<HTMLButtonElement>(null)
 
@@ -128,12 +140,48 @@ export const ChatComposerMenu = forwardRef<
 
   useEffect(() => {
     if (mode !== "command") return
+    if (agentEngine === "native") {
+      setAgentCommands([])
+      void (skillsInitialized ? refreshSkills() : initSkills())
+      return
+    }
 
-    void (skillsInitialized ? refreshSkills() : initSkills())
-  }, [initSkills, mode, refreshSkills, skillsInitialized])
+    let active = true
+    setAgentCommands([])
+    setCommandLoading(true)
+    void loadAgentEngineSettings()
+      .then(settings => listAgentEngineCommands(
+        agentEngine,
+        settings.engines[agentEngine].executable,
+        settings.engines[agentEngine].workspace
+      ))
+      .then(commands => {
+        if (active) setAgentCommands(commands)
+      })
+      .finally(() => {
+        if (active) setCommandLoading(false)
+      })
+    return () => { active = false }
+  }, [agentEngine, initSkills, mode, refreshSkills, skillsInitialized])
 
   const items = useMemo<ComposerMenuItem[]>(() => {
     if (mode === "command") {
+      if (agentEngine !== "native") {
+        const engineName = getAgentEngineName(agentEngine)
+        return agentCommands.map(command => ({
+          key: `agent-command:${agentEngine}:${command.name}`,
+          group: command.source === "project"
+            ? `${engineName} · 项目指令`
+            : command.source === "personal"
+              ? `${engineName} · 个人指令`
+              : `${engineName} 指令`,
+          label: `/${command.name}`,
+          description: command.description,
+          icon: command.source === "project" || command.source === "personal" ? Package : Terminal,
+          meta: command.argumentHint,
+          onSelect: () => onCommandSelect(`/${command.name}${command.argumentHint ? " " : ""}`),
+        }))
+      }
       return [
         ...COMMANDS.map(({ key, icon }) => ({
           key: `command:${key}`,
@@ -184,6 +232,8 @@ export const ChatComposerMenu = forwardRef<
     ]
   }, [
     files,
+    agentCommands,
+    agentEngine,
     mode,
     onCommandSelect,
     onFileSelect,
@@ -240,13 +290,18 @@ export const ChatComposerMenu = forwardRef<
 
   if (mode === null) return null
 
+  const menuLoading = mode === "command" ? commandLoading : loading
+  const commandMenuLabel = agentEngine === "native"
+    ? t("commands.title")
+    : `${getAgentEngineName(agentEngine)} 指令`
+
   return (
     <div
       className="absolute inset-x-1 bottom-[calc(100%+0.375rem)] z-30 max-h-[min(22rem,46vh)] overflow-y-auto rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg"
       role="listbox"
-      aria-label={mode === "command" ? t("commands.title") : t("resources.title")}
+      aria-label={mode === "command" ? commandMenuLabel : t("resources.title")}
     >
-      {loading && filteredItems.length === 0 ? (
+      {menuLoading && filteredItems.length === 0 ? (
         <div className="px-2 py-4 text-center text-xs text-muted-foreground">
           {t("loading")}
         </div>

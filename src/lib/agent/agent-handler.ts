@@ -159,7 +159,12 @@ export class AgentHandler {
         const history = Array.isArray(contextOrMessages)
           ? contextOrMessages.map(message => `${message.role}: ${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`).join('\n\n')
           : contextOrMessages || ''
-        const prompt = history ? `${history}\n\nuser: ${userInput}` : userInput
+        // Native CLI slash commands are recognized only at the beginning of the
+        // dispatched prompt. Do not prefix them with NoteGoal's rendered history.
+        const isExternalSlashCommand = /^\s*\/[a-zA-Z0-9][\w:.-]*(?:\s|$)/.test(userInput)
+        const prompt = isExternalSlashCommand
+          ? userInput.trimStart()
+          : history ? `${history}\n\nuser: ${userInput}` : userInput
         try {
           const hostBridge = LEARNING_WORKFLOW_PATTERN.test(prompt)
             ? buildExternalHostToolInstructions()

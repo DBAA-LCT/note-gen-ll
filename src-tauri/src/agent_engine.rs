@@ -56,6 +56,112 @@ pub struct AgentEngineModel {
     is_current: bool,
 }
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentEngineCommand {
+    name: String,
+    description: String,
+    argument_hint: Option<String>,
+    source: String,
+}
+
+fn command_description(engine: &str, name: &str) -> &'static str {
+    match (engine, name) {
+        (_, "init") => "初始化当前项目的 Agent 配置",
+        (_, "context") => "查看当前上下文占用",
+        (_, "status") => "查看当前 Agent 与工作区状态",
+        (_, "doctor") => "检查 Agent 环境与配置",
+        (_, "review") | (_, "code-review") => "审查当前工作区的代码改动",
+        (_, "security-review") => "执行安全审查",
+        (_, "compact") => "压缩当前会话上下文",
+        (_, "usage") | (_, "cost") => "查看用量与消耗",
+        (_, "recap") => "回顾当前会话的工作",
+        (_, "debug") => "诊断并调试当前问题",
+        (_, "simplify") => "检查并简化最近的代码改动",
+        (_, "batch") => "批量执行可并行的工作",
+        (_, "loop") => "按指定间隔重复执行任务",
+        (_, "undo") => "撤销上一次 Agent 修改",
+        (_, "redo") => "重做上一次撤销的修改",
+        (_, "share") => "分享当前 Agent 会话",
+        (_, "help") => "显示此 Agent 的帮助信息",
+        ("codex", "diff") => "查看当前工作区差异",
+        ("codex", "permissions") => "调整 Codex 的审批与沙箱权限",
+        ("codex", "model") => "切换 Codex 模型",
+        _ => "运行此 Agent 提供的快捷指令",
+    }
+}
+
+fn push_command(commands: &mut Vec<AgentEngineCommand>, engine: &str, name: &str, source: &str, description: Option<String>, argument_hint: Option<String>) {
+    let name = name.trim().trim_start_matches('/');
+    if name.is_empty() || !name.chars().all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | ':' | '.')) {
+        return;
+    }
+    if commands.iter().any(|command| command.name == name) { return; }
+    commands.push(AgentEngineCommand {
+        name: name.to_string(),
+        description: description.filter(|value| !value.trim().is_empty()).unwrap_or_else(|| command_description(engine, name).to_string()),
+        argument_hint,
+        source: source.to_string(),
+    });
+}
+
+fn markdown_frontmatter_value(content: &str, key: &str) -> Option<String> {
+    let mut lines = content.lines();
+    if lines.next()?.trim() != "---" { return None; }
+    for line in lines {
+        let line = line.trim();
+        if line == "---" { break; }
+        let Some((field, value)) = line.split_once(':') else { continue; };
+        if field.trim() == key {
+            return Some(value.trim().trim_matches(['\'', '"']).to_string());
+        }
+    }
+    None
+}
+
+fn scan_command_markdown(commands: &mut Vec<AgentEngineCommand>, engine: &str, root: &Path, current: &Path, skills: bool, source: &str, depth: usize) {
+    if depth > 8 || commands.len() >= 300 { return; }
+    let Ok(entries) = std::fs::read_dir(current) else { return; };
+    for entry in entries.flatten() {
+        if commands.len() >= 300 { break; }
+        let Ok(file_type) = entry.file_type() else { continue; };
+        if file_type.is_symlink() { continue; }
+        let path = entry.path();
+        if file_type.is_dir() {
+            scan_command_markdown(commands, engine, root, &path, skills, source, depth + 1);
+            continue;
+        }
+        let is_skill = skills && path.file_name().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("SKILL.md"));
+        let is_command = !skills && path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("md"));
+        if !is_skill && !is_command { continue; }
+        let command_path = if is_skill { path.parent().unwrap_or(&path) } else { path.as_path() };
+        let Ok(relative) = command_path.strip_prefix(root) else { continue; };
+        let mut parts = relative.components().filter_map(|part| part.as_os_str().to_str()).map(str::to_string).collect::<Vec<_>>();
+        if !is_skill {
+            if let Some(last) = parts.last_mut() {
+                *last = Path::new(last).file_stem().and_then(|value| value.to_str()).unwrap_or(last).to_string();
+            }
+        }
+        let name = parts.join(":");
+        let content = std::fs::read_to_string(&path).unwrap_or_default();
+        push_command(
+            commands,
+            engine,
+            &name,
+            source,
+            markdown_frontmatter_value(&content, "description"),
+            markdown_frontmatter_value(&content, "argument-hint"),
+        );
+    }
+}
+
+fn scan_engine_commands(commands: &mut Vec<AgentEngineCommand>, engine: &str, base: &Path, folder: &str, source: &str) {
+    let commands_root = base.join(folder).join("commands");
+    scan_command_markdown(commands, engine, &commands_root, &commands_root, false, source, 0);
+    let skills_root = base.join(folder).join("skills");
+    scan_command_markdown(commands, engine, &skills_root, &skills_root, true, source, 0);
+}
+
 fn default_command(engine: &str) -> Result<&'static str, String> {
     match engine {
         "opencode" => Ok("opencode"),
@@ -327,6 +433,69 @@ pub async fn list_agent_engine_models(engine: String, executable: Option<String>
         return list_workbuddy_models_via_acp(&value, workspace.as_deref()).await;
     }
     Ok(models_from_local_config(&engine))
+}
+
+async fn discover_claude_slash_commands(executable: &str, workspace: Option<&Path>) -> Vec<String> {
+    let (program, mut args) = command_with_script_support(executable);
+    args.extend(["-p", "/help", "--output-format", "stream-json", "--verbose", "--permission-mode", "plan"].map(str::to_string));
+    let mut command = Command::new(&program);
+    command.args(&args).stdin(Stdio::null());
+    if let Some(workspace) = workspace { command.current_dir(workspace); }
+    let Ok(Ok(output)) = timeout(Duration::from_secs(20), command.output()).await else { return Vec::new(); };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else { continue; };
+        if message.get("type").and_then(serde_json::Value::as_str) != Some("system")
+            || message.get("subtype").and_then(serde_json::Value::as_str) != Some("init") { continue; }
+        return message.get("slash_commands")
+            .and_then(serde_json::Value::as_array)
+            .into_iter().flatten()
+            .filter_map(serde_json::Value::as_str)
+            .filter(|name| !name.starts_with("__") && !name.starts_with("workflow-"))
+            .map(str::to_string)
+            .collect();
+    }
+    Vec::new()
+}
+
+#[tauri::command]
+pub async fn list_agent_engine_commands(engine: String, executable: Option<String>, workspace: Option<String>) -> Result<Vec<AgentEngineCommand>, String> {
+    if !matches!(engine.as_str(), "opencode" | "claude" | "codex" | "workbuddy") {
+        return Err("Unsupported Agent engine".to_string());
+    }
+    let workspace_path = workspace.as_deref().map(str::trim).filter(|value| !value.is_empty()).map(PathBuf::from);
+    if workspace_path.as_ref().is_some_and(|path| !path.is_dir()) {
+        return Err(format!("Agent workspace does not exist: {}", workspace_path.as_ref().unwrap().display()));
+    }
+
+    let mut commands = Vec::new();
+    let folder = match engine.as_str() {
+        "claude" => Some(".claude"),
+        "workbuddy" => Some(".codebuddy"),
+        "opencode" => Some(".opencode"),
+        _ => None,
+    };
+    if let Some(folder) = folder {
+        if let Some(home) = user_home_dir() { scan_engine_commands(&mut commands, &engine, &home, folder, "personal"); }
+        if let Some(workspace) = workspace_path.as_deref() { scan_engine_commands(&mut commands, &engine, workspace, folder, "project"); }
+    }
+
+    let builtin_names: &[&str] = match engine.as_str() {
+        "claude" => {
+            let value = resolved_executable(&engine, executable.as_deref())?;
+            let discovered = discover_claude_slash_commands(&value, workspace_path.as_deref()).await;
+            let discovery_failed = discovered.is_empty();
+            for name in discovered { push_command(&mut commands, &engine, &name, "claude", None, None); }
+            if discovery_failed { &["context", "init", "review", "security-review", "usage"] } else { &[] }
+        }
+        "workbuddy" => &["help", "doctor", "status", "context", "cost", "init", "compact", "insights"],
+        "opencode" => &["init", "undo", "redo", "share", "help"],
+        "codex" => &["status", "model", "permissions", "review", "init", "compact", "diff", "mcp"],
+        _ => &[],
+    };
+    for name in builtin_names { push_command(&mut commands, &engine, name, "builtin", None, None); }
+    commands.sort_by(|left, right| left.source.cmp(&right.source).then_with(|| left.name.cmp(&right.name)));
+    Ok(commands)
 }
 
 #[tauri::command]
