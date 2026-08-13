@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Bot, ChevronDown, Settings } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Bot, ChevronDown, LoaderCircle, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Command,
@@ -19,10 +19,13 @@ import {
   AGENT_ENGINE_CATALOG,
   DEFAULT_AGENT_ENGINE_SETTINGS,
   getAgentEngineName,
+  inspectAgentEngine,
   loadAgentEngineSettings,
   saveAgentEngineSettings,
   type AgentEngineId,
+  type AgentEngineInspection,
   type AgentEngineSettings,
+  type ExternalAgentEngineId,
 } from '@/lib/agent-engines'
 import { useSettingsDialogStore } from '@/stores/settings-dialog'
 import useChatStore from '@/stores/chat'
@@ -30,18 +33,53 @@ import useChatStore from '@/stores/chat'
 export function AgentEngineIndicator() {
   const [open, setOpen] = useState(false)
   const [settings, setSettings] = useState<AgentEngineSettings>(DEFAULT_AGENT_ENGINE_SETTINGS)
+  const [inspections, setInspections] = useState<Partial<Record<ExternalAgentEngineId, AgentEngineInspection>>>({})
+  const [checking, setChecking] = useState(false)
   const loading = useChatStore(state => state.loading)
   const openSettings = useSettingsDialogStore(state => state.openSettings)
 
+  const refreshAvailability = useCallback(async (currentSettings: AgentEngineSettings) => {
+    setChecking(true)
+    const results = await Promise.all(AGENT_ENGINE_CATALOG.map(async item => {
+      try {
+        return await inspectAgentEngine(item.id, currentSettings.engines[item.id].executable)
+      } catch (error) {
+        return {
+          engine: item.id,
+          available: false,
+          error: String(error),
+        } satisfies AgentEngineInspection
+      }
+    }))
+
+    const nextInspections = Object.fromEntries(
+      results.map(result => [result.engine, result])
+    ) as Record<ExternalAgentEngineId, AgentEngineInspection>
+    setInspections(nextInspections)
+    setChecking(false)
+
+    if (currentSettings.selected !== 'native' && !nextInspections[currentSettings.selected].available) {
+      const fallbackSettings = { ...currentSettings, selected: 'native' as const }
+      setSettings(fallbackSettings)
+      await saveAgentEngineSettings(fallbackSettings)
+    }
+  }, [])
+
   useEffect(() => {
-    void loadAgentEngineSettings().then(setSettings)
+    void loadAgentEngineSettings().then(loadedSettings => {
+      setSettings(loadedSettings)
+      void refreshAvailability(loadedSettings)
+    })
     const handleChange = (event: Event) => {
       const nextSettings = (event as CustomEvent<AgentEngineSettings>).detail
-      if (nextSettings?.selected) setSettings(nextSettings)
+      if (nextSettings?.selected) {
+        setSettings(nextSettings)
+        void refreshAvailability(nextSettings)
+      }
     }
     window.addEventListener('agent-engine-settings-changed', handleChange)
     return () => window.removeEventListener('agent-engine-settings-changed', handleChange)
-  }, [])
+  }, [refreshAvailability])
 
   async function selectEngine(engine: AgentEngineId) {
     if (engine === settings.selected) {
@@ -49,7 +87,16 @@ export function AgentEngineIndicator() {
       return
     }
 
-    const nextSettings = { ...settings, selected: engine }
+    const nextSettings: AgentEngineSettings = engine === 'native'
+      ? { ...settings, selected: engine }
+      : {
+          ...settings,
+          selected: engine,
+          engines: {
+            ...settings.engines,
+            [engine]: { ...settings.engines[engine], installed: true },
+          },
+        }
     setSettings(nextSettings)
     setOpen(false)
     await saveAgentEngineSettings(nextSettings)
@@ -61,17 +108,34 @@ export function AgentEngineIndicator() {
   }
 
   const engineOptions = [
-    { id: 'native' as const, name: 'NoteGoal 内置', description: '使用 NoteGoal 的模型配置', enabled: true },
+    {
+      id: 'native' as const,
+      name: 'NoteGoal 内置',
+      description: '在线 · 使用 NoteGoal 的模型配置',
+      available: true,
+      checking: false,
+    },
     ...AGENT_ENGINE_CATALOG.map(item => ({
       id: item.id,
       name: item.name,
-      description: item.description,
-      enabled: settings.engines[item.id].installed,
+      description: checking && !inspections[item.id]
+        ? '正在检测本机 CLI…'
+        : inspections[item.id]?.available
+          ? `在线${inspections[item.id]?.version ? ` · ${inspections[item.id]?.version}` : ''}`
+          : '离线 · 未检测到可用 CLI',
+      available: inspections[item.id]?.available === true,
+      checking: checking && !inspections[item.id],
     })),
   ]
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={nextOpen => {
+        setOpen(nextOpen)
+        if (nextOpen) void refreshAvailability(settings)
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -97,7 +161,7 @@ export function AgentEngineIndicator() {
                 <CommandItem
                   key={item.id}
                   value={`${item.name} ${item.id}`}
-                  disabled={!item.enabled}
+                  disabled={!item.available || item.checking}
                   data-checked={settings.selected === item.id}
                   onSelect={() => void selectEngine(item.id)}
                   className="items-start"
@@ -106,9 +170,14 @@ export function AgentEngineIndicator() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-medium">{item.name}</span>
-                      {!item.enabled ? (
-                        <span className="shrink-0 text-xs text-muted-foreground">未启用</span>
-                      ) : null}
+                      {item.checking ? (
+                        <LoaderCircle className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+                      ) : (
+                        <span
+                          className={`size-2 shrink-0 rounded-full ${item.available ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`}
+                          aria-label={item.available ? '在线' : '离线'}
+                        />
+                      )}
                     </div>
                     <p className="truncate text-xs text-muted-foreground">{item.description}</p>
                   </div>
