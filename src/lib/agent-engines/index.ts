@@ -46,13 +46,39 @@ export async function inspectAgentEngine(engine: ExternalAgentEngineId, executab
   return invoke<AgentEngineInspection>('inspect_agent_engine', { engine, executable: executable || null })
 }
 function textFromJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    for (let index = value.length - 1; index >= 0; index -= 1) {
+      const text = textFromJson(value[index])
+      if (text) return text
+    }
+    return ''
+  }
   if (!value || typeof value !== 'object') return ''
+
   const item = value as Record<string, unknown>
   if (typeof item.result === 'string') return item.result
+
+  if (item.role === 'assistant') {
+    if (typeof item.content === 'string') return item.content
+    if (Array.isArray(item.content)) {
+      const content = item.content
+        .filter(part => part && typeof part === 'object')
+        .map(part => {
+          const block = part as Record<string, unknown>
+          return block.type === 'output_text' && typeof block.text === 'string' ? block.text : ''
+        })
+        .filter(Boolean)
+        .join('\n')
+      if (content) return content
+    }
+  }
+
   if (typeof item.text === 'string') return item.text
   for (const key of ['item', 'part']) {
     const child = item[key]
-    if (child && typeof child === 'object' && typeof (child as Record<string, unknown>).text === 'string') return (child as Record<string, string>).text
+    if (child && typeof child === 'object' && typeof (child as Record<string, unknown>).text === 'string') {
+      return (child as Record<string, string>).text
+    }
   }
   return ''
 }
