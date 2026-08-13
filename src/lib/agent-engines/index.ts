@@ -35,6 +35,12 @@ export async function loadAgentEngineSettings(): Promise<AgentEngineSettings> {
 }
 export async function saveAgentEngineSettings(settings: AgentEngineSettings) {
   const store = await Store.load('store.json'); await store.set(STORE_KEY, settings); await store.save()
+  window.dispatchEvent(new CustomEvent('agent-engine-settings-changed', { detail: settings }))
+}
+
+export function getAgentEngineName(engine: AgentEngineId) {
+  if (engine === 'native') return 'NoteGoal 内置'
+  return AGENT_ENGINE_CATALOG.find(item => item.id === engine)?.name || engine
 }
 export async function inspectAgentEngine(engine: ExternalAgentEngineId, executable?: string) {
   return invoke<AgentEngineInspection>('inspect_agent_engine', { engine, executable: executable || null })

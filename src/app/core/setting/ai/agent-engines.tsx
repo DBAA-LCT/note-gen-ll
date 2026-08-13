@@ -45,7 +45,7 @@ export default function AgentEngines() {
             <Input value={config.executable || ''} placeholder={`可选：${item.id} 可执行文件完整路径`} onChange={event => setSettings(current => ({ ...current, engines: { ...current.engines, [item.id]: { ...current.engines[item.id], executable: event.target.value } } }))} onBlur={() => void commit(settings)} />
             <Button variant="ghost" onClick={() => void commit({ ...settings, engines: { ...settings.engines, [item.id]: { ...config, permissionMode: config.permissionMode === 'workspace-write' ? 'read-only' : 'workspace-write' } } })}>{config.permissionMode === 'workspace-write' ? '可写工作区' : '只读模式'}</Button>
           </div> : null}
-          {status ? <div className={`mt-2 text-sm ${status.available ? 'text-emerald-600' : 'text-destructive'}`}>{status.available ? `CLI 可用${status.version ? ` · ${status.version}` : ''}` : `CLI 不可用${status.error ? ` · ${status.error}` : ''}`}</div> : null}
+          {status ? <div className={`mt-2 break-all text-sm ${status.available ? 'text-emerald-600' : 'text-destructive'}`}>{status.available ? `CLI 可用${status.version ? ` · ${status.version}` : ''}${status.executable ? ` · ${status.executable}` : ''}` : `CLI 不可用${status.error ? ` · ${status.error}` : ''}`}</div> : null}
         </div>
       })}
     </CardContent>

@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+#[cfg(windows)]
+use std::process::Command as StdCommand;
 use std::sync::Arc;
 use tauri::State;
 use tokio::process::Command;
@@ -75,10 +77,31 @@ fn resolved_executable(engine: &str, custom: Option<&str>) -> Result<String, Str
     let detected: Option<PathBuf> = None;
     let value = custom.map(str::to_string)
         .or_else(|| detected.map(|path| path.to_string_lossy().to_string()))
+        .or_else(|| discover_windows_command(engine))
         .unwrap_or(default_command(engine)?.to_string());
     if value.contains('\0') { return Err("Invalid Agent executable path".to_string()); }
     Ok(value)
 }
+
+#[cfg(windows)]
+fn discover_windows_command(engine: &str) -> Option<String> {
+    let command_name = default_command(engine).ok()?;
+    let script = format!(
+        "(Get-Command -Name '{}' -CommandType Application,ExternalScript -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source)",
+        command_name
+    );
+    let output = StdCommand::new("powershell.exe")
+        .args(["-NoProfile", "-Command", &script])
+        .stdin(Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() { return None; }
+    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if path.is_empty() { None } else { Some(path) }
+}
+
+#[cfg(not(windows))]
+fn discover_windows_command(_engine: &str) -> Option<String> { None }
 
 #[tauri::command]
 pub async fn inspect_agent_engine(engine: String, executable: Option<String>) -> Result<AgentEngineInspection, String> {

@@ -20,6 +20,7 @@ import type { PendingQuote } from "@/stores/chat"
 import { AgentApprovalPanel } from "./agent-approval-panel"
 import { cancelPendingAgentAction, confirmPendingAgentAction } from "./agent-approval-actions"
 import { AgentPermissionModeSelect } from "./agent-permission-mode"
+import { AgentEngineIndicator } from "./agent-engine-indicator"
 import { ContextUsageIndicator } from "./context-usage-indicator"
 import { readFile, readTextFile, writeFile, BaseDirectory, exists, mkdir, stat } from "@tauri-apps/plugin-fs"
 import { ShineBorder } from "@/components/ui/shine-border"
@@ -1377,6 +1378,7 @@ ${previewLines.join('\n')}
               additionalContext={contextUsageAdditionalContext}
               imageCount={attachedImages.length}
             />
+            <AgentEngineIndicator />
             <AgentPermissionModeSelect />
             <ChatSend
               inputValue={text}
