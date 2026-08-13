@@ -126,7 +126,9 @@ pub async fn inspect_agent_engine(engine: String, executable: Option<String>) ->
 pub async fn run_agent_engine(manager: State<'_, AgentEngineManager>, request: AgentEngineRequest) -> Result<AgentEngineResult, String> {
     if request.run_id.len() > 80 || request.prompt.len() > 2_000_000 { return Err("Invalid Agent request".to_string()); }
     let workspace = PathBuf::from(&request.workspace);
-    if !workspace.is_dir() { return Err("Agent workspace does not exist".to_string()); }
+    if !workspace.is_dir() {
+        return Err(format!("Agent workspace does not exist: {}", workspace.display()));
+    }
     let executable = resolved_executable(&request.engine, request.executable.as_deref())?;
     let (program, mut args) = command_with_script_support(&executable);
     let writable = request.permission_mode.as_deref() != Some("read-only");

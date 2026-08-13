@@ -8,7 +8,7 @@ import { useEffect, useImperativeHandle, forwardRef, useRef } from "react"
 import { useTranslations } from "next-intl"
 import { LinkedResource, isLinkedFolder, type MarkdownFile } from "@/lib/files"
 import { readTextFile } from "@tauri-apps/plugin-fs"
-import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace"
+import { getDefaultArticleAbsolutePath, getFilePathOptions, getWorkspacePath } from "@/lib/workspace"
 import { AgentHandler } from "@/lib/agent/agent-handler"
 import { isRequestAbortError } from "@/lib/agent/runtime"
 import { agentDebugLog, previewText } from "@/lib/agent/debug-log"
@@ -499,11 +499,16 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       agentHandlerRef.current = null
     }
 
+    const configuredWorkspace = await getWorkspacePath()
+    const agentWorkspacePath = configuredWorkspace.isCustom
+      ? configuredWorkspace.path
+      : await getDefaultArticleAbsolutePath('')
+
     // 每次都创建新的 AgentHandler，使用当前的 placeholderMessage
     const agentHandler = new AgentHandler({
       activeChatId: placeholderMessage.id,
       conversationId: placeholderMessage.conversationId,
-      workspaceId: useSettingStore.getState().workspacePath.trim().replace(/\\/g, '/').replace(/\/+$/, '') || 'default',
+      workspaceId: agentWorkspacePath.trim().replace(/\\/g, '/').replace(/\/+$/, ''),
       useMemories: !useChatStore.getState().isTemporaryConversation,
       activeFilePath: articleStore.activeFilePath,
       permissionMode: agentPermissionMode,
