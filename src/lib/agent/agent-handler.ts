@@ -10,7 +10,7 @@ import type { AgentApprovalDecision, AgentChange, AgentPermissionMode, AgentRunt
 import type { RuntimeChatAttachment } from '@/lib/chat-attachments'
 import type { AgentImageAttachment } from '@/lib/chat-image-context'
 import { retainCompletedAgentTraceEvents } from './trace-retention'
-import { cancelExternalAgent, loadAgentEngineSettings, runExternalAgent } from '@/lib/agent-engines'
+import { cancelExternalAgent, loadAgentEngineSettings, resolveAgentModel, runExternalAgent } from '@/lib/agent-engines'
 
 export interface AgentHandlerConfig {
   activeChatId?: number
@@ -103,6 +103,10 @@ export class AgentHandler {
       const engine = engineSettings.selected
       const engineConfig = engineSettings.engines[engine]
       if (engineConfig.installed) {
+        const modelConfig = await resolveAgentModel(engineConfig)
+        const canUseProviderCredentials = engine === 'codex'
+          || engine === 'opencode'
+          || (engine === 'claude' && /anthropic/i.test(modelConfig?.baseURL || ''))
         this.externalRunId = crypto.randomUUID()
         store.setAgentState({ status: 'thinking', isRunning: true, isThinking: true })
         const history = Array.isArray(contextOrMessages)
@@ -117,6 +121,11 @@ export class AgentHandler {
             workspace: this.config.workspaceId || '.',
             executable: engineConfig.executable,
             permissionMode: engineConfig.permissionMode,
+            model: engine === 'opencode' && modelConfig?.model && !modelConfig.model.includes('/')
+              ? `openai/${modelConfig.model}`
+              : modelConfig?.model,
+            baseUrl: canUseProviderCredentials ? modelConfig?.baseURL : undefined,
+            apiKey: canUseProviderCredentials ? modelConfig?.apiKey : undefined,
           })
           store.setAgentState({
             isRunning: false,

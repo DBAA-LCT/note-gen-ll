@@ -2,17 +2,23 @@
 import { useCallback, useEffect, useState } from 'react'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { Bot, Check, Download, ExternalLink, LoaderCircle, RefreshCw } from 'lucide-react'
-import { AGENT_ENGINE_CATALOG, DEFAULT_AGENT_ENGINE_SETTINGS, inspectAgentEngine, loadAgentEngineSettings, saveAgentEngineSettings, type AgentEngineInspection, type AgentEngineSettings, type ExternalAgentEngineId } from '@/lib/agent-engines'
+import { AGENT_ENGINE_CATALOG, DEFAULT_AGENT_ENGINE_SETTINGS, inspectAgentEngine, loadAgentEngineSettings, loadSystemAgentModels, saveAgentEngineSettings, type AgentEngineInspection, type AgentEngineSettings, type ExternalAgentEngineId, type SystemAgentModel } from '@/lib/agent-engines'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { ResponsiveSelect } from '@/components/responsive-select'
 
 export default function AgentEngines() {
   const [settings, setSettings] = useState<AgentEngineSettings>(DEFAULT_AGENT_ENGINE_SETTINGS)
   const [inspections, setInspections] = useState<Partial<Record<ExternalAgentEngineId, AgentEngineInspection>>>({})
   const [checking, setChecking] = useState<ExternalAgentEngineId | null>(null)
-  useEffect(() => { void loadAgentEngineSettings().then(setSettings) }, [])
+  const [systemModels, setSystemModels] = useState<SystemAgentModel[]>([])
+  useEffect(() => {
+    void Promise.all([loadAgentEngineSettings(), loadSystemAgentModels()]).then(([saved, models]) => {
+      setSettings(saved); setSystemModels(models)
+    })
+  }, [])
   const commit = useCallback(async (next: AgentEngineSettings) => { setSettings(next); await saveAgentEngineSettings(next) }, [])
   const inspect = useCallback(async (id: ExternalAgentEngineId, executable?: string) => {
     setChecking(id)
@@ -21,7 +27,7 @@ export default function AgentEngines() {
   return <Card>
     <CardHeader>
       <CardTitle className="flex items-center gap-2"><Bot className="size-5" />Agent 引擎插件</CardTitle>
-      <CardDescription>安装适配器后，可将内置 Agent 切换为用户电脑上的 OpenCode、Claude Code 或 Codex CLI。CLI 本体与账号仍由用户自行安装和登录。</CardDescription>
+      <CardDescription>安装适配器后，可切换到 OpenCode、Claude Code、Codex 或 WorkBuddy，并让外部 Agent 跟随 NoteGoal 的系统模型配置。</CardDescription>
       <CardAction><Badge variant="outline">当前：{settings.selected === 'native' ? 'NoteGoal 内置' : settings.selected}</Badge></CardAction>
     </CardHeader>
     <CardContent className="flex flex-col gap-3">
@@ -41,8 +47,22 @@ export default function AgentEngines() {
                 : <Button size="sm" variant={settings.selected === item.id ? 'secondary' : 'default'} disabled={status?.available === false} onClick={() => void commit({ ...settings, selected: item.id })}>{settings.selected === item.id ? <Check /> : null}使用</Button>}
             </div>
           </div>
-          {config.installed ? <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
+          {config.installed ? <div className="mt-3 grid gap-2 md:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_auto]">
             <Input value={config.executable || ''} placeholder={`可选：${item.id} 可执行文件完整路径`} onChange={event => setSettings(current => ({ ...current, engines: { ...current.engines, [item.id]: { ...current.engines[item.id], executable: event.target.value } } }))} onBlur={() => void commit(settings)} />
+            <ResponsiveSelect
+              title="Agent 模型"
+              value={config.modelSource === 'system-model' ? `model:${config.modelId || ''}` : config.modelSource}
+              onValueChange={value => void commit({ ...settings, engines: { ...settings.engines, [item.id]: {
+                ...config,
+                modelSource: value === 'agent-default' ? 'agent-default' : value === 'system-primary' ? 'system-primary' : 'system-model',
+                modelId: value.startsWith('model:') ? value.slice(6) : undefined,
+              } } })}
+              options={[
+                { value: 'agent-default', label: '使用 Agent 默认模型' },
+                { value: 'system-primary', label: '跟随系统主模型' },
+                ...systemModels.map(model => ({ value: `model:${model.id}`, label: model.label })),
+              ]}
+            />
             <Button variant="ghost" onClick={() => void commit({ ...settings, engines: { ...settings.engines, [item.id]: { ...config, permissionMode: config.permissionMode === 'workspace-write' ? 'read-only' : 'workspace-write' } } })}>{config.permissionMode === 'workspace-write' ? '可写工作区' : '只读模式'}</Button>
           </div> : null}
           {status ? <div className={`mt-2 text-sm ${status.available ? 'text-emerald-600' : 'text-destructive'}`}>{status.available ? `CLI 可用${status.version ? ` · ${status.version}` : ''}` : `CLI 不可用${status.error ? ` · ${status.error}` : ''}`}</div> : null}

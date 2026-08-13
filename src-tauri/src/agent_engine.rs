@@ -21,6 +21,9 @@ pub struct AgentEngineRequest {
     workspace: String,
     executable: Option<String>,
     permission_mode: Option<String>,
+    model: Option<String>,
+    base_url: Option<String>,
+    api_key: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -47,6 +50,7 @@ fn default_command(engine: &str) -> Result<&'static str, String> {
         "opencode" => Ok("opencode"),
         "claude" => Ok("claude"),
         "codex" => Ok("codex"),
+        "workbuddy" => Ok("codebuddy"),
         _ => Err("Unsupported Agent engine".to_string()),
     }
 }
@@ -58,13 +62,25 @@ fn command_with_script_support(executable: &str) -> (String, Vec<String>) {
             "-File".to_string(), executable.to_string(),
         ]);
     }
+    if cfg!(windows) && Path::new(executable).is_file() && Path::new(executable).extension().is_none() {
+        return ("node.exe".to_string(), vec![executable.to_string()]);
+    }
     (executable.to_string(), Vec::new())
 }
 
 fn resolved_executable(engine: &str, custom: Option<&str>) -> Result<String, String> {
-    let value = custom.map(str::trim).filter(|v| !v.is_empty()).unwrap_or(default_command(engine)?);
+    let custom = custom.map(str::trim).filter(|value| !value.is_empty());
+    #[cfg(windows)]
+    let detected = std::env::var("LOCALAPPDATA").ok().map(|root| {
+        PathBuf::from(root).join("Programs/WorkBuddy/resources/app.asar.unpacked/cli/bin/codebuddy")
+    }).filter(|path| engine == "workbuddy" && path.is_file());
+    #[cfg(not(windows))]
+    let detected: Option<PathBuf> = None;
+    let value = custom.map(str::to_string)
+        .or_else(|| detected.map(|path| path.to_string_lossy().to_string()))
+        .unwrap_or(default_command(engine)?.to_string());
     if value.contains('\0') { return Err("Invalid Agent executable path".to_string()); }
-    Ok(value.to_string())
+    Ok(value)
 }
 
 #[tauri::command]
@@ -97,20 +113,44 @@ pub async fn run_agent_engine(manager: State<'_, AgentEngineManager>, request: A
     match request.engine.as_str() {
         "opencode" => {
             args.extend(["run", "--format", "json"].map(str::to_string));
+            if let Some(model) = request.model.as_deref() { args.extend(["--model".to_string(), model.to_string()]); }
             args.push(request.prompt.clone());
         }
         "claude" => {
             args.extend(["-p", "--output-format", "json", "--permission-mode", if writable { "acceptEdits" } else { "plan" }].map(str::to_string));
+            if let Some(model) = request.model.as_deref() { args.extend(["--model".to_string(), model.to_string()]); }
             args.push(request.prompt.clone());
         }
         "codex" => {
             args.extend(["exec", "--json", "--skip-git-repo-check", "--sandbox", if writable { "workspace-write" } else { "read-only" }, "-C"].map(str::to_string));
             args.push(workspace.to_string_lossy().to_string());
+            if let Some(model) = request.model.as_deref() { args.extend(["--model".to_string(), model.to_string()]); }
+            args.push(request.prompt.clone());
+        }
+        "workbuddy" => {
+            args.extend(["--print", "--output-format", "json", "--permission-mode", if writable { "acceptEdits" } else { "plan" }].map(str::to_string));
+            if let Some(model) = request.model.as_deref() { args.extend(["--model".to_string(), model.to_string()]); }
             args.push(request.prompt.clone());
         }
         _ => return Err("Unsupported Agent engine".to_string()),
     }
-    let child = Command::new(&program).args(&args).current_dir(Path::new(&request.workspace))
+    let mut command = Command::new(&program);
+    command.args(&args);
+    if let Some(base_url) = request.base_url.as_deref() {
+        match request.engine.as_str() {
+            "codex" | "opencode" => { command.env("OPENAI_BASE_URL", base_url); }
+            "claude" => { command.env("ANTHROPIC_BASE_URL", base_url); }
+            _ => {}
+        }
+    }
+    if let Some(api_key) = request.api_key.as_deref() {
+        match request.engine.as_str() {
+            "codex" | "opencode" => { command.env("OPENAI_API_KEY", api_key); }
+            "claude" => { command.env("ANTHROPIC_AUTH_TOKEN", api_key); }
+            _ => {}
+        }
+    }
+    let child = command.current_dir(Path::new(&request.workspace))
         .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true)
         .spawn().map_err(|e| format!("Failed to start {}: {e}", request.engine))?;
     let pid = child.id().ok_or("Failed to determine Agent process ID")?;
