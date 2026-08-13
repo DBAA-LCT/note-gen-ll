@@ -63,7 +63,16 @@ function parseAgentOutput(stdout: string): string {
   return chunks.length ? chunks[chunks.length - 1] : trimmed
 }
 export async function runExternalAgent(input: { runId: string; engine: ExternalAgentEngineId; prompt: string; workspace: string; executable?: string; permissionMode: 'workspace-write' | 'read-only' }) {
-  const result = await invoke<{ exitCode: number; stdout: string; stderr: string; cancelled: boolean }>('run_agent_engine', { request: input })
+  let result: { exitCode: number; stdout: string; stderr: string; cancelled: boolean }
+  try {
+    result = await invoke<typeof result>('run_agent_engine', { request: input })
+  } catch (error) {
+    const message = String(error)
+    if (/command run_agent_engine not found/i.test(message)) {
+      throw new Error('Agent 后端尚未加载。请完全退出并重新启动 NoteGoal 后再试。')
+    }
+    throw error
+  }
   const content = parseAgentOutput(result.stdout)
   if (result.cancelled) return { content, stopped: true }
   if (result.exitCode !== 0) throw new Error(result.stderr.trim() || `${input.engine} exited with code ${result.exitCode}`)
