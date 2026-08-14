@@ -3,7 +3,14 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/responsive-dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -92,12 +99,12 @@ export function GoalDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{goal ? '编辑目标' : '新建目标'}</DialogTitle>
-          <DialogDescription>目标用于组织总体路线、相关笔记和每天要做的事情。</DialogDescription>
-        </DialogHeader>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>{goal ? '编辑目标' : '新建目标'}</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>目标用于组织总体路线、相关笔记和每天要做的事情。</ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2 sm:col-span-2">
@@ -124,18 +131,22 @@ export function GoalDialog({
             <Label htmlFor="goal-note">备注与执行建议</Label>
             <Textarea id="goal-note" value={form.note} onChange={event => setField('note', event.target.value)} rows={4} />
           </div>
-          {form.planMarkdown ? (
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="goal-plan">总体规划</Label>
-              <Textarea id="goal-plan" value={form.planMarkdown} onChange={event => setField('planMarkdown', event.target.value)} rows={10} />
-            </div>
-          ) : null}
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="goal-plan">总体规划（可选）</Label>
+            <Textarea
+              id="goal-plan"
+              value={form.planMarkdown}
+              onChange={event => setField('planMarkdown', event.target.value)}
+              placeholder="写下阶段、里程碑和进入下一阶段的标准"
+              rows={6}
+            />
+          </div>
         </div>
-        <DialogFooter>
+        <ResponsiveDialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
           <Button onClick={handleSave} disabled={saving}>{saving ? '保存中…' : '保存目标'}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   )
 }

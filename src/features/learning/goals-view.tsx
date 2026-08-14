@@ -7,8 +7,15 @@ import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from '@/components/responsive-dialog'
+import { ResponsiveActionMenu } from '@/components/responsive-action-menu'
 import { Progress } from '@/components/ui/progress'
 import { diffLocalDays, formatLocalDate } from '@/lib/learning/date'
 import { listLearningTasksForGoal } from '@/lib/learning/repository'
@@ -43,12 +50,17 @@ export function GoalsView({ createSignal = 0, onCreateRequestHandled, onNavigate
   const [viewingGoal, setViewingGoal] = useState<LearningGoal | undefined>()
   const [tasksByGoal, setTasksByGoal] = useState<Record<string, LearningTask[]>>({})
   const [lastSignal, setLastSignal] = useState(0)
+  const [changingGoalId, setChangingGoalId] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    void Promise.all(goals.map(async goal => [goal.id, await listLearningTasksForGoal(goal.id)] as const)).then(entries => {
-      if (!cancelled) setTasksByGoal(Object.fromEntries(entries))
-    })
+    void Promise.all(goals.map(async goal => [goal.id, await listLearningTasksForGoal(goal.id)] as const))
+      .then(entries => {
+        if (!cancelled) setTasksByGoal(Object.fromEntries(entries))
+      })
+      .catch(error => {
+        if (!cancelled) toast.error('读取目标任务失败', { description: error instanceof Error ? error.message : String(error) })
+      })
     return () => { cancelled = true }
   }, [goals])
 
@@ -78,8 +90,15 @@ export function GoalsView({ createSignal = 0, onCreateRequestHandled, onNavigate
   const finishedGoals = goals.filter(goal => goal.status === 'completed' || goal.status === 'archived')
   const changeStatus = async (goal: LearningGoal, status: LearningGoalStatus) => {
     if (status === 'deleted' && !window.confirm(`删除目标“${goal.title}”？过去的每日回顾和执行记录会保留。`)) return
-    await setGoalStatus(goal.id, status)
-    toast.success(status === 'deleted' ? '目标已删除' : '目标状态已更新')
+    setChangingGoalId(goal.id)
+    try {
+      await setGoalStatus(goal.id, status)
+      toast.success(status === 'deleted' ? '目标已删除' : '目标状态已更新')
+    } catch (error) {
+      toast.error('更新目标失败', { description: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setChangingGoalId(null)
+    }
   }
 
   const openEdit = (goal?: LearningGoal) => { setEditingGoal(goal); setGoalDraft(undefined); setDialogOpen(true) }
@@ -123,7 +142,7 @@ export function GoalsView({ createSignal = 0, onCreateRequestHandled, onNavigate
         <div>
           <div className="mb-3 text-sm font-medium text-muted-foreground">当前目标</div>
           <div className="grid gap-4">
-            {activeGoals.map(goal => <GoalBoardCard key={goal.id} goal={goal} tasks={tasksByGoal[goal.id] || []} today={today} onViewPlan={() => setViewingGoal(goal)} onEdit={() => openEdit(goal)} onAiAdjust={() => void openAiGoalAdjustment(goal)} onStatus={status => void changeStatus(goal, status)} onFocus={() => onNavigate?.('focus')} />)}
+            {activeGoals.map(goal => <GoalBoardCard key={goal.id} goal={goal} tasks={tasksByGoal[goal.id] || []} today={today} busy={changingGoalId === goal.id} onViewPlan={() => setViewingGoal(goal)} onEdit={() => openEdit(goal)} onAiAdjust={() => void openAiGoalAdjustment(goal)} onStatus={status => changeStatus(goal, status)} onFocus={() => onNavigate?.('focus')} />)}
           </div>
         </div>
       ) : (
@@ -133,7 +152,7 @@ export function GoalsView({ createSignal = 0, onCreateRequestHandled, onNavigate
       {finishedGoals.length ? (
         <Card>
           <CardHeader><CardTitle className="text-base">过去的目标</CardTitle><CardDescription>完成或归档后，相关回顾和笔记仍会保留。</CardDescription></CardHeader>
-          <CardContent className="divide-y">{finishedGoals.map(goal => <div key={goal.id} className="flex items-center gap-3 py-3"><span className="min-w-0 flex-1 truncate text-sm font-medium">{goal.title}</span><Badge variant="outline">{statusLabel[goal.status]}</Badge><Button size="icon-sm" variant="ghost" onClick={() => void changeStatus(goal, 'active')} aria-label="重新开启"><RotateCcw /></Button></div>)}</CardContent>
+          <CardContent className="divide-y">{finishedGoals.map(goal => <div key={goal.id} className="flex items-center gap-3 py-3"><span className="min-w-0 flex-1 truncate text-sm font-medium">{goal.title}</span><Badge variant="outline">{statusLabel[goal.status]}</Badge><Button size="icon-sm" variant="ghost" disabled={changingGoalId === goal.id} onClick={() => void changeStatus(goal, 'active')} aria-label="重新开启"><RotateCcw className={changingGoalId === goal.id ? 'animate-spin' : undefined} /></Button></div>)}</CardContent>
         </Card>
       ) : null}
 
@@ -148,9 +167,9 @@ export function GoalsView({ createSignal = 0, onCreateRequestHandled, onNavigate
           if (goal) openEdit(goal)
         }}
       />
-      <Dialog open={createChoiceOpen} onOpenChange={setCreateChoiceOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>创建目标</DialogTitle><DialogDescription>选择适合你的方式。第一次使用建议让 AI 带着你完成。</DialogDescription></DialogHeader>
+      <ResponsiveDialog open={createChoiceOpen} onOpenChange={setCreateChoiceOpen}>
+        <ResponsiveDialogContent className="sm:max-w-lg">
+          <ResponsiveDialogHeader><ResponsiveDialogTitle>创建目标</ResponsiveDialogTitle><ResponsiveDialogDescription>选择适合你的方式。第一次使用建议让 AI 带着你完成。</ResponsiveDialogDescription></ResponsiveDialogHeader>
           <div className="grid gap-3 sm:grid-cols-2">
             <button type="button" className="rounded-xl border bg-primary/5 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/10" onClick={() => void openAiPlanner()}>
               <Sparkles className="size-5 text-primary" />
@@ -164,13 +183,13 @@ export function GoalsView({ createSignal = 0, onCreateRequestHandled, onNavigate
               <p className="mt-1 text-xs leading-5 text-muted-foreground">已经想清楚目标和周期时，直接填写表单。</p>
             </button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   )
 }
 
-function GoalBoardCard({ goal, tasks, today, onViewPlan, onEdit, onAiAdjust, onStatus, onFocus }: { goal: LearningGoal; tasks: LearningTask[]; today: string; onViewPlan: () => void; onEdit: () => void; onAiAdjust: () => void; onStatus: (status: LearningGoalStatus) => void; onFocus: () => void }) {
+function GoalBoardCard({ goal, tasks, today, busy, onViewPlan, onEdit, onAiAdjust, onStatus, onFocus }: { goal: LearningGoal; tasks: LearningTask[]; today: string; busy: boolean; onViewPlan: () => void; onEdit: () => void; onAiAdjust: () => void; onStatus: (status: LearningGoalStatus) => Promise<void>; onFocus: () => void }) {
   const activeTasks = tasks.filter(task => task.status !== 'cancelled')
   const remainingDays = Math.max(0, diffLocalDays(today, goal.endDate))
   const nextTask = activeTasks.find(task => task.status !== 'done')
@@ -181,7 +200,17 @@ function GoalBoardCard({ goal, tasks, today, onViewPlan, onEdit, onAiAdjust, onS
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><CardTitle className="truncate text-base">{goal.title}</CardTitle><Badge variant={overdue ? 'destructive' : 'outline'}>{overdue ? '已逾期' : statusLabel[goal.status]}</Badge></div><CardDescription className="mt-1 line-clamp-2">{goal.description}</CardDescription></div>
-          <DropdownMenu><DropdownMenuTrigger asChild><Button size="icon-sm" variant="ghost"><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onClick={onEdit}><Pencil />手动编辑</DropdownMenuItem><DropdownMenuItem onClick={onAiAdjust}><Sparkles />AI 调整路线</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem onClick={() => onStatus('completed')}><CheckCircle2 />标记完成</DropdownMenuItem><DropdownMenuItem onClick={() => onStatus('archived')}><Archive />归档</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem variant="destructive" onClick={() => onStatus('deleted')}><Trash2 />删除</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+          <ResponsiveActionMenu
+            title={`${goal.title}操作`}
+            trigger={<Button size="icon-sm" variant="ghost" disabled={busy} aria-label={`管理目标：${goal.title}`}><MoreHorizontal /></Button>}
+            items={[
+              { key: 'edit', label: '手动编辑', icon: <Pencil />, onSelect: onEdit },
+              { key: 'ai-adjust', label: 'AI 调整路线', icon: <Sparkles />, onSelect: onAiAdjust },
+              { key: 'complete', label: '标记完成', icon: <CheckCircle2 />, separatorBefore: true, onSelect: () => onStatus('completed') },
+              { key: 'archive', label: '归档', icon: <Archive />, onSelect: () => onStatus('archived') },
+              { key: 'delete', label: '删除', icon: <Trash2 />, destructive: true, separatorBefore: true, onSelect: () => onStatus('deleted') },
+            ]}
+          />
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -189,7 +218,7 @@ function GoalBoardCard({ goal, tasks, today, onViewPlan, onEdit, onAiAdjust, onS
         {goal.planMarkdown ? <div className="rounded-md bg-muted/40 p-3"><p className="mb-1 text-xs font-medium text-muted-foreground">总体路线</p><p className="line-clamp-4 whitespace-pre-line text-xs leading-5">{planPreview(goal.planMarkdown)}</p></div> : null}
         <div className="flex items-center justify-between text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><CalendarDays className="size-3.5" />{goal.endDate} 前完成</span><span>{overdue ? '已超过计划日期' : `还有 ${remainingDays} 天`}</span></div>
         <div className="rounded-md border bg-background p-3"><p className="text-xs font-medium text-muted-foreground">下一步</p>{nextTask ? <><div className="mt-1 flex items-center justify-between gap-3"><p className="min-w-0 truncate text-sm font-medium">{nextTask.title}</p><span className="shrink-0 text-xs font-medium">{Math.round(nextTask.progressPercent)}%</span></div><Progress value={nextTask.progressPercent} className="mt-2 h-1" /><p className="mt-1 text-xs text-muted-foreground">{nextTask.localDate}</p></> : <p className="mt-1 text-sm text-muted-foreground">还没有安排下一项任务。</p>}</div>
-        <div className="flex gap-2 border-t pt-3"><Button size="sm" onClick={onFocus}><TimerReset />开始执行</Button><Button size="sm" variant="outline" onClick={onViewPlan}>查看规划</Button></div>
+        <div className="flex gap-2 border-t pt-3"><Button size="sm" onClick={onFocus} disabled={!nextTask} title={nextTask ? undefined : '请先为目标安排任务'}><TimerReset />{nextTask ? '开始执行' : '暂无任务'}</Button><Button size="sm" variant="outline" onClick={onViewPlan}>查看规划</Button></div>
       </CardContent>
     </Card>
   )
@@ -199,12 +228,12 @@ function GoalPlanDialog({ goal, open, onOpenChange, onEdit }: { goal?: LearningG
   const renderedPlan = useMemo(() => planMarkdown.render(goal?.planMarkdown || ''), [goal?.planMarkdown])
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>{goal?.title || '总体规划'}</DialogTitle>
-          <DialogDescription>{goal?.description}</DialogDescription>
-        </DialogHeader>
+    <ResponsiveDialog open={open} onOpenChange={onOpenChange}>
+      <ResponsiveDialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle>{goal?.title || '总体规划'}</ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>{goal?.description}</ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
         {goal?.note ? (
           <div className="rounded-lg border bg-muted/30 p-4">
             <p className="text-xs font-medium text-muted-foreground">执行建议</p>
@@ -219,11 +248,11 @@ function GoalPlanDialog({ goal, open, onOpenChange, onEdit }: { goal?: LearningG
         ) : (
           <p className="rounded-lg border border-dashed py-10 text-center text-sm text-muted-foreground">还没有总体规划。</p>
         )}
-        <DialogFooter>
+        <ResponsiveDialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>关闭</Button>
           <Button onClick={onEdit}><Pencil />编辑规划</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialogContent>
+    </ResponsiveDialog>
   )
 }

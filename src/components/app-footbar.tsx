@@ -93,7 +93,7 @@ export function AppFootbar() {
     },
     {
       id: 'learning',
-      label: '目标',
+      label: '规划',
       url: '/mobile/learning',
       icon: Flag,
     },

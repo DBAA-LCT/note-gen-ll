@@ -32,6 +32,7 @@ import { DataSyncOverview } from './components/data-sync-overview'
 import { ConnectorMappingTree } from './components/connector-mapping-tree'
 import { SettingType } from '../components/setting-base'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardAction,
@@ -60,6 +61,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
+import { toast } from '@/hooks/use-toast'
 import { SyncStateEnum } from '@/lib/sync/github.types'
 import { checkSyncProviderStatus } from '@/lib/sync/provider-status'
 import useSettingStore from '@/stores/setting'
@@ -87,6 +89,7 @@ export default function SyncPage() {
   const t = useTranslations()
   const {
     primaryBackupMethod,
+    setPrimaryBackupMethod,
     autoSync,
     setAutoSync,
     autoRecordSyncEnabled,
@@ -111,11 +114,15 @@ export default function SyncPage() {
     webdavConnected,
     cloudFolderConnected,
   } = useSyncStore()
+  const effectivePrimaryBackupMethod: SyncPlatform = SYNC_PLATFORMS.includes(primaryBackupMethod)
+    ? primaryBackupMethod
+    : 'github'
 
-  const [platform, setPlatform] = useState<SyncPlatform>(primaryBackupMethod)
+  const [platform, setPlatform] = useState<SyncPlatform>(effectivePrimaryBackupMethod)
   const [activeTab, setActiveTab] = useState('connection')
   const [isLoading, setIsLoading] = useState(true)
   const [checkingPlatforms, setCheckingPlatforms] = useState<Set<SyncPlatform>>(new Set())
+  const [switchingPrimary, setSwitchingPrimary] = useState(false)
   const checkingPlatformsRef = useRef<Set<SyncPlatform>>(new Set())
 
   const workspaceOptions = useMemo(
@@ -139,12 +146,12 @@ export default function SyncPage() {
   useEffect(() => {
     let cancelled = false
     async function loadConnectorStatuses() {
+      await checkPlatformStatus(effectivePrimaryBackupMethod)
       if (!cancelled) setIsLoading(false)
-      await Promise.allSettled(SYNC_PLATFORMS.map(checkPlatformStatus))
     }
     void loadConnectorStatuses()
     return () => { cancelled = true }
-  }, [checkPlatformStatus])
+  }, [checkPlatformStatus, effectivePrimaryBackupMethod])
 
   useEffect(() => {
     if (!isLoading) void checkPlatformStatus(platform)
@@ -172,7 +179,8 @@ export default function SyncPage() {
   }
 
   const currentSyncState = getSyncState(platform)
-  const isProviderUnavailable = currentSyncState !== SyncStateEnum.success
+  const primarySyncState = getSyncState(effectivePrimaryBackupMethod)
+  const isProviderUnavailable = primarySyncState !== SyncStateEnum.success
   const isAutoSyncDisabled = isProviderUnavailable
   const currentPlatformInfo = SYNC_PLATFORM_INFO[platform]
   const currentPlatformName = platform === 'cloudFolder'
@@ -238,6 +246,23 @@ export default function SyncPage() {
     }
 
     return <Badge variant="destructive">{t('settings.sync.status.disconnected')}</Badge>
+  }
+
+  async function handleSetPrimaryPlatform() {
+    if (platform === effectivePrimaryBackupMethod || switchingPrimary) return
+    setSwitchingPrimary(true)
+    try {
+      await setPrimaryBackupMethod(platform)
+      toast({ title: t('settings.sync.currentPlatform'), description: currentPlatformName })
+    } catch (error) {
+      toast({
+        title: t('settings.sync.settings'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      })
+    } finally {
+      setSwitchingPrimary(false)
+    }
   }
 
   function renderCompactStatus(state: SyncStateEnum) {
@@ -308,6 +333,7 @@ export default function SyncPage() {
                         </ItemTitle>
                       </ItemContent>
                       <ItemActions>
+                        {effectivePrimaryBackupMethod === itemPlatform ? <Badge variant="secondary">{t('settings.sync.currentPlatform')}</Badge> : null}
                         {renderCompactStatus(getSyncState(itemPlatform))}
                       </ItemActions>
                     </button>
@@ -328,7 +354,20 @@ export default function SyncPage() {
                   <CardDescription>{t('settings.sync.platformDesc')}</CardDescription>
                 </div>
               </div>
-              <CardAction>
+              <CardAction className="flex flex-wrap items-center justify-end gap-2">
+                {platform === effectivePrimaryBackupMethod ? (
+                  <Badge>{t('settings.sync.currentPlatform')}</Badge>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={switchingPrimary || currentSyncState !== SyncStateEnum.success}
+                    onClick={() => void handleSetPrimaryPlatform()}
+                  >
+                    {switchingPrimary ? <Loader2 className="animate-spin" /> : null}
+                    {t('settings.sync.setCurrentPlatform')}
+                  </Button>
+                )}
                 {renderStatusBadge(currentSyncState)}
               </CardAction>
             </CardHeader>
@@ -373,7 +412,7 @@ export default function SyncPage() {
                         <Select
                           value={autoSync}
                           onValueChange={setAutoSync}
-                          disabled={isAutoSyncDisabled || primaryBackupMethod === 'cloudFolder'}
+                          disabled={isAutoSyncDisabled || effectivePrimaryBackupMethod === 'cloudFolder'}
                         >
                           <SelectTrigger className="w-45">
                             <SelectValue placeholder={t('settings.sync.autoSyncOptions.placeholder')} />
@@ -405,7 +444,7 @@ export default function SyncPage() {
                         <Switch
                           checked={autoPullOnOpen}
                           onCheckedChange={setAutoPullOnOpen}
-                          disabled={isProviderUnavailable || primaryBackupMethod === 'cloudFolder'}
+                          disabled={isProviderUnavailable || effectivePrimaryBackupMethod === 'cloudFolder'}
                         />
                       </ItemActions>
                     </Item>

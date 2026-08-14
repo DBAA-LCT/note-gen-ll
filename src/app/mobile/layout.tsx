@@ -21,6 +21,9 @@ import { MobileModeProvider } from "@/hooks/use-mobile"
 import { Skeleton } from "@/components/ui/skeleton"
 import AppStatus from "@/components/app-status"
 import { isTauriRuntime } from '@/lib/check'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { RotateCcw, TriangleAlert } from 'lucide-react'
 
 const WritingScreen = dynamic(
   () => import('./writing/writing-screen').then(module => module.WritingScreen),
@@ -72,6 +75,8 @@ export default function RootLayout({
   const nativeRuntime = isTauriRuntime()
   const isWritingRoute = nativeRuntime && pathname === '/mobile/writing'
   const [hasWritingCache, setHasWritingCache] = useState(isWritingRoute)
+  const [initializationError, setInitializationError] = useState<string | null>(null)
+  const [initializationAttempt, setInitializationAttempt] = useState(0)
   const { initSettingData, customThemeColors, appFontFamily } = useSettingStore()
   const { currentLocale } = useI18n()
   useEffect(() => {
@@ -100,6 +105,7 @@ export default function RootLayout({
     }
 
     const initializeApp = async () => {
+      setInitializationError(null)
       try {
         if (!isTauriRuntime()) return
         const [
@@ -140,6 +146,9 @@ export default function RootLayout({
         initMcp()
       } catch (error) {
         console.error('Failed to initialize mobile app:', error)
+        if (!cancelled) {
+          setInitializationError(error instanceof Error ? error.message : String(error))
+        }
       }
     }
 
@@ -148,7 +157,7 @@ export default function RootLayout({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [initializationAttempt, initSettingData])
 
   useEffect(() => {
     switch (currentLocale) {
@@ -191,6 +200,24 @@ export default function RootLayout({
           {nativeRuntime ? <AppStatus /> : null}
           <TooltipProvider>
             <div className="mobile-app-shell flex flex-col">
+              {initializationError ? (
+                <div className="fixed inset-x-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-[60] mx-auto max-w-lg">
+                  <Alert variant="destructive" className="shadow-lg">
+                    <TriangleAlert />
+                    <AlertTitle>应用初始化失败</AlertTitle>
+                    <AlertDescription className="mt-2 flex flex-col items-start gap-3">
+                      <span className="line-clamp-3">{initializationError}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setInitializationAttempt(value => value + 1)}
+                      >
+                        <RotateCcw />重试
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              ) : null}
               <main className="mobile-app-main flex flex-1 w-full overflow-hidden">
                 {hasWritingCache ? (
                   <div

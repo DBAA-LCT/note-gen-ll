@@ -30,12 +30,12 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/responsive-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -93,7 +93,7 @@ function TaskProgressControl({
         max={100}
         step={5}
         onValueChange={(values) => setValue(values[0] || 0)}
-        onValueCommit={(values) => void onChange(task.id, values[0] || 0)}
+        onValueCommit={(values) => void onChange(task.id, values[0] || 0).catch(() => setValue(normalizedProgress))}
       />
       <span className="w-9 text-right text-xs font-medium tabular-nums">
         {value}%
@@ -171,6 +171,10 @@ function GoalTodayCard({
       for (const task of tasks.filter((item) => item.status !== "done"))
         await onTaskChange(task.id, true);
       toast.success(`“${goal.title}”今天的任务已完成`);
+    } catch (error) {
+      toast.error("完成任务失败", {
+        description: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setFinishing(false);
     }
@@ -237,7 +241,7 @@ function GoalTodayCard({
                   className="mt-0.5"
                   checked={task.status === "done"}
                   onCheckedChange={(checked) =>
-                    void onTaskChange(task.id, checked === true)
+                    void onTaskChange(task.id, checked === true).catch(() => undefined)
                   }
                   aria-label={`${task.title}完成状态`}
                 />
@@ -291,9 +295,14 @@ function GoalTodayCard({
           </div>
         )}
         <div className="flex flex-wrap gap-2 border-t pt-3">
-          <Button size="sm" onClick={onFocus}>
+          <Button
+            size="sm"
+            onClick={onFocus}
+            disabled={!tasks.some(task => task.status !== "done" && task.status !== "cancelled")}
+            title={tasks.some(task => task.status !== "done" && task.status !== "cancelled") ? undefined : "请先为今天安排任务"}
+          >
             <TimerReset />
-            开始执行
+            {tasks.some(task => task.status !== "done" && task.status !== "cancelled") ? "开始执行" : "暂无任务"}
           </Button>
           {tasks.some((task) => task.status !== "done") ? (
             <Button
@@ -536,10 +545,26 @@ export function TodayView({
     }
   };
 
-  const changeTask = async (id: string, done: boolean) =>
-    setTaskStatus(id, done ? "done" : "todo");
-  const changeTaskProgress = async (id: string, progress: number) =>
-    setTaskProgress(id, progress);
+  const changeTask = async (id: string, done: boolean) => {
+    try {
+      await setTaskStatus(id, done ? "done" : "todo");
+    } catch (error) {
+      toast.error("更新任务状态失败", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  };
+  const changeTaskProgress = async (id: string, progress: number) => {
+    try {
+      await setTaskProgress(id, progress);
+    } catch (error) {
+      toast.error("更新任务进度失败", {
+        description: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  };
 
   const openAi = async (prompt: string) => {
     if (!rightSidebarVisible) await toggleRightSidebar();
@@ -611,9 +636,13 @@ export function TodayView({
             <Plus />
             临时任务
           </Button>
-          <Button onClick={() => onNavigate("focus")}>
+          <Button
+            onClick={() => onNavigate("focus")}
+            disabled={!actionable.some(task => task.status !== "done")}
+            title={actionable.some(task => task.status !== "done") ? undefined : "请先添加今天要执行的任务"}
+          >
             <TimerReset />
-            开始执行
+            {actionable.some(task => task.status !== "done") ? "开始执行" : "暂无可执行任务"}
           </Button>
         </div>
       </div>
@@ -900,13 +929,13 @@ export function TodayView({
         </aside>
       </div>
 
-      <Dialog open={taskOpen} onOpenChange={setTaskOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
+      <ResponsiveDialog open={taskOpen} onOpenChange={setTaskOpen}>
+        <ResponsiveDialogContent className="overflow-y-auto">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>
               {editingTask ? "编辑任务" : "添加临时任务"}
-            </DialogTitle>
-          </DialogHeader>
+            </ResponsiveDialogTitle>
+          </ResponsiveDialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="manual-task-title">任务标题</Label>
@@ -992,7 +1021,7 @@ export function TodayView({
               </label>
             ) : null}
           </div>
-          <DialogFooter>
+          <ResponsiveDialogFooter>
             <Button variant="outline" onClick={() => setTaskOpen(false)}>
               取消
             </Button>
@@ -1002,9 +1031,9 @@ export function TodayView({
             >
               {editingTask ? "保存修改" : "添加"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }

@@ -1,35 +1,63 @@
 
-import Database from '@tauri-apps/plugin-sql';
+import Database, { type QueryResult } from '@tauri-apps/plugin-sql';
 
-// 导出数据库实例
-export const db = await Database.load('sqlite:note.db');
+let coreDatabasePromise: Promise<Database> | null = null
 
-// Core schema migrations must finish before this module exports. The desktop layout
-// renders children while its initialization effect is still running, so altering a
-// table later can invalidate SQLx's cached `select *` metadata on another query.
-await db.execute(`
-  create table if not exists marks (
-    id integer primary key autoincrement,
-    tagId integer not null,
-    type text not null,
-    content text default null,
-    url text default null,
-    desc text default null,
-    deleted integer default 0,
-    createdAt integer,
-    sourceId text default null
-  )
-`)
-try {
-  await db.select('select sourceId from marks limit 1')
-} catch {
-  await db.execute('alter table marks add column sourceId text default null')
+async function loadCoreDatabase(): Promise<Database> {
+  const database = await Database.load('sqlite:note.db')
+
+  // Core schema migrations finish before the database is exposed. Keeping this
+  // initialization lazy avoids top-level await in every web/mobile route that
+  // imports the database facade.
+  await database.execute(`
+    create table if not exists marks (
+      id integer primary key autoincrement,
+      tagId integer not null,
+      type text not null,
+      content text default null,
+      url text default null,
+      desc text default null,
+      deleted integer default 0,
+      createdAt integer,
+      sourceId text default null
+    )
+  `)
+  try {
+    await database.select('select sourceId from marks limit 1')
+  } catch {
+    await database.execute('alter table marks add column sourceId text default null')
+  }
+  await database.execute('create unique index if not exists idx_marks_source_id on marks(sourceId) where sourceId is not null')
+  return database
 }
-await db.execute('create unique index if not exists idx_marks_source_id on marks(sourceId) where sourceId is not null')
 
 // 获取数据库实例(兼容旧代码)
-export async function getDb() {
-  return db;
+export async function getDb(): Promise<Database> {
+  if (!coreDatabasePromise) {
+    coreDatabasePromise = loadCoreDatabase().catch((error) => {
+      coreDatabasePromise = null
+      throw error
+    })
+  }
+  return coreDatabasePromise
+}
+
+// Keep the existing db.select/db.execute API while initializing on first use.
+export const db = {
+  async execute(query: string, bindValues?: unknown[]): Promise<QueryResult> {
+    return (await getDb()).execute(query, bindValues)
+  },
+  async select<T>(query: string, bindValues?: unknown[]): Promise<T> {
+    return (await getDb()).select<T>(query, bindValues)
+  },
+  async close(databaseName?: string): Promise<boolean> {
+    if (!coreDatabasePromise) return true
+    const database = await coreDatabasePromise
+    const closed = await database.close(databaseName)
+    coreDatabasePromise = null
+    databaseInitialization = null
+    return closed
+  },
 }
 
 let databaseInitialization: Promise<void> | null = null

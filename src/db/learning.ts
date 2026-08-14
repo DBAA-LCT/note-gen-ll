@@ -34,6 +34,13 @@ import {
 } from "@/types/learning";
 import type { PlannedTaskDraft } from "@/lib/learning/planner";
 import { formatLocalDate } from "@/lib/learning/date";
+import {
+  assertValidDailyReportInput,
+  assertValidLearningGoalInput,
+  assertValidLearningScheduleInput,
+  isValidLocalDate,
+  taskStateForProgress,
+} from "@/lib/learning/logic";
 
 type GoalRow = Omit<LearningGoal, "weeklyDays" | "deletedAt"> & {
   weeklyDays: string;
@@ -365,6 +372,7 @@ export async function listLearningGoals(
 export async function createLearningGoal(
   input: CreateLearningGoalInput,
 ): Promise<LearningGoal> {
+  assertValidLearningGoalInput(input);
   const db = await getDb();
   const now = Date.now();
   const goal: LearningGoal = {
@@ -416,8 +424,9 @@ export async function updateLearningGoal(
   id: string,
   input: CreateLearningGoalInput,
 ): Promise<void> {
+  assertValidLearningGoalInput(input);
   const db = await getDb();
-  await db.execute(
+  const result = await db.execute(
     `update learning_goals set title=$1,description=$2,startDate=$3,endDate=$4,timeZone=$5,
       weeklyDays=$6,timeWeight=$7,color=$8,note=$9,planMarkdown=$10,updatedAt=$11 where id=$12 and status != 'deleted'`,
     [
@@ -435,6 +444,7 @@ export async function updateLearningGoal(
       id,
     ],
   );
+  if (!result.rowsAffected) throw new Error("目标不存在或已删除。");
 }
 
 export async function setLearningGoalStatus(
@@ -443,6 +453,16 @@ export async function setLearningGoalStatus(
 ): Promise<void> {
   const db = await getDb();
   const now = Date.now();
+  const goal = (
+    await db.select<Array<{ timeZone: string; status: LearningGoalStatus }>>(
+      "select timeZone,status from learning_goals where id=$1 limit 1",
+      [id],
+    )
+  )[0];
+  if (!goal) throw new Error("目标不存在。");
+  if (goal.status === "deleted" && status !== "deleted") {
+    throw new Error("已删除的目标不能重新启用。");
+  }
   await db.execute(
     "update learning_goals set status=$1, deletedAt=$2, updatedAt=$3 where id=$4",
     [status, status === "deleted" ? now : null, now, id],
@@ -450,7 +470,7 @@ export async function setLearningGoalStatus(
   if (status === "archived" || status === "deleted" || status === "completed") {
     await db.execute(
       "update learning_tasks set status='cancelled', updatedAt=$1 where goalId=$2 and status in ('todo','in-progress') and localDate >= $3",
-      [now, id, new Date(now).toISOString().slice(0, 10)],
+      [now, id, formatLocalDate(now, goal.timeZone)],
     );
   }
 }
@@ -492,6 +512,15 @@ export async function insertPlannedTasks(
   let inserted = 0;
   for (const task of tasks) {
     const now = Date.now();
+    const restored = await db.execute(
+      `update learning_tasks set status='todo',progressPercent=0,updatedAt=$1
+       where generationKey=$2 and status='cancelled' and manuallyEdited=0`,
+      [now, task.generationKey],
+    );
+    if (restored.rowsAffected) {
+      inserted += restored.rowsAffected;
+      continue;
+    }
     const result = await db.execute(
       `insert or ignore into learning_tasks
         (id,goalId,localDate,title,description,completionCriteria,plannedMinutes,status,source,generationNote,
@@ -524,6 +553,8 @@ export async function createManualLearningTask(input: {
   description?: string;
   plannedMinutes: number;
 }): Promise<void> {
+  if (!isValidLocalDate(input.localDate)) throw new Error("任务日期无效。");
+  if (!input.title.trim()) throw new Error("任务标题不能为空。");
   const db = await getDb();
   const now = Date.now();
   await db.execute(
@@ -536,9 +567,9 @@ export async function createManualLearningTask(input: {
       input.goalId || null,
       input.notePath || null,
       input.localDate,
-      input.title,
-      input.description || "",
-      input.plannedMinutes,
+      input.title.trim(),
+      input.description?.trim() || "",
+      Math.max(0, Math.min(720, Math.round(input.plannedMinutes))),
       now,
     ],
   );
@@ -552,14 +583,15 @@ export async function setLearningTaskStatus(
   const now = Date.now();
   const progressPercent =
     status === "done" ? 100 : status === "todo" ? 0 : null;
-  await db.execute(
+  const result = await db.execute(
     progressPercent === null
-      ? "update learning_tasks set status=$1, updatedAt=$2 where id=$3"
-      : "update learning_tasks set status=$1, progressPercent=$2, updatedAt=$3 where id=$4",
+      ? "update learning_tasks set status=$1, manuallyEdited=1, updatedAt=$2 where id=$3"
+      : "update learning_tasks set status=$1, progressPercent=$2, manuallyEdited=1, updatedAt=$3 where id=$4",
     progressPercent === null
       ? [status, now, id]
       : [status, progressPercent, now, id],
   );
+  if (!result.rowsAffected) throw new Error("任务不存在。");
   if (status === "done") {
     const task = (
       await db.select<
@@ -601,23 +633,18 @@ export async function setLearningTaskProgress(
   progress: number,
 ): Promise<void> {
   const db = await getDb();
-  const progressPercent = Math.max(0, Math.min(100, Math.round(progress)));
+  const { progressPercent, status } = taskStateForProgress(progress);
   const current = (
     await db.select<Array<{ status: LearningTaskStatus }>>(
       "select status from learning_tasks where id=$1 limit 1",
       [id],
     )
   )[0];
-  const status: LearningTaskStatus =
-    progressPercent >= 100
-      ? "done"
-      : progressPercent > 0
-        ? "in-progress"
-        : "todo";
-  await db.execute(
+  const result = await db.execute(
     "update learning_tasks set progressPercent=$1,status=$2,manuallyEdited=1,updatedAt=$3 where id=$4",
     [progressPercent, status, Date.now(), id],
   );
+  if (!result.rowsAffected) throw new Error("任务不存在。");
   if (status === "done" && current?.status !== "done") {
     const task = (
       await db.select<
@@ -657,18 +684,10 @@ export async function updateLearningTask(
   id: string,
   input: UpdateLearningTaskInput,
 ): Promise<void> {
+  if (!input.title.trim()) throw new Error("任务标题不能为空。");
   const db = await getDb();
-  const progressPercent = Math.max(
-    0,
-    Math.min(100, Math.round(input.progressPercent)),
-  );
-  const status: LearningTaskStatus =
-    progressPercent >= 100
-      ? "done"
-      : progressPercent > 0
-        ? "in-progress"
-        : "todo";
-  await db.execute(
+  const { progressPercent, status } = taskStateForProgress(input.progressPercent);
+  const result = await db.execute(
     `update learning_tasks
      set title=$1,description=$2,completionCriteria=$3,plannedMinutes=$4,
          progressPercent=$5,status=$6,manuallyEdited=1,updatedAt=$7
@@ -684,6 +703,7 @@ export async function updateLearningTask(
       id,
     ],
   );
+  if (!result.rowsAffected) throw new Error("任务不存在。");
 }
 
 export async function replaceAiLearningTasks(
@@ -691,32 +711,43 @@ export async function replaceAiLearningTasks(
   tasks: AiLearningTaskDraft[],
   generatedFromDate: string | null = null,
 ): Promise<void> {
+  if (!isValidLocalDate(localDate)) throw new Error("规划日期无效。");
+  if (tasks.some((task) => !task.goalId || !task.title.trim() || !Number.isFinite(task.plannedMinutes))) {
+    throw new Error("AI 规划中包含无效任务。");
+  }
   const db = await getDb();
   const now = Date.now();
-  await db.execute(
-    "delete from learning_tasks where localDate=$1 and source in ('ai','local-rule') and status != 'done' and manuallyEdited=0",
-    [localDate],
-  );
-  for (const [index, task] of tasks.entries()) {
+  await db.execute("begin immediate");
+  try {
     await db.execute(
-      `insert into learning_tasks
-        (id,goalId,notePath,localDate,title,description,completionCriteria,plannedMinutes,status,source,generationNote,
-         generatedFromDate,generationKey,manuallyEdited,scheduledStart,scheduledEnd,sortOrder,createdAt,updatedAt)
-       values ($1,$2,null,$3,$4,$5,$6,$7,'todo','ai','AI 每日规划',$8,$9,0,null,null,$10,$11,$11)`,
-      [
-        uuid(),
-        task.goalId,
-        localDate,
-        task.title,
-        task.description,
-        task.completionCriteria,
-        Math.max(0, Math.min(720, Math.round(task.plannedMinutes))),
-        generatedFromDate,
-        `ai-v1:${localDate}:${task.goalId}:${now}:${index}`,
-        index,
-        now,
-      ],
+      "delete from learning_tasks where localDate=$1 and source in ('ai','local-rule') and status != 'done' and manuallyEdited=0",
+      [localDate],
     );
+    for (const [index, task] of tasks.entries()) {
+      await db.execute(
+        `insert into learning_tasks
+          (id,goalId,notePath,localDate,title,description,completionCriteria,plannedMinutes,status,source,generationNote,
+           generatedFromDate,generationKey,manuallyEdited,scheduledStart,scheduledEnd,sortOrder,createdAt,updatedAt)
+         values ($1,$2,null,$3,$4,$5,$6,$7,'todo','ai','AI 每日规划',$8,$9,0,null,null,$10,$11,$11)`,
+        [
+          uuid(),
+          task.goalId,
+          localDate,
+          task.title.trim(),
+          task.description.trim(),
+          task.completionCriteria.trim(),
+          Math.max(0, Math.min(720, Math.round(task.plannedMinutes))),
+          generatedFromDate,
+          `ai-v1:${localDate}:${task.goalId}:${now}:${index}`,
+          index,
+          now,
+        ],
+      );
+    }
+    await db.execute("commit");
+  } catch (error) {
+    await db.execute("rollback").catch(() => undefined);
+    throw error;
   }
 }
 
@@ -1047,11 +1078,14 @@ export async function savePeriodicLearningReport(
 export async function saveDailyReport(
   input: SaveDailyReportInput,
 ): Promise<DailyReport> {
+  assertValidDailyReportInput(input);
   const db = await getDb();
   const existing = await getDailyReport(input.localDate);
   const now = Date.now();
   const version = (existing?.version || 0) + 1;
-  await db.execute(
+  await db.execute("begin immediate");
+  try {
+    await db.execute(
     `insert into daily_reports(localDate,overall,reflectionJson,markdownPath,completedAt,version,createdAt,updatedAt)
      values($1,$2,$3,$4,$5,$6,$7,$7)
      on conflict(localDate) do update set overall=excluded.overall,reflectionJson=excluded.reflectionJson,
@@ -1067,30 +1101,35 @@ export async function saveDailyReport(
       version,
       existing?.createdAt || now,
     ],
-  );
-  await db.execute(
-    "delete from daily_report_goal_entries where reportDate=$1",
-    [input.localDate],
-  );
-  for (const entry of input.entries) {
-    await db.execute(
-      `insert into daily_report_goal_entries
-        (reportDate,goalId,goalTitle,status,progressPercent,studyMinutes,content)
-       values($1,$2,$3,$4,$5,$6,$7)`,
-      [
-        input.localDate,
-        entry.goalId,
-        entry.goalTitle,
-        entry.status,
-        entry.progressPercent,
-        entry.studyMinutes,
-        entry.content,
-      ],
     );
     await db.execute(
-      "update learning_goals set progressPercent=$1, updatedAt=$2 where id=$3 and status != 'deleted'",
-      [entry.progressPercent, now, entry.goalId],
+      "delete from daily_report_goal_entries where reportDate=$1",
+      [input.localDate],
     );
+    for (const entry of input.entries) {
+      await db.execute(
+        `insert into daily_report_goal_entries
+          (reportDate,goalId,goalTitle,status,progressPercent,studyMinutes,content)
+         values($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          input.localDate,
+          entry.goalId,
+          entry.goalTitle,
+          entry.status,
+          entry.progressPercent,
+          entry.studyMinutes,
+          entry.content,
+        ],
+      );
+      await db.execute(
+        "update learning_goals set progressPercent=$1, updatedAt=$2 where id=$3 and status != 'deleted'",
+        [entry.progressPercent, now, entry.goalId],
+      );
+    }
+    await db.execute("commit");
+  } catch (error) {
+    await db.execute("rollback").catch(() => undefined);
+    throw error;
   }
   await insertActivityEvent({
     source: "learning",
@@ -1211,6 +1250,7 @@ export async function saveLearningScheduleEvent(
   input: SaveLearningScheduleEventInput,
   id?: string,
 ): Promise<LearningScheduleEvent> {
+  assertValidLearningScheduleInput(input);
   const db = await getDb();
   const now = Date.now();
   const event: LearningScheduleEvent = {
@@ -1229,6 +1269,7 @@ export async function saveLearningScheduleEvent(
         )
       )[0]
     : null;
+  if (id && !existing) throw new Error("要编辑的日程不存在。");
   event.createdAt = existing?.createdAt || now;
   await db.execute(
     `insert into learning_schedule_events

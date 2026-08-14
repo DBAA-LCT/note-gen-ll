@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Flag, LoaderCircle, RotateCcw } from "lucide-react";
+import { BookOpenCheck, CalendarDays, ClipboardCheck, Flag, LoaderCircle, RotateCcw } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatLocalDate } from "@/lib/learning/date";
@@ -25,12 +25,14 @@ const primaryTabs: Array<{
 }> = [
   { value: "today", label: "今日", icon: ClipboardCheck },
   { value: "goals", label: "目标", icon: Flag },
+  { value: "calendar", label: "日程", icon: CalendarDays },
+  { value: "review", label: "复习", icon: BookOpenCheck },
   { value: "reports", label: "回顾", icon: RotateCcw },
 ];
 
 export function LearningApp() {
   const router = useRouter();
-  const { initialized, loading, error, date, initialize, settings } =
+  const { initialized, error, date, initialize, settings } =
     useLearningStore();
   const [tab, setTab] = useState<LearningTab>("today");
   const [createSignal, setCreateSignal] = useState(0);
@@ -54,7 +56,34 @@ export function LearningApp() {
     router.push("/mobile/writing");
   };
 
-  if (!initialized || !date || loading) {
+  const retryInitialize = () => {
+    void initialize(formatLocalDate(Date.now(), settings.timeZone)).catch(
+      () => undefined,
+    );
+  };
+
+  if (error && (!initialized || !date)) {
+    return (
+      <div className="flex h-full items-center justify-center p-4">
+        <Alert variant="destructive" className="max-w-lg">
+          <AlertTitle>规划空间加载失败</AlertTitle>
+          <AlertDescription className="mt-2 flex flex-col items-start gap-3">
+            <span>{error}</span>
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium"
+              onClick={retryInitialize}
+            >
+              <RotateCcw className="size-4" />
+              重试
+            </button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (!initialized || !date) {
     return (
       <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
         <LoaderCircle className="size-4 animate-spin" />
@@ -80,7 +109,7 @@ export function LearningApp() {
           <div className="sticky top-0 z-20 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/85">
             <TabsList
               variant="line"
-              className="mx-auto flex h-12 w-full min-w-0 max-w-6xl justify-start overflow-x-auto rounded-none bg-transparent p-0"
+              className="mx-auto flex h-12 w-full min-w-0 max-w-6xl justify-start overflow-x-auto rounded-none bg-transparent p-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               {primaryTabs.map((item) => {
                 const Icon = item.icon;
@@ -88,7 +117,7 @@ export function LearningApp() {
                   <TabsTrigger
                     key={item.value}
                     value={item.value}
-                    className="h-12 min-w-[72px] rounded-none px-4 text-sm data-[state=active]:font-medium"
+                    className="h-12 min-w-[68px] rounded-none px-2 text-sm data-[state=active]:font-medium sm:min-w-[72px] sm:px-4"
                   >
                     <Icon className="size-4" />
                     {item.label}

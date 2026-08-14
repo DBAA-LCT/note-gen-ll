@@ -1,4 +1,5 @@
 import { diffLocalDays, localWeekday } from './date'
+import { allocateWeightedMinutes } from './logic'
 import type { LearningGoal, LearningSettings } from '@/types/learning'
 
 export interface PlannedTaskDraft {
@@ -31,30 +32,7 @@ export function allocateLearningMinutes(
   goals: LearningGoal[],
   budgetMinutes: number,
 ): Map<string, number> {
-  const budget = Math.max(15, Math.min(720, Math.round(budgetMinutes)))
-  const result = new Map<string, number>()
-  if (!goals.length) return result
-
-  const totalWeight = goals.reduce((sum, goal) => sum + Math.max(1, goal.timeWeight), 0)
-  const shares = goals.map(goal => {
-    const exact = budget * Math.max(1, goal.timeWeight) / totalWeight
-    return {
-      goal,
-      minutes: Math.floor(exact),
-      remainder: exact - Math.floor(exact),
-    }
-  })
-  let remaining = budget - shares.reduce((sum, share) => sum + share.minutes, 0)
-  shares
-    .sort((left, right) => right.remainder - left.remainder || left.goal.createdAt - right.goal.createdAt)
-    .forEach(share => {
-      if (remaining > 0) {
-        share.minutes += 1
-        remaining -= 1
-      }
-    })
-  shares.forEach(share => result.set(share.goal.id, share.minutes))
-  return result
+  return allocateWeightedMinutes(goals, budgetMinutes)
 }
 
 export function planTasksForDate(
@@ -65,8 +43,10 @@ export function planTasksForDate(
   const eligible = eligibleGoalsForDate(goals, date, settings.weeklyDays)
   const allocations = allocateLearningMinutes(eligible, settings.dailyStudyMinutes)
 
-  return eligible.map((goal, index) => {
-    const plannedMinutes = allocations.get(goal.id) || 15
+  return eligible
+    .filter(goal => (allocations.get(goal.id) ?? 0) > 0)
+    .map((goal, index) => {
+    const plannedMinutes = allocations.get(goal.id) ?? 0
     const remainingDays = Math.max(1, diffLocalDays(date, goal.endDate) + 1)
     return {
       goalId: goal.id,
@@ -79,5 +59,5 @@ export function planTasksForDate(
       generationKey: `local-v1:${goal.id}:${date}`,
       sortOrder: index,
     }
-  })
+    })
 }

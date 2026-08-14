@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { BookOpenCheck, Clock3, FileText, Flag, History, Link2, Plus, Settings2 } from 'lucide-react'
+import { BookOpenCheck, CalendarDays, Clock3, FileText, Flag, History, Link2, Plus, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -26,6 +26,7 @@ function compactDate(date: string) {
 const planningActions = [
   { view: 'today' as const, label: '今日', icon: BookOpenCheck },
   { view: 'goals' as const, label: '目标', icon: Flag },
+  { view: 'calendar' as const, label: '日程', icon: CalendarDays },
   { view: 'reports' as const, label: '回顾', icon: History },
 ]
 

@@ -48,6 +48,11 @@ export function useSyncManager(path?: string, options: UseSyncManagerOptions = {
 
     try {
       const result = await manager.syncFile(path)
+      if (!result.success) {
+        setStatus(result.action === 'conflict' ? 'conflict' : 'unknown')
+        setError(result.error || result.message || 'Sync failed')
+        return result
+      }
       await checkStatus(path)
       return result
     } catch (err) {
@@ -64,6 +69,7 @@ export function useSyncManager(path?: string, options: UseSyncManagerOptions = {
     if (!path) return null
 
     setIsLoading(true)
+    setError(null)
     try {
       const workspace = await getWorkspacePath()
       const pathOptions = await getFilePathOptions(path)
@@ -71,10 +77,17 @@ export function useSyncManager(path?: string, options: UseSyncManagerOptions = {
         ? await readTextFile(pathOptions.path)
         : await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
       const result = await manager.pushFile(path, content)
+      if (!result.success) {
+        setStatus('local_newer')
+        setError(result.error || result.message || 'Push failed')
+        return result
+      }
       await checkStatus(path)
       return result
     } catch (err) {
       console.error('Push failed:', err)
+      setStatus('local_newer')
+      setError(err instanceof Error ? err.message : 'Push failed')
       return null
     } finally {
       setIsLoading(false)
@@ -85,12 +98,20 @@ export function useSyncManager(path?: string, options: UseSyncManagerOptions = {
     if (!path) return null
 
     setIsLoading(true)
+    setError(null)
     try {
       const result = await manager.pullFile(path)
+      if (!result.success) {
+        setStatus('remote_newer')
+        setError(result.error || result.message || 'Pull failed')
+        return result
+      }
       await checkStatus(path)
       return result
     } catch (err) {
       console.error('Pull failed:', err)
+      setStatus('remote_newer')
+      setError(err instanceof Error ? err.message : 'Pull failed')
       return null
     } finally {
       setIsLoading(false)

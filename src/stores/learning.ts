@@ -25,6 +25,7 @@ import {
   updateLearningTask,
 } from "@/lib/learning/repository";
 import { planTasksForDate } from "@/lib/learning/planner";
+import { createLatestRequestGuard } from "@/lib/learning/logic";
 import { generateLocalPeriodicReport, getLearningPeriodBounds } from "@/lib/learning/period-report";
 import type {
   CreateLearningGoalInput,
@@ -91,6 +92,8 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+const dateLoadGuard = createLatestRequestGuard();
+
 const useLearningStore = create<LearningStoreState>((set, get) => ({
   initialized: false,
   loading: false,
@@ -127,6 +130,7 @@ const useLearningStore = create<LearningStoreState>((set, get) => ({
   },
 
   loadDate: async (date, options = {}) => {
+    const request = dateLoadGuard.begin();
     set({ loading: true, error: null, date });
     try {
       if (options.ensureTasks) await get().ensureTasks(date);
@@ -135,12 +139,12 @@ const useLearningStore = create<LearningStoreState>((set, get) => ({
         listFocusSessions(date),
         getDailyReport(date),
       ]);
-      set({ tasks, sessions, report });
+      if (dateLoadGuard.isLatest(request)) set({ tasks, sessions, report });
     } catch (error) {
-      set({ error: errorMessage(error) });
+      if (dateLoadGuard.isLatest(request)) set({ error: errorMessage(error) });
       throw error;
     } finally {
-      set({ loading: false });
+      if (dateLoadGuard.isLatest(request)) set({ loading: false });
     }
   },
 
@@ -162,6 +166,9 @@ const useLearningStore = create<LearningStoreState>((set, get) => ({
   setGoalStatus: async (id, status) => {
     await setLearningGoalStatus(id, status);
     await get().refreshGoals();
+    if ((status === "active" || status === "planned") && get().date) {
+      await get().ensureTasks(get().date);
+    }
     set({ tasks: await listLearningTasks(get().date) });
   },
 

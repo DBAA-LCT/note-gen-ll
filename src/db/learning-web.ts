@@ -31,6 +31,14 @@ import {
   DEFAULT_REVIEW_SETTINGS,
 } from "@/types/learning";
 import { formatLocalDate } from "@/lib/learning/date";
+import {
+  assertValidDailyReportInput,
+  assertValidLearningGoalInput,
+  assertValidLearningScheduleInput,
+  isValidLocalDate,
+  shouldRestoreGeneratedTask,
+  taskStateForProgress,
+} from "@/lib/learning/logic";
 
 interface WebLearningState {
   goals: LearningGoal[];
@@ -132,6 +140,7 @@ export async function listLearningGoals(
   );
 }
 export async function createLearningGoal(input: CreateLearningGoalInput) {
+  assertValidLearningGoalInput(input);
   const state = readState();
   const now = Date.now();
   const goal: LearningGoal = {
@@ -154,9 +163,11 @@ export async function updateLearningGoal(
   id: string,
   input: CreateLearningGoalInput,
 ) {
+  assertValidLearningGoalInput(input);
   const state = readState();
   const goal = state.goals.find((item) => item.id === id);
-  if (goal) Object.assign(goal, input, { updatedAt: Date.now() });
+  if (!goal || goal.status === "deleted") throw new Error("目标不存在或已删除。");
+  Object.assign(goal, input, { updatedAt: Date.now() });
   writeState(state);
 }
 export async function setLearningGoalStatus(
@@ -166,19 +177,25 @@ export async function setLearningGoalStatus(
   const state = readState();
   const now = Date.now();
   const goal = state.goals.find((item) => item.id === id);
-  if (goal)
-    Object.assign(goal, {
-      status,
-      deletedAt: status === "deleted" ? now : null,
-      updatedAt: now,
-    });
+  if (!goal) throw new Error("目标不存在。");
+  if (goal.status === "deleted" && status !== "deleted") {
+    throw new Error("已删除的目标不能重新启用。");
+  }
+  Object.assign(goal, {
+    status,
+    deletedAt: status === "deleted" ? now : null,
+    updatedAt: now,
+  });
   if (status === "archived" || status === "deleted" || status === "completed")
     state.tasks.forEach((task) => {
       if (
         task.goalId === id &&
+        task.localDate >= formatLocalDate(now, goal.timeZone) &&
         (task.status === "todo" || task.status === "in-progress")
-      )
+      ) {
         task.status = "cancelled";
+        task.updatedAt = now;
+      }
     });
   writeState(state);
 }
@@ -211,8 +228,20 @@ export async function insertPlannedTasks(tasks: PlannedTaskDraft[]) {
   const state = readState();
   let inserted = 0;
   for (const draft of tasks) {
-    if (state.tasks.some((task) => task.generationKey === draft.generationKey))
+    const existing = state.tasks.find(
+      (task) => task.generationKey === draft.generationKey,
+    );
+    if (existing) {
+      if (shouldRestoreGeneratedTask(existing)) {
+        Object.assign(existing, {
+          status: "todo",
+          progressPercent: 0,
+          updatedAt: Date.now(),
+        });
+        inserted += 1;
+      }
       continue;
+    }
     const now = Date.now();
     state.tasks.push({
       id: uuid(),
@@ -249,6 +278,8 @@ export async function createManualLearningTask(input: {
   description?: string;
   plannedMinutes: number;
 }) {
+  if (!isValidLocalDate(input.localDate)) throw new Error("任务日期无效。");
+  if (!input.title.trim()) throw new Error("任务标题不能为空。");
   const state = readState();
   const now = Date.now();
   state.tasks.push({
@@ -256,10 +287,10 @@ export async function createManualLearningTask(input: {
     goalId: input.goalId || null,
     notePath: input.notePath || null,
     localDate: input.localDate,
-    title: input.title,
-    description: input.description || "",
+    title: input.title.trim(),
+    description: input.description?.trim() || "",
     completionCriteria: "",
-    plannedMinutes: input.plannedMinutes,
+    plannedMinutes: Math.max(0, Math.min(720, Math.round(input.plannedMinutes))),
     progressPercent: 0,
     status: "todo",
     source: "manual",
@@ -280,6 +311,10 @@ export async function replaceAiLearningTasks(
   drafts: AiLearningTaskDraft[],
   generatedFromDate: string | null = null,
 ) {
+  if (!isValidLocalDate(localDate)) throw new Error("规划日期无效。");
+  if (drafts.some((task) => !task.goalId || !task.title.trim() || !Number.isFinite(task.plannedMinutes))) {
+    throw new Error("AI 规划中包含无效任务。");
+  }
   const state = readState();
   const now = Date.now();
   state.tasks = state.tasks.filter(
@@ -297,9 +332,9 @@ export async function replaceAiLearningTasks(
       goalId: draft.goalId,
       notePath: null,
       localDate,
-      title: draft.title,
-      description: draft.description,
-      completionCriteria: draft.completionCriteria,
+      title: draft.title.trim(),
+      description: draft.description.trim(),
+      completionCriteria: draft.completionCriteria.trim(),
       plannedMinutes: Math.max(
         0,
         Math.min(720, Math.round(draft.plannedMinutes)),
@@ -326,45 +361,38 @@ export async function setLearningTaskStatus(
 ) {
   const state = readState();
   const task = state.tasks.find((item) => item.id === id);
-  if (task)
-    Object.assign(task, {
-      status,
-      progressPercent:
-        status === "done" ? 100 : status === "todo" ? 0 : task.progressPercent,
-      updatedAt: Date.now(),
-    });
+  if (!task) throw new Error("任务不存在。");
+  Object.assign(task, {
+    status,
+    progressPercent:
+      status === "done" ? 100 : status === "todo" ? 0 : task.progressPercent,
+    manuallyEdited: true,
+    updatedAt: Date.now(),
+  });
   writeState(state);
 }
 export async function setLearningTaskProgress(id: string, progress: number) {
   const state = readState();
   const task = state.tasks.find((item) => item.id === id);
-  const progressPercent = Math.max(0, Math.min(100, Math.round(progress)));
-  if (task)
-    Object.assign(task, {
-      progressPercent,
-      status:
-        progressPercent >= 100
-          ? "done"
-          : progressPercent > 0
-            ? "in-progress"
-            : "todo",
-      manuallyEdited: true,
-      updatedAt: Date.now(),
-    });
+  if (!task) throw new Error("任务不存在。");
+  const nextState = taskStateForProgress(progress);
+  Object.assign(task, {
+    ...nextState,
+    manuallyEdited: true,
+    updatedAt: Date.now(),
+  });
   writeState(state);
 }
 export async function updateLearningTask(
   id: string,
   input: UpdateLearningTaskInput,
 ) {
+  if (!input.title.trim()) throw new Error("任务标题不能为空。");
   const state = readState();
   const task = state.tasks.find((item) => item.id === id);
-  const progressPercent = Math.max(
-    0,
-    Math.min(100, Math.round(input.progressPercent)),
-  );
-  if (task)
-    Object.assign(task, {
+  if (!task) throw new Error("任务不存在。");
+  const nextState = taskStateForProgress(input.progressPercent);
+  Object.assign(task, {
       title: input.title.trim(),
       description: input.description.trim(),
       completionCriteria: input.completionCriteria.trim(),
@@ -372,13 +400,7 @@ export async function updateLearningTask(
         0,
         Math.min(720, Math.round(input.plannedMinutes)),
       ),
-      progressPercent,
-      status:
-        progressPercent >= 100
-          ? "done"
-          : progressPercent > 0
-            ? "in-progress"
-            : "todo",
+      ...nextState,
       manuallyEdited: true,
       updatedAt: Date.now(),
     });
@@ -419,6 +441,7 @@ export async function listArchivedDailyReports() {
     .sort((a, b) => b.localDate.localeCompare(a.localDate));
 }
 export async function saveDailyReport(input: SaveDailyReportInput) {
+  assertValidDailyReportInput(input);
   const state = readState();
   const existing = state.reports.find(
     (report) => report.localDate === input.localDate,
@@ -589,10 +612,12 @@ export async function saveLearningScheduleEvent(
   input: SaveLearningScheduleEventInput,
   id?: string,
 ) {
+  assertValidLearningScheduleInput(input);
   const state = readState();
   const existing = id
     ? state.scheduleEvents.find((event) => event.id === id)
     : undefined;
+  if (id && !existing) throw new Error("要编辑的日程不存在。");
   const now = Date.now();
   const event: LearningScheduleEvent = {
     id: id || uuid(),

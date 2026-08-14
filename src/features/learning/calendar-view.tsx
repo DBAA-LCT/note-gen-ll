@@ -12,18 +12,21 @@ import {
   Plus,
   Search,
   Trash2,
+  LoaderCircle,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  ResponsiveDialog,
+  ResponsiveDialogContent,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+} from "@/components/responsive-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -119,6 +122,9 @@ export function LearningCalendarView() {
   >(new Map());
   const [query, setQuery] = useState("");
   const [eventOpen, setEventOpen] = useState(false);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [eventBusy, setEventBusy] = useState(false);
   const [editingEvent, setEditingEvent] =
     useState<LearningScheduleEvent | null>(null);
   const [draft, setDraft] = useState<SaveLearningScheduleEventInput>(() =>
@@ -127,12 +133,22 @@ export function LearningCalendarView() {
   const range = useMemo(() => rangeForMonth(cursor), [cursor]);
 
   const reload = useCallback(async () => {
-    const [nextSummaries, nextEvents] = await Promise.all([
-      listLearningDaySummaries(range.start, range.end),
-      listLearningScheduleEvents(range.start, range.end),
-    ]);
-    setSummaries(nextSummaries);
-    setEvents(nextEvents);
+    setCalendarLoading(true);
+    setCalendarError(null);
+    try {
+      const [nextSummaries, nextEvents] = await Promise.all([
+        listLearningDaySummaries(range.start, range.end),
+        listLearningScheduleEvents(range.start, range.end),
+      ]);
+      setSummaries(nextSummaries);
+      setEvents(nextEvents);
+      return true;
+    } catch (error) {
+      setCalendarError(error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      setCalendarLoading(false);
+    }
   }, [range.end, range.start]);
   useEffect(() => {
     void reload();
@@ -188,7 +204,11 @@ export function LearningCalendarView() {
   }, [goals]);
   const selectDate = async (nextDate: string, syncCursor = true) => {
     if (syncCursor) setCursor(toDate(nextDate));
-    await loadDate(nextDate, { ensureTasks: nextDate <= today });
+    try {
+      await loadDate(nextDate, { ensureTasks: nextDate <= today });
+    } catch (error) {
+      toast.error("读取当天计划失败", { description: error instanceof Error ? error.message : String(error) });
+    }
   };
   const move = (direction: number) => {
     setExpandedScheduleWeekStart(null);
@@ -244,37 +264,57 @@ export function LearningCalendarView() {
       toast.error("结束时间需要晚于开始时间");
       return;
     }
-    await saveLearningScheduleEvent(
-      { ...draft, title: draft.title.trim(), notes: draft.notes.trim() },
-      editingEvent?.id,
-    );
-    setEventOpen(false);
-    await reload();
-    await selectDate(draft.localDate);
-    toast.success(editingEvent ? "日程已更新" : "日程已添加");
+    setEventBusy(true);
+    try {
+      await saveLearningScheduleEvent(
+        { ...draft, title: draft.title.trim(), notes: draft.notes.trim() },
+        editingEvent?.id,
+      );
+      setEventOpen(false);
+      await reload();
+      await selectDate(draft.localDate);
+      toast.success(editingEvent ? "日程已更新" : "日程已添加");
+    } catch (error) {
+      toast.error("保存日程失败", { description: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setEventBusy(false);
+    }
   };
   const removeEvent = async (event: LearningScheduleEvent) => {
-    await deleteLearningScheduleEvent(event.id);
-    await reload();
-    toast.success("日程已删除");
+    if (!window.confirm(`删除日程“${event.title}”？`)) return;
+    setEventBusy(true);
+    try {
+      await deleteLearningScheduleEvent(event.id);
+      setEventOpen(false);
+      await reload();
+      toast.success("日程已删除");
+    } catch (error) {
+      toast.error("删除日程失败", { description: error instanceof Error ? error.message : String(error) });
+    } finally {
+      setEventBusy(false);
+    }
   };
   const dropEvent = async (eventId: string, nextDate: string) => {
     const event = events.find((item) => item.id === eventId);
     if (!event || event.localDate === nextDate) return;
-    await saveLearningScheduleEvent(
-      {
-        title: event.title,
-        localDate: nextDate,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        allDay: event.allDay,
-        kind: event.kind,
-        notes: event.notes,
-      },
-      event.id,
-    );
-    await reload();
-    toast.success(`已移动到 ${nextDate}`);
+    try {
+      await saveLearningScheduleEvent(
+        {
+          title: event.title,
+          localDate: nextDate,
+          startTime: event.startTime,
+          endTime: event.endTime,
+          allDay: event.allDay,
+          kind: event.kind,
+          notes: event.notes,
+        },
+        event.id,
+      );
+      await reload();
+      toast.success(`已移动到 ${nextDate}`);
+    } catch (error) {
+      toast.error("移动日程失败", { description: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   const renderEvent = (event: LearningScheduleEvent) => (
@@ -290,8 +330,15 @@ export function LearningCalendarView() {
         openEdit(event);
       }}
       onDoubleClick={(e) => e.stopPropagation()}
+      onKeyDown={(keyboardEvent) => {
+        if (!keyboardEvent.altKey || !["ArrowLeft", "ArrowRight"].includes(keyboardEvent.key)) return;
+        keyboardEvent.preventDefault();
+        keyboardEvent.stopPropagation();
+        void dropEvent(event.id, addLocalDays(event.localDate, keyboardEvent.key === "ArrowLeft" ? -1 : 1));
+      }}
+      aria-label={`${event.title}，${event.localDate}。按回车编辑，按 Alt 加左右方向键移动一天`}
       className={cn(
-        "flex w-full items-center gap-1 truncate rounded px-1.5 py-1 text-left text-[11px]",
+        "flex min-h-9 w-full items-center gap-1 truncate rounded px-2 py-1 text-left text-xs md:min-h-0 md:px-1.5 md:text-[11px]",
         event.kind === "milestone"
           ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
           : "bg-primary/10 text-primary",
@@ -320,8 +367,12 @@ export function LearningCalendarView() {
         tabIndex={0}
         onClick={() => expandDate(cell)}
         onDoubleClick={() => openCreate(cell)}
+        aria-label={`${cell}，按回车展开，按 Shift 加回车新建日程`}
         onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
+          if (event.key === "Enter" && event.shiftKey) {
+            event.preventDefault();
+            openCreate(cell);
+          } else if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             expandDate(cell);
           }
@@ -395,13 +446,106 @@ export function LearningCalendarView() {
     );
   };
 
+  const renderMobileMonth = () => {
+    const cells = monthCells(cursor);
+    const selectedDate = date?.startsWith(monthKey(cursor))
+      ? date
+      : `${monthKey(cursor)}-01`;
+    const selectedSummary = summaryMap.get(selectedDate);
+    const selectedEvents = eventMap.get(selectedDate) || [];
+    const selectedDeadlines = deadlineMap.get(selectedDate) || [];
+
+    return (
+      <div className="space-y-3 md:hidden">
+        <Card className="overflow-hidden">
+          <div className="grid grid-cols-7 border-b bg-muted/30">
+            {WEEKDAYS.map((day) => (
+              <div key={day} className="py-2 text-center text-xs text-muted-foreground">
+                {day}
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 p-1">
+            {cells.map((cell, index) => {
+              if (!cell) return <div key={`mobile-empty-${index}`} className="min-h-11" />;
+              const hasEvent = Boolean(eventMap.get(cell)?.length);
+              const hasDeadline = Boolean(deadlineMap.get(cell)?.length);
+              return (
+                <button
+                  key={cell}
+                  type="button"
+                  className={cn(
+                    "relative flex min-h-11 items-center justify-center rounded-md text-sm",
+                    cell === selectedDate && "bg-primary text-primary-foreground",
+                    cell === today && cell !== selectedDate && "font-semibold text-primary",
+                  )}
+                  onClick={() => void selectDate(cell, false)}
+                  aria-label={`${cell}${hasEvent ? "，有日程" : ""}${hasDeadline ? "，有目标截止" : ""}`}
+                >
+                  {Number(cell.slice(-2))}
+                  {hasEvent || hasDeadline ? (
+                    <span
+                      className={cn(
+                        "absolute bottom-1 size-1 rounded-full bg-primary",
+                        hasDeadline && "bg-destructive",
+                        cell === selectedDate && "bg-primary-foreground",
+                      )}
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-medium">{formatChineseDate(selectedDate)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {selectedSummary?.taskTotal
+                  ? `${selectedSummary.taskDone}/${selectedSummary.taskTotal} 个任务`
+                  : "当天暂无规划任务"}
+                {selectedSummary?.focusedMinutes
+                  ? ` · 专注 ${selectedSummary.focusedMinutes} 分钟`
+                  : ""}
+              </p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => openCreate(selectedDate)}>
+              <Plus />添加
+            </Button>
+          </div>
+          <div className="mt-4 space-y-2">
+            {selectedDeadlines.map((goal) => (
+              <div
+                key={goal.id}
+                className="flex min-h-11 items-center gap-2 rounded-md bg-destructive/10 px-3 text-sm text-destructive"
+              >
+                <Flag className="size-4 shrink-0" />
+                <span className="truncate">目标截止 · {goal.title}</span>
+              </div>
+            ))}
+            {selectedEvents.map(renderEvent)}
+            {!selectedDeadlines.length && !selectedEvents.length ? (
+              <div className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                当天暂无日程，点击“添加”安排事项。
+              </div>
+            ) : null}
+          </div>
+        </Card>
+      </div>
+    );
+  };
+
   const renderMonth = () => {
     const cells = monthCells(cursor);
     const weeks = Array.from({ length: cells.length / 7 }, (_, index) =>
       cells.slice(index * 7, index * 7 + 7),
     );
     return (
-      <Card className="overflow-hidden">
+      <>
+        {renderMobileMonth()}
+        <Card className="hidden overflow-hidden md:block">
         <div className="grid grid-cols-7 border-l border-t">
           {WEEKDAYS.map((day) => (
             <div
@@ -439,7 +583,8 @@ export function LearningCalendarView() {
             </div>
           );
         })}
-      </Card>
+        </Card>
+      </>
     );
   };
   const renderExpandedWeek = (start: string) => {
@@ -682,15 +827,31 @@ export function LearningCalendarView() {
           />
         </div>
       </div>
+      {calendarError ? (
+        <Alert variant="destructive">
+          <AlertTitle>日程读取失败</AlertTitle>
+          <AlertDescription className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <span>{calendarError}</span>
+            <Button size="sm" variant="outline" onClick={() => void reload()}>
+              <RotateCcw />重试
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {calendarLoading ? (
+        <div className="flex min-h-24 items-center justify-center gap-2 rounded-lg border bg-background text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" />正在更新日程…
+        </div>
+      ) : null}
       {renderMonth()}
-      <Dialog open={eventOpen} onOpenChange={setEventOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingEvent ? "编辑日程" : "添加日程"}</DialogTitle>
-            <DialogDescription>
+      <ResponsiveDialog open={eventOpen} onOpenChange={setEventOpen}>
+        <ResponsiveDialogContent className="overflow-y-auto">
+          <ResponsiveDialogHeader>
+            <ResponsiveDialogTitle>{editingEvent ? "编辑日程" : "添加日程"}</ResponsiveDialogTitle>
+            <ResponsiveDialogDescription>
               全局日程和里程碑会显示在同一时间线上，可在月历或展开周中拖拽改期。
-            </DialogDescription>
-          </DialogHeader>
+            </ResponsiveDialogDescription>
+          </ResponsiveDialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="event-title">标题</Label>
@@ -773,13 +934,12 @@ export function LearningCalendarView() {
               />
             </div>
           </div>
-          <DialogFooter className="justify-between">
+          <ResponsiveDialogFooter className="justify-between">
             {editingEvent ? (
               <Button
                 variant="destructive"
-                onClick={() =>
-                  void removeEvent(editingEvent).then(() => setEventOpen(false))
-                }
+                disabled={eventBusy}
+                onClick={() => void removeEvent(editingEvent)}
               >
                 <Trash2 />
                 删除
@@ -788,19 +948,19 @@ export function LearningCalendarView() {
               <span />
             )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setEventOpen(false)}>
+              <Button variant="outline" disabled={eventBusy} onClick={() => setEventOpen(false)}>
                 取消
               </Button>
               <Button
-                disabled={!draft.title.trim()}
+                disabled={!draft.title.trim() || eventBusy}
                 onClick={() => void saveEvent()}
               >
-                保存
+                {eventBusy ? "保存中…" : "保存"}
               </Button>
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ResponsiveDialogFooter>
+        </ResponsiveDialogContent>
+      </ResponsiveDialog>
     </div>
   );
 }

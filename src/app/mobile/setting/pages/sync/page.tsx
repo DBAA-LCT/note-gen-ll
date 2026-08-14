@@ -18,6 +18,10 @@ import { MobileSelectDrawer } from '@/app/mobile/components/mobile-select-drawer
 import { OneDriveCloudFolderSync } from '@/app/mobile/setting/pages/sync/android-cloud-folder-sync'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item'
 import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { toast } from '@/hooks/use-toast'
+import { isTauriRuntime } from '@/lib/check'
 import { SyncStateEnum } from '@/lib/sync/github.types'
 import useSettingStore from '@/stores/setting'
 import useSyncStore from '@/stores/sync'
@@ -31,8 +35,7 @@ function toSyncPlatform(platformName: MobileSyncPlatform): SyncPlatform {
 
 export default function SyncPage() {
   const t = useTranslations()
-  const currentPlatform = platform()
-  const isAndroid = currentPlatform === 'android'
+  const isAndroid = isTauriRuntime() && platform() === 'android'
   const standardPlatforms = SYNC_PLATFORMS.filter(platformName => platformName !== 'cloudFolder')
   const availablePlatforms: MobileSyncPlatform[] = isAndroid
     ? [...standardPlatforms, 'oneDrive']
@@ -65,10 +68,14 @@ export default function SyncPage() {
     webdavConnected,
     cloudFolderConnected,
   } = useSyncStore()
+  const effectivePrimaryBackupMethod: SyncPlatform = SYNC_PLATFORMS.includes(primaryBackupMethod)
+    ? primaryBackupMethod
+    : 'github'
 
-  const [tab, setTab] = useState<MobileSyncPlatform>(primaryBackupMethod)
+  const [tab, setTab] = useState<MobileSyncPlatform>(effectivePrimaryBackupMethod)
   const [isLoading, setIsLoading] = useState(true)
   const [activeCloudFolderProvider, setActiveCloudFolderProvider] = useState<'folder' | 'oneDrive' | null>(null)
+  const [switchingPrimary, setSwitchingPrimary] = useState(false)
 
   const workspaceOptions = useMemo(
     () => Array.from(new Set([workspacePath, '', ...workspaceHistory])),
@@ -92,7 +99,6 @@ export default function SyncPage() {
             : isAndroid
               ? 'oneDrive'
               : 'github'
-          await setPrimaryBackupMethod(toSyncPlatform(nextTab))
           setTab(nextTab)
         }
       } catch (error) {
@@ -103,10 +109,11 @@ export default function SyncPage() {
     }
 
     void loadPrimaryBackupMethod()
-  }, [isAndroid, setPrimaryBackupMethod])
+  }, [isAndroid])
 
   const selectedSyncPlatform = toSyncPlatform(tab)
-  const activeWorkspaceSyncState = getCurrentSyncState(primaryBackupMethod)
+  const selectedSyncState = getCurrentSyncState(selectedSyncPlatform)
+  const activeWorkspaceSyncState = getCurrentSyncState(effectivePrimaryBackupMethod)
   const isProviderUnavailable = activeWorkspaceSyncState !== SyncStateEnum.success
   const isFileAutoSyncDisabled = isProviderUnavailable || syncAccessMode === 'read-only'
   const isCloudFolderTab = selectedSyncPlatform === 'cloudFolder'
@@ -144,6 +151,23 @@ export default function SyncPage() {
   function handleTabChange(value: string) {
     const nextTab = value as MobileSyncPlatform
     setTab(nextTab)
+  }
+
+  async function handleSetPrimaryPlatform() {
+    if (selectedSyncPlatform === effectivePrimaryBackupMethod || switchingPrimary) return
+    setSwitchingPrimary(true)
+    try {
+      await setPrimaryBackupMethod(selectedSyncPlatform)
+      toast({ title: t('settings.sync.currentPlatform'), description: getProviderLabel(tab) })
+    } catch (error) {
+      toast({
+        title: t('settings.sync.settings'),
+        description: error instanceof Error ? error.message : String(error),
+        variant: 'destructive',
+      })
+    } finally {
+      setSwitchingPrimary(false)
+    }
   }
 
   async function handleExcludeSensitiveConfigChange(checked: boolean) {
@@ -209,6 +233,25 @@ export default function SyncPage() {
             label: getProviderLabel(platformName),
           }))}
         />
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/20 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">{t('settings.sync.currentPlatform')}</p>
+            <p className="truncate text-sm font-medium">{getProviderLabel(effectivePrimaryBackupMethod)}</p>
+          </div>
+          {selectedSyncPlatform === effectivePrimaryBackupMethod ? (
+            <Badge>{t('settings.sync.currentPlatform')}</Badge>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={switchingPrimary || selectedSyncState !== SyncStateEnum.success}
+              onClick={() => void handleSetPrimaryPlatform()}
+            >
+              {switchingPrimary ? <Loader2 className="animate-spin" /> : null}
+              {t('settings.sync.setCurrentPlatform')}
+            </Button>
+          )}
+        </div>
         {renderSyncContent()}
         <ConnectorMappingTree
           platform={selectedSyncPlatform}

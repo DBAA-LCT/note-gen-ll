@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { LoaderCircle } from 'lucide-react'
+import { LoaderCircle, RotateCcw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatLocalDate } from '@/lib/learning/date'
 import useArticleStore from '@/stores/article'
@@ -16,9 +17,10 @@ import { LearningReviewHub } from './learning-review-hub'
 import { LEARNING_WORKSPACE_PATH, planningViewNames } from './open-learning-workspace'
 import { openGlobalSchedule } from '@/features/schedule/open-global-schedule'
 import emitter from '@/lib/emitter'
+import { toast } from 'sonner'
 
 export function LearningWorkspace() {
-  const { initialized, loading, error, date, initialize, settings } = useLearningStore()
+  const { initialized, error, date, initialize, settings } = useLearningStore()
   const { activeView, createGoalSignal, setActiveView, requestCreateGoal, clearCreateGoalRequest, setPendingReportDraft } = useLearningWorkspaceStore()
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
@@ -32,8 +34,11 @@ export function LearningWorkspace() {
 
   useEffect(() => {
     if (activeView !== 'calendar') return
-    setActiveView('today')
     void openGlobalSchedule()
+      .catch(scheduleError => {
+        toast.error('打开日程失败', { description: scheduleError instanceof Error ? scheduleError.message : String(scheduleError) })
+      })
+      .finally(() => setActiveView('today'))
   }, [activeView, setActiveView])
 
   useEffect(() => {
@@ -73,7 +78,9 @@ export function LearningWorkspace() {
 
   const navigate = (view: Parameters<typeof setActiveView>[0]) => {
     if (view === 'calendar') {
-      void openGlobalSchedule()
+      void openGlobalSchedule().catch(scheduleError => {
+        toast.error('打开日程失败', { description: scheduleError instanceof Error ? scheduleError.message : String(scheduleError) })
+      })
       return
     }
     setActiveView(view)
@@ -98,7 +105,26 @@ export function LearningWorkspace() {
     }
   })()
 
-  if (!initialized || !date || loading) {
+  if (error && (!initialized || !date)) {
+    return (
+      <div className="flex h-full flex-1 items-center justify-center p-4">
+        <Alert variant="destructive" className="max-w-lg">
+          <AlertTitle>规划空间加载失败</AlertTitle>
+          <AlertDescription className="mt-2 flex flex-col items-start gap-3">
+            <span>{error}</span>
+            <Button
+              variant="outline"
+              onClick={() => void initialize(formatLocalDate(Date.now(), settings.timeZone)).catch(() => undefined)}
+            >
+              <RotateCcw />重试
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
+  if (!initialized || !date) {
     return (
       <div className="flex h-full flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
         <LoaderCircle className="size-4 animate-spin" />

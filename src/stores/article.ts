@@ -2744,7 +2744,7 @@ const useArticleStore = create<NoteState>((set, get) => ({
         if (currentReadPath === actualPath && currentActivePath === actualPath) {
           const result = await syncOnOpen(actualPath)
           // 在设置 content 前再次确认路径没有变化
-          if (result?.updated && result.content && get().activeFilePath === actualPath) {
+          if (result?.updated && result.content !== undefined && get().activeFilePath === actualPath) {
             // 拉取了新内容，更新 currentArticle
             set({ currentArticle: result.content })
           }

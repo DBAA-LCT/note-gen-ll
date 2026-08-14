@@ -34,6 +34,7 @@ export function CloudFolderSync() {
   const [initialized, setInitialized] = useState(false)
   const [migrating, setMigrating] = useState(false)
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
   const normalizedCloudPath = config.path.trim().replace(/\\/g, '/').replace(/\/+$/, '')
   const normalizedWorkspacePath = workspacePath.trim().replace(/\\/g, '/').replace(/\/+$/, '')
   const workspaceIsCovered = Boolean(
@@ -46,12 +47,19 @@ export function CloudFolderSync() {
   useEffect(() => {
     let cancelled = false
     async function initialize() {
-      const store = await Store.load('store.json')
-      const saved = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-      if (cancelled) return
-      setConfig(saved || { path: '' })
-      setInitialized(true)
-      if (saved?.path) void testConnection(saved)
+      try {
+        const store = await Store.load('store.json')
+        const saved = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+        if (cancelled) return
+        setConfig(saved || { path: '' })
+        if (saved?.path) await testConnection(saved)
+      } catch (error) {
+        if (!cancelled) {
+          setConnectionError(error instanceof Error ? error.message : t('accessFailedDescription'))
+        }
+      } finally {
+        if (!cancelled) setInitialized(true)
+      }
     }
     void initialize()
     return () => {
@@ -66,11 +74,15 @@ export function CloudFolderSync() {
 
   async function testConnection(target = config) {
     if (!target.path) return
+    setConnectionError(null)
     try {
-      setCloudFolderConnected(await testCloudFolderConnection(target))
+      const connected = await testCloudFolderConnection(target)
+      setCloudFolderConnected(connected)
+      if (!connected) setConnectionError(t('accessFailedDescription'))
     } catch (error) {
       console.error('Cloud folder connection test failed:', error)
       setCloudFolderConnected(false)
+      setConnectionError(error instanceof Error ? error.message : t('accessFailedDescription'))
     }
   }
 
@@ -89,6 +101,7 @@ export function CloudFolderSync() {
 
   async function clearFolder() {
     setCloudFolderConnected(false)
+    setConnectionError(null)
     await saveConfig({ path: '' })
   }
 
@@ -244,6 +257,13 @@ export function CloudFolderSync() {
                   </Button>
                 </div>
               </AlertDescription>
+            </Alert>
+          ) : null}
+          {connectionError ? (
+            <Alert variant="destructive">
+              <TriangleAlert />
+              <AlertTitle>{t('migrationFailed')}</AlertTitle>
+              <AlertDescription>{connectionError}</AlertDescription>
             </Alert>
           ) : null}
         </FieldGroup>

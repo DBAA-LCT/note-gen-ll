@@ -27,6 +27,12 @@ import {
   getSyncPathWritePolicy,
   type ResolvedSyncMapping,
 } from '@/lib/sync/connector-mappings'
+import {
+  ActiveSyncPaths,
+  hasRemoteFileContent,
+  shouldAutoApplyRemote,
+  shouldRecordSuccessfulSync,
+} from '@/lib/sync/sync-logic'
 
 /**
  * 获取 GitLab 分支配置
@@ -104,6 +110,7 @@ export interface SyncResult {
   action: 'push' | 'pull' | 'delete' | 'none' | 'conflict'
   message?: string
   error?: string
+  content?: string
 }
 
 // 同步日志
@@ -126,6 +133,8 @@ export class SyncManager {
     syncStatus: 'unknown'
   }
   private syncQueue: Map<string, { timestamp: number }> = new Map()
+  private activeSyncPaths = new ActiveSyncPaths()
+  private processingSyncQueue = false
   private throttleTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor() {
@@ -419,7 +428,7 @@ export class SyncManager {
         }
       }
 
-      if (content) {
+      if (hasRemoteFileContent(content)) {
         // S3 和 WebDAV 不需要 base64 解码，其他平台需要
         let decodedContent = content
         if (platform !== 's3' && platform !== 'webdav' && platform !== 'cloudFolder') {
@@ -437,7 +446,7 @@ export class SyncManager {
 
         await updateFileSyncTime(path)
         await this.logSync(path, 'pull', true)
-        return { success: true, action: 'pull', message: '拉取成功' }
+        return { success: true, action: 'pull', message: '拉取成功', content: decodedContent }
       }
 
       await this.logSync(path, 'pull', false, '文件不存在')
@@ -578,8 +587,12 @@ export class SyncManager {
       switch (strategy) {
         case 'local':
           // 保留本地，删除远程然后重新上传
-          await this.deleteRemoteFile(path)
-          await this.pushFile(path, localContent)
+          {
+            const deleteResult = await this.deleteRemoteFile(path)
+            if (!deleteResult.success) return deleteResult
+            const pushResult = await this.pushFile(path, localContent)
+            if (!pushResult.success) return pushResult
+          }
           toast({ title: '冲突处理', description: '保留本地版本' })
           break
         case 'remote':
@@ -606,10 +619,10 @@ export class SyncManager {
       return { success: true, action: 'none', message: '文件被排除在同步之外' }
     }
 
-    // 检查是否正在同步
-    if (this.state.isSyncing) {
-      this.state.pendingSync = true
-      return { success: true, action: 'none', message: '同步中，标记待同步' }
+    // 同一路径只执行一个同步；不同文件可以并行，避免后来的文件被错误地
+    // 当成前一个文件的“待同步”并最终丢失。
+    if (!this.activeSyncPaths.begin(path)) {
+      return { success: true, action: 'none', message: '该文件正在同步' }
     }
 
     this.state.isSyncing = true
@@ -635,16 +648,20 @@ export class SyncManager {
           : await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
 
         const result = await this.pushFile(path, content)
-        this.state.lastSyncTime = Date.now()
-        this.state.lastSyncSha = localSha || ''
+        if (shouldRecordSuccessfulSync(result)) {
+          this.state.lastSyncTime = Date.now()
+          this.state.lastSyncSha = localSha || ''
+        }
         return result
       }
 
       if (syncResult.action === 'pull') {
         // 拉取远程版本
         const result = await this.pullFile(path)
-        this.state.lastSyncTime = Date.now()
-        this.state.lastSyncSha = remoteSha || ''
+        if (shouldRecordSuccessfulSync(result)) {
+          this.state.lastSyncTime = Date.now()
+          this.state.lastSyncSha = remoteSha || ''
+        }
         return result
       }
 
@@ -667,12 +684,14 @@ export class SyncManager {
 
       return { success: true, action: 'none' }
     } finally {
-      this.state.isSyncing = false
+      this.activeSyncPaths.end(path)
+      this.state.isSyncing = this.activeSyncPaths.size > 0 || this.processingSyncQueue
 
-      // 如果有待同步的变更，继续同步
-      if (this.state.pendingSync) {
+      // 保存期间积累的文件使用各自的路径处理，不能复用当前 path。
+      if (!this.state.isSyncing && this.syncQueue.size > 0) {
+        await this.processSyncQueue()
+      } else if (!this.state.isSyncing) {
         this.state.pendingSync = false
-        await this.syncFile(path, options)
       }
     }
   }
@@ -728,34 +747,18 @@ export class SyncManager {
     // 比较版本，决定是否需要拉取
     const syncResult = await compareFileVersions(path)
 
-    if (syncResult.action === 'pull') {
+    if (shouldAutoApplyRemote(syncResult.action)) {
       const result = await this.pullFile(path)
       if (result.success && result.action === 'pull') {
-        // 读取拉取的内容并返回
-        try {
-          const { pullRemoteFile } = await import('./auto-sync')
-          const content = await pullRemoteFile(path)
-          return { updated: true, content }
-        } catch {
-          return { updated: true }
-        }
+        return { updated: true, content: result.content }
       }
       return { updated: result.success }
     }
 
-    // 处理冲突情况：远程文件较新但 SHA 不同（可能是同步过的）
+    // 冲突不能自动拉取，否则会无提示覆盖本地修改。
     if (syncResult.action === 'conflict') {
-      const result = await this.pullFile(path)
-      if (result.success && result.action === 'pull') {
-        try {
-          const { pullRemoteFile } = await import('./auto-sync')
-          const content = await pullRemoteFile(path)
-          return { updated: true, content }
-        } catch {
-          return { updated: true }
-        }
-      }
-      return { updated: result.success }
+      this.state.syncStatus = 'conflict'
+      return { updated: false }
     }
 
     return null
@@ -765,6 +768,8 @@ export class SyncManager {
    * 处理同步队列
    */
   private async processSyncQueue(): Promise<void> {
+    if (this.processingSyncQueue) return
+    this.processingSyncQueue = true
     this.state.isSyncing = true
 
     try {
@@ -788,8 +793,9 @@ export class SyncManager {
         }
       }
     } finally {
-      this.state.isSyncing = false
-      this.state.pendingSync = false
+      this.processingSyncQueue = false
+      this.state.isSyncing = this.activeSyncPaths.size > 0
+      this.state.pendingSync = this.syncQueue.size > 0
     }
   }
 
