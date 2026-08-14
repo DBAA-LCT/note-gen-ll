@@ -9,7 +9,6 @@ export type SettingSection =
   | 'backup'
   | 'imageHosting'
   | 'ai'
-  | 'agentEngines'
   | 'webSearch'
   | 'rag'
   | 'mcp'
@@ -33,7 +32,6 @@ export const settingSections: SettingSection[] = [
   'imageMethod',
   'audio',
   'ai',
-  'agentEngines',
   'webSearch',
   'rag',
   'memories',

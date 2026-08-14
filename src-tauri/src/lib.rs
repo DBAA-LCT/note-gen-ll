@@ -1,6 +1,4 @@
 mod ai;
-#[cfg(not(target_os = "android"))]
-mod agent_engine;
 mod analytics;
 #[cfg(target_os = "android")]
 mod android_cloud_folder;
@@ -31,8 +29,6 @@ use ai::{
     ai_binary_request, ai_chat_completion_stream, ai_json_request, ai_multipart_request,
     cancel_ai_request, AiRequestManager,
 };
-#[cfg(not(target_os = "android"))]
-use agent_engine::{cancel_agent_engine, inspect_agent_engine, list_agent_engine_commands, list_agent_engine_models, run_agent_engine, AgentEngineManager};
 use backup::{export_app_data, import_app_data, import_app_data_from_file};
 use backup_manager::{create_managed_backup, list_managed_backups, restore_managed_backup};
 use cloud_folder_sync::{
@@ -82,8 +78,7 @@ pub fn run() {
 
     #[cfg(not(target_os = "android"))]
     let builder = builder
-        .manage(SkillProcessManager::default())
-        .manage(AgentEngineManager::default());
+        .manage(SkillProcessManager::default());
 
     #[cfg(target_os = "android")]
     let builder = builder.plugin(android_cloud_folder::init());
@@ -135,16 +130,6 @@ pub fn run() {
             inspect_skill_python,
             #[cfg(not(target_os = "android"))]
             install_skill_python_dependencies,
-            #[cfg(not(target_os = "android"))]
-            inspect_agent_engine,
-            #[cfg(not(target_os = "android"))]
-            list_agent_engine_commands,
-            #[cfg(not(target_os = "android"))]
-            list_agent_engine_models,
-            #[cfg(not(target_os = "android"))]
-            run_agent_engine,
-            #[cfg(not(target_os = "android"))]
-            cancel_agent_engine,
             ai_json_request,
             ai_binary_request,
             ai_multipart_request,

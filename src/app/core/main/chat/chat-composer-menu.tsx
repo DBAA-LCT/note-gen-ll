@@ -31,14 +31,6 @@ import { getAllMarkdownFiles, type MarkdownFile } from "@/lib/files"
 import { cn } from "@/lib/utils"
 import { useSkillsStore } from "@/stores/skills"
 import type { SkillMetadata } from "@/lib/skills/types"
-import {
-  getAgentEngineName,
-  listAgentEngineCommands,
-  loadAgentEngineSettings,
-  type AgentEngineCommand,
-  type AgentEngineId,
-} from "@/lib/agent-engines"
-import { AgentEngineMark } from "./agent-engine-brand"
 
 export type ComposerMenuMode = "command" | "resource"
 
@@ -50,7 +42,6 @@ export interface ChatComposerMenuHandle {
 interface ChatComposerMenuProps {
   mode: ComposerMenuMode | null
   query: string
-  agentEngine: AgentEngineId
   onClose: () => void
   onCommandSelect: (prompt: string) => void
   onFileSelect: (file: MarkdownFile) => void
@@ -64,8 +55,7 @@ interface ComposerMenuItem {
   label: string
   description: string
   searchText?: string
-  icon?: LucideIcon
-  engine?: AgentEngineId
+  icon: LucideIcon
   iconClassName?: string
   meta?: string
   onSelect: () => void
@@ -93,7 +83,6 @@ export const ChatComposerMenu = forwardRef<
 >(function ChatComposerMenu({
   mode,
   query,
-  agentEngine,
   onClose,
   onCommandSelect,
   onFileSelect,
@@ -109,8 +98,6 @@ export const ChatComposerMenu = forwardRef<
   const [files, setFiles] = useState<MarkdownFile[]>([])
   const [records, setRecords] = useState<Mark[]>([])
   const [loading, setLoading] = useState(false)
-  const [commandLoading, setCommandLoading] = useState(false)
-  const [agentCommands, setAgentCommands] = useState<AgentEngineCommand[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const selectedItemRef = useRef<HTMLButtonElement>(null)
 
@@ -141,48 +128,11 @@ export const ChatComposerMenu = forwardRef<
 
   useEffect(() => {
     if (mode !== "command") return
-    if (agentEngine === "native") {
-      setAgentCommands([])
-      void (skillsInitialized ? refreshSkills() : initSkills())
-      return
-    }
-
-    let active = true
-    setAgentCommands([])
-    setCommandLoading(true)
-    void loadAgentEngineSettings()
-      .then(settings => listAgentEngineCommands(
-        agentEngine,
-        settings.engines[agentEngine].executable,
-        settings.engines[agentEngine].workspace
-      ))
-      .then(commands => {
-        if (active) setAgentCommands(commands)
-      })
-      .finally(() => {
-        if (active) setCommandLoading(false)
-      })
-    return () => { active = false }
-  }, [agentEngine, initSkills, mode, refreshSkills, skillsInitialized])
+    void (skillsInitialized ? refreshSkills() : initSkills())
+  }, [initSkills, mode, refreshSkills, skillsInitialized])
 
   const items = useMemo<ComposerMenuItem[]>(() => {
     if (mode === "command") {
-      if (agentEngine !== "native") {
-        const engineName = getAgentEngineName(agentEngine)
-        return agentCommands.map(command => ({
-          key: `agent-command:${agentEngine}:${command.name}`,
-          group: command.source === "project"
-            ? `${engineName} · 项目指令`
-            : command.source === "personal"
-              ? `${engineName} · 个人指令`
-              : `${engineName} 指令`,
-          label: `/${command.name}`,
-          description: command.description,
-          engine: agentEngine,
-          meta: command.argumentHint,
-          onSelect: () => onCommandSelect(`/${command.name}${command.argumentHint ? " " : ""}`),
-        }))
-      }
       return [
         ...COMMANDS.map(({ key, icon }) => ({
           key: `command:${key}`,
@@ -233,8 +183,6 @@ export const ChatComposerMenu = forwardRef<
     ]
   }, [
     files,
-    agentCommands,
-    agentEngine,
     mode,
     onCommandSelect,
     onFileSelect,
@@ -291,27 +239,19 @@ export const ChatComposerMenu = forwardRef<
 
   if (mode === null) return null
 
-  const menuLoading = mode === "command" ? commandLoading : loading
-  const commandMenuLabel = agentEngine === "native"
-    ? t("commands.title")
-    : `${getAgentEngineName(agentEngine)} 指令`
-  const emptyMessage = mode === "command" && agentEngine === "codex"
-    ? "当前接入使用 Codex exec 模式，不支持 Codex 交互界面的斜杠指令；模型和权限请使用输入框工具栏。"
-    : t("empty")
-
   return (
     <div
       className="absolute inset-x-1 bottom-[calc(100%+0.375rem)] z-30 max-h-[min(22rem,46vh)] overflow-y-auto rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg"
       role="listbox"
-      aria-label={mode === "command" ? commandMenuLabel : t("resources.title")}
+      aria-label={mode === "command" ? t("commands.title") : t("resources.title")}
     >
-      {menuLoading && filteredItems.length === 0 ? (
+      {loading && filteredItems.length === 0 ? (
         <div className="px-2 py-4 text-center text-xs text-muted-foreground">
           {t("loading")}
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="px-2 py-4 text-center text-xs text-muted-foreground">
-          {emptyMessage}
+          {t("empty")}
         </div>
       ) : (
         <div className="flex flex-col gap-0.5">
@@ -342,14 +282,10 @@ export const ChatComposerMenu = forwardRef<
                     onMouseDown={event => event.preventDefault()}
                     onClick={() => selectItem(item)}
                   >
-                    {item.engine ? (
-                      <AgentEngineMark engine={item.engine} className="size-4 rounded-[4px]" />
-                    ) : Icon ? (
-                      <Icon
-                        data-icon="inline-start"
-                        className={item.iconClassName}
-                      />
-                    ) : null}
+                    <Icon
+                      data-icon="inline-start"
+                      className={item.iconClassName}
+                    />
                     <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
                       <span className="shrink-0 truncate text-xs font-medium">
                         {item.label}

@@ -8,7 +8,7 @@ import { useEffect, useImperativeHandle, forwardRef, useRef } from "react"
 import { useTranslations } from "next-intl"
 import { LinkedResource, isLinkedFolder, type MarkdownFile } from "@/lib/files"
 import { readTextFile } from "@tauri-apps/plugin-fs"
-import { getDefaultArticleAbsolutePath, getFilePathOptions, getWorkspacePath } from "@/lib/workspace"
+import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace"
 import { AgentHandler } from "@/lib/agent/agent-handler"
 import { isRequestAbortError } from "@/lib/agent/runtime"
 import { agentDebugLog, previewText } from "@/lib/agent/debug-log"
@@ -93,7 +93,6 @@ interface ChatSendProps {
   mentionedFiles?: MarkdownFile[];
   mentionedRecords?: QuoteData[];
   dockStyle?: boolean;
-  composerEnabled?: boolean;
 }
 
 export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
@@ -107,9 +106,8 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
   mentionedFiles = [],
   mentionedRecords = [],
   dockStyle = false,
-  composerEnabled = true,
 }, ref) => {
-  const { agentPermissionMode } = useSettingStore()
+  const { primaryModel, agentPermissionMode } = useSettingStore()
   const { currentTagId } = useTagStore()
   const {
     insert,
@@ -501,16 +499,11 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       agentHandlerRef.current = null
     }
 
-    const configuredWorkspace = await getWorkspacePath()
-    const agentWorkspacePath = configuredWorkspace.isCustom
-      ? configuredWorkspace.path
-      : await getDefaultArticleAbsolutePath('')
-
     // 每次都创建新的 AgentHandler，使用当前的 placeholderMessage
     const agentHandler = new AgentHandler({
       activeChatId: placeholderMessage.id,
       conversationId: placeholderMessage.conversationId,
-      workspaceId: agentWorkspacePath.trim().replace(/\\/g, '/').replace(/\/+$/, ''),
+      workspaceId: useSettingStore.getState().workspacePath.trim().replace(/\\/g, '/').replace(/\/+$/, '') || 'default',
       useMemories: !useChatStore.getState().isTemporaryConversation,
       activeFilePath: articleStore.activeFilePath,
       permissionMode: agentPermissionMode,
@@ -1275,7 +1268,7 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
     variant={dockStyle ? "ghost" : showStop ? "destructive" : "default"}
     size={dockStyle ? "icon" : "sm"}
     icon={showStop ? <Square className="fill-current" /> : <Send />}
-    disabled={!showStop && (!composerEnabled || !hasInput)}
+    disabled={!showStop && (!primaryModel || !hasInput)}
     tooltipText={showStop
       ? t('record.chat.input.stop')
       : loading

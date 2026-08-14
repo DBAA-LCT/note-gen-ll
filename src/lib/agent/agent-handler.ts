@@ -3,65 +3,13 @@ import useChatStore from '@/stores/chat'
 import { skillManager } from '@/lib/skills'
 import { BUILTIN_SKILL_CREATOR } from '@/lib/skills/creator'
 import { useSkillsStore } from '@/stores/skills'
-import { getToolsByCategory, reloadMcpTools } from './tools'
+import { reloadMcpTools } from './tools'
 import { AgentRuntime, isRequestAbortError } from './runtime'
 import { readCurrentEditorState } from './tools/editor-tools'
-import type { AgentApprovalDecision, AgentChange, AgentPermissionMode, AgentRuntimeResult, AgentSkillSummary, AgentSteeringPayload, AgentStep, AgentToolResult, AgentTraceEvent, ToolCall } from './types'
+import type { AgentApprovalDecision, AgentChange, AgentPermissionMode, AgentRuntimeResult, AgentSkillSummary, AgentSteeringPayload, AgentStep, AgentTraceEvent, ToolCall } from './types'
 import type { RuntimeChatAttachment } from '@/lib/chat-attachments'
 import type { AgentImageAttachment } from '@/lib/chat-image-context'
 import { retainCompletedAgentTraceEvents } from './trace-retention'
-import { cancelExternalAgent, loadAgentEngineSettings, runExternalAgent, saveAgentEngineSettings } from '@/lib/agent-engines'
-
-const EXTERNAL_HOST_TOOL_PATTERN = /<notegoal-tool-call>\s*([\s\S]*?)\s*<\/notegoal-tool-call>/i
-const EXTERNAL_TOOL_UNAVAILABLE_PATTERN = /(?:learning_[a-z_]+|NoteGoal[\s\S]{0,40}(?:工具|tools?))[\s\S]{0,240}(?:不在[\s\S]{0,30}(?:工具集|tools?)|无法(?:真正)?调用|不可用|unavailable|not available|cannot call)/i
-const LEARNING_WORKFLOW_PATTERN = /learning_|学习(?:目标|计划|规划|日报|访谈|任务|日程)|长期目标|今日计划|每日计划|整日回顾/i
-const TERMINAL_LEARNING_TOOLS = new Set([
-  'learning_ask_interview_question',
-  'learning_propose_goal',
-  'learning_propose_daily_plan',
-  'learning_propose_daily_report',
-])
-
-function parseExternalHostToolCall(content: string): { name: string; arguments: Record<string, unknown> } | null {
-  const match = content.match(EXTERNAL_HOST_TOOL_PATTERN)
-  if (!match) return null
-  try {
-    const value = JSON.parse(match[1]) as { name?: unknown; arguments?: unknown }
-    if (typeof value.name !== 'string' || !value.name.trim()) return null
-    const args = value.arguments && typeof value.arguments === 'object' && !Array.isArray(value.arguments)
-      ? value.arguments as Record<string, unknown>
-      : {}
-    return { name: value.name.trim(), arguments: args }
-  } catch {
-    return null
-  }
-}
-
-function buildExternalHostToolInstructions() {
-  const tools = getToolsByCategory('system').filter(tool => tool.name.startsWith('learning_'))
-  if (!tools.length) return { instructions: '', tools }
-  const catalog = tools.map(tool => ({
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.inputSchema,
-  }))
-  return {
-    tools,
-    instructions: [
-      '## NoteGoal host tools (real and currently available)',
-      'The following tools are provided by the NoteGoal host application. They are not CLI, MCP, ToolSearch, or plugin tools. Never search for them with ToolSearch and never say they are unavailable.',
-      'To call one tool, your entire response for that turn must be exactly one XML envelope containing valid JSON:',
-      '<notegoal-tool-call>{"name":"tool_name","arguments":{}}</notegoal-tool-call>',
-      'Call only one host tool at a time. NoteGoal will execute it locally and return the result, after which you may call another tool or answer normally.',
-      'For learning interviews, every question must use learning_ask_interview_question. For draft cards, call the matching learning_propose_* tool instead of substituting ordinary text.',
-      JSON.stringify(catalog),
-    ].join('\n'),
-  }
-}
-
-function hiddenExternalToolContext(name: string, args: Record<string, unknown>, result: unknown) {
-  return `<!-- notegoal-host-tool-context:${encodeURIComponent(JSON.stringify({ name, arguments: args, result }))} -->`
-}
 
 export interface AgentHandlerConfig {
   activeChatId?: number
@@ -105,7 +53,6 @@ export interface AgentHandlerConfig {
 
 export class AgentHandler {
   private runtime: AgentRuntime | null = null
-  private externalRunId: string | null = null
   private stopped = false
   private readonly config: AgentHandlerConfig
   private steeringPending = false
@@ -148,196 +95,6 @@ export class AgentHandler {
       selectedSkills: this.config.selectedSkills,
       currentStepStartTime: Date.now(),
     })
-
-    const engineSettings = await loadAgentEngineSettings()
-    if (engineSettings.selected !== 'native') {
-      const engine = engineSettings.selected
-      const engineConfig = engineSettings.engines[engine]
-      if (engineConfig.installed) {
-        this.externalRunId = crypto.randomUUID()
-        store.setAgentState({ status: 'thinking', isRunning: true, isThinking: true })
-        const history = Array.isArray(contextOrMessages)
-          ? contextOrMessages.map(message => `${message.role}: ${typeof message.content === 'string' ? message.content : JSON.stringify(message.content)}`).join('\n\n')
-          : contextOrMessages || ''
-        // Native CLI slash commands are recognized only at the beginning of the
-        // dispatched prompt. Do not prefix them with NoteGoal's rendered history.
-        const isExternalSlashCommand = /^\s*\/[a-zA-Z0-9][\w:.-]*(?:\s|$)/.test(userInput)
-        const prompt = isExternalSlashCommand
-          ? userInput.trimStart()
-          : history ? `${history}\n\nuser: ${userInput}` : userInput
-        try {
-          const hostBridge = LEARNING_WORKFLOW_PATTERN.test(prompt)
-            ? buildExternalHostToolInstructions()
-            : { instructions: '', tools: [] }
-          const hostTools = new Map(hostBridge.tools.map(tool => [tool.name, tool]))
-          let turnPrompt = hostBridge.instructions
-            ? `${prompt}\n\n${hostBridge.instructions}`
-            : prompt
-          let result: Awaited<ReturnType<typeof runExternalAgent>> | undefined
-          let finalContent = ''
-
-          for (let iteration = 0; iteration < 8; iteration += 1) {
-            if (this.stopped) break
-            result = await runExternalAgent({
-              runId: this.externalRunId,
-              engine,
-              prompt: turnPrompt,
-              workspace: engineConfig.workspace?.trim() || this.config.workspaceId || '.',
-              executable: engineConfig.executable,
-              model: engineConfig.model,
-              permissionMode: engineConfig.permissionMode,
-            })
-            if (result.stopped) {
-              finalContent = result.content
-              break
-            }
-
-            const requestedCall = parseExternalHostToolCall(result.content)
-            if (!requestedCall) {
-              if (hostBridge.instructions && iteration === 0 && EXTERNAL_TOOL_UNAVAILABLE_PATTERN.test(result.content)) {
-                turnPrompt += [
-                  '',
-                  `assistant: ${result.content}`,
-                  'NoteGoal host: Your previous statement was incorrect. These host tools are available through the XML bridge described above; they intentionally do not appear in your CLI ToolSearch. Make the required host tool call now.',
-                ].join('\n\n')
-                continue
-              }
-              finalContent = result.content
-              break
-            }
-
-            const tool = hostTools.get(requestedCall.name)
-            if (!tool) {
-              turnPrompt += [
-                '',
-                `assistant: ${result.content}`,
-                `NoteGoal host: Tool ${requestedCall.name} is not exposed in this workflow. Use one of: ${[...hostTools.keys()].join(', ')}.`,
-              ].join('\n\n')
-              continue
-            }
-
-            const toolCall: ToolCall = {
-              id: `external-${crypto.randomUUID()}`,
-              toolName: tool.name,
-              params: requestedCall.arguments,
-              status: 'running',
-              timestamp: Date.now(),
-            }
-            store.addAgentToolCall(toolCall)
-            store.setAgentState({ status: 'calling_tool', isThinking: false, currentAction: tool.title })
-
-            let toolResult: AgentToolResult
-            try {
-              if (tool.risk !== 'read' && engineConfig.permissionMode === 'read-only') {
-                toolResult = { ok: false, message: '当前外部 Agent 是只读模式，已阻止写入类 NoteGoal 工具。', error: 'READ_ONLY_MODE' }
-              } else if (tool.risk !== 'read') {
-                const decision = await this.config.requestConfirmation?.(tool.name, requestedCall.arguments)
-                toolResult = decision === 'approved'
-                  ? await tool.execute(requestedCall.arguments, {
-                      runId: this.externalRunId,
-                      context: {
-                        activeChatId: this.config.activeChatId,
-                        activeFilePath: this.config.activeFilePath,
-                        activeCanvasId: this.config.activeCanvasId,
-                        userInput,
-                        currentQuote: this.config.currentQuote,
-                        selectedSkills: this.config.selectedSkills,
-                        attachments: this.config.attachments,
-                        imageAttachments: this.config.imageAttachments,
-                      },
-                    })
-                  : { ok: false, message: '用户未批准此 NoteGoal 工具调用。', error: 'USER_DENIED' }
-              } else {
-                toolResult = await tool.execute(requestedCall.arguments, {
-                  runId: this.externalRunId,
-                  context: {
-                    activeChatId: this.config.activeChatId,
-                    activeFilePath: this.config.activeFilePath,
-                    activeCanvasId: this.config.activeCanvasId,
-                    userInput,
-                    currentQuote: this.config.currentQuote,
-                    selectedSkills: this.config.selectedSkills,
-                    attachments: this.config.attachments,
-                    imageAttachments: this.config.imageAttachments,
-                  },
-                })
-              }
-            } catch (error) {
-              toolResult = {
-                ok: false,
-                message: error instanceof Error ? error.message : String(error),
-                error: 'HOST_TOOL_EXECUTION_FAILED',
-              }
-            }
-            store.updateAgentToolCall(toolCall.id, {
-              status: toolResult.ok ? 'success' : 'error',
-              result: {
-                success: toolResult.ok,
-                message: toolResult.message,
-                data: toolResult.data,
-                error: toolResult.error,
-                changes: toolResult.changes,
-              },
-            })
-
-            if (toolResult.ok && TERMINAL_LEARNING_TOOLS.has(tool.name)) {
-              finalContent = `${toolResult.message}\n\n${hiddenExternalToolContext(tool.name, requestedCall.arguments, toolResult)}`
-              break
-            }
-
-            turnPrompt += [
-              '',
-              `assistant: ${result.content}`,
-              `NoteGoal host tool result for ${tool.name}: ${JSON.stringify(toolResult)}`,
-              'Continue the task. Call another NoteGoal host tool with the XML envelope when needed, or answer normally when finished.',
-            ].join('\n\n')
-            store.setAgentState({ status: 'thinking', isThinking: true, currentAction: undefined })
-          }
-
-          if (!result) {
-            finalContent = ''
-            result = { content: '', stopped: this.stopped }
-          }
-          if (!finalContent && !this.stopped) {
-            throw new Error(`${engine} exceeded the NoteGoal host tool call limit`)
-          }
-
-          if (result.model && result.model !== engineConfig.lastUsedModel) {
-            const nextSettings = {
-              ...engineSettings,
-              engines: {
-                ...engineSettings.engines,
-                [engine]: { ...engineConfig, lastUsedModel: result.model },
-              },
-            }
-            await saveAgentEngineSettings(nextSettings).catch(error => {
-              console.warn('[Agent Handler] Failed to save the actual external model:', error)
-            })
-          }
-          store.setAgentState({
-            isRunning: false,
-            isThinking: false,
-            status: result.stopped ? 'stopped' : 'completed',
-            isFinalAnswerMode: true,
-            finalAnswerContent: finalContent,
-          })
-          this.config.onFinalAnswerRender?.(finalContent)
-          this.config.onComplete?.(finalContent, [], result.stopped)
-          return finalContent
-        } catch (error) {
-          store.setAgentState({ isRunning: false, isThinking: false, status: this.stopped ? 'stopped' : 'failed' })
-          const message = error instanceof Error ? error.message : String(error)
-          if (this.stopped) {
-            this.config.onComplete?.('', [], true)
-            return ''
-          }
-          await this.config.onError?.(message)
-          throw error
-        } finally {
-          this.externalRunId = null
-        }
-      }
-    }
 
     this.runtime = new AgentRuntime()
     if (this.steeringPending) {
@@ -481,7 +238,6 @@ export class AgentHandler {
 
   stop() {
     this.stopped = true
-    if (this.externalRunId) void cancelExternalAgent(this.externalRunId)
     const state = useChatStore.getState()
     const pending = state.agentState.pendingConfirmation
     if (pending) {
