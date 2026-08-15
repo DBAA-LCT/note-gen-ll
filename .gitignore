@@ -37,6 +37,10 @@ target/*
 skills-lock.json
 src-tauri/resources/ocr/*
 !src-tauri/resources/ocr/.gitkeep
+src-tauri/resources/harness-runtime/
+src-tauri/resources/harness-runtime.zip
+.harness-*.log
+harness/.notegoal-host-build.log
 src-tauri/native-ocr/ios-vision/.tauri/
 
 /.pnp

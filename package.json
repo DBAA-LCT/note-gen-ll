@@ -9,7 +9,12 @@
     "start": "next start --turbopack -p 3456",
     "lint": "next lint",
     "tauri": "tauri",
-    "docs:build": "npm --prefix ./docs run build"
+    "docs:build": "npm --prefix ./docs run build",
+    "harness:install": "corepack pnpm@11.7.0 --dir harness install --trust-lockfile --registry=https://registry.npmjs.org",
+    "harness:build": "corepack pnpm@11.7.0 --dir harness run build:lib:host && corepack pnpm@11.7.0 --dir harness run build:lib:client",
+    "harness:package": "node scripts/package-harness-sidecar.mjs",
+    "harness:smoke": "node scripts/smoke-harness-sidecar.mjs",
+    "harness:sidecar": "node harness/apps/cli/lib/bin.js --profile notegoal"
   },
   "dependencies": {
     "@antv/infographic": "^0.2.7",

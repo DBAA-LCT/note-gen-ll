@@ -1,4 +1,5 @@
 import type OpenAI from 'openai'
+import type { HarnessSessionEvent } from '@/lib/deepseek-harness/events'
 import type { RuntimeChatAttachment } from '@/lib/chat-attachments'
 import type { AgentImageAttachment } from '@/lib/chat-image-context'
 
@@ -344,6 +345,8 @@ export interface AgentState {
   currentObservation?: string
   toolCalls: ToolCall[]
   traceEvents?: AgentTraceEvent[]
+  /** DeepSeek Harness-compatible append-only session log. */
+  harnessEvents?: HarnessSessionEvent[]
   changes?: AgentChange[]
   maxIterations: number
   currentIteration: number
@@ -359,6 +362,18 @@ export interface AgentState {
     canApproveForSession?: boolean
     sessionApprovalType?: 'runtime-script'
     sessionApprovalKey?: string
+  }
+  pendingHarnessQuestions?: {
+    token: string
+    questions: Array<{
+      id: string
+      question: string
+      detail?: string
+      header?: string
+      options?: Array<{ label: string; description?: string }>
+      multiSelect?: boolean
+      intent?: { kind: 'plan-review'; approve: string }
+    }>
   }
   confirmationHistory: ConfirmationRecord[]
   loadedSkills?: AgentSkillSummary[]

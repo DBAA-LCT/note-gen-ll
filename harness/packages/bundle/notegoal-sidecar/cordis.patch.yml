@@ -1,0 +1,60 @@
+# NoteGoal's native-sidebar runtime. This layer is applied after dsh-base.
+# stdout is reserved for newline-delimited JSON-RPC frames.
+
+- id: hmr
+  disabled: true
+
+- id: system-prompt
+  config:
+    persona: >-
+      You are NoteGoal's built-in coding and knowledge agent powered by the
+      {{model}} model. Your working directory is {{cwd}}.
+
+- id: tools
+  config:
+    mode: !!js process.env.DSH_TOOLS_MODE ?? 'both'
+
+- insert:
+    # Native/code dual tool presentation.
+    - id: code-runtime
+      name: '@deepseek-ai/dsh-code-runtime-worker-thread'
+
+    # NoteGoal owns the UI; Harness owns the complete agent runtime over stdio.
+    - id: sdk-jsonrpc-server
+      name: '@deepseek-ai/dsh-sdk-jsonrpc-server'
+      config:
+        maxTokensAsSuccess: true
+
+    # Native sidebar-backed human interaction. The SDK server supplies the
+    # user-questions provider and forwards approval requests over JSON-RPC.
+    - id: tool-ask-user
+      name: '@deepseek-ai/dsh-tool-ask-user'
+
+    # Durable scheduled prompts and resumable sessions.
+    - id: schedule
+      name: '@deepseek-ai/dsh-schedule'
+
+    # LSP registry and model-facing query tool. Concrete language servers are
+    # inserted from NoteGoal settings as lsp-stdio rows.
+    - id: lsp
+      name: '@deepseek-ai/dsh-lsp'
+
+    - id: tool-lsp
+      name: '@deepseek-ai/dsh-tool-lsp'
+
+    # Persistent PTY tools. The upstream backend is Bash-specific; Windows
+    # retains the base layer's native PowerShell + background job toolchain.
+    - id: terminal
+      name: '@deepseek-ai/dsh-terminal'
+
+    - id: terminal-bash
+      name: '@deepseek-ai/dsh-terminal-bash'
+      disabled: !!js process.platform === 'win32'
+
+    - id: tool-terminal
+      name: '@deepseek-ai/dsh-tool-terminal'
+      disabled: !!js process.platform === 'win32'
+
+# MCP is intentionally instance-based: NoteGoal settings add one
+# @deepseek-ai/dsh-mcp-client row per configured server. Mounting an empty row
+# is invalid in the upstream schema and would make the runtime fail at boot.

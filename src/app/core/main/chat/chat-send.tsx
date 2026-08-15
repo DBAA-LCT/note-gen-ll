@@ -10,6 +10,7 @@ import { LinkedResource, isLinkedFolder, type MarkdownFile } from "@/lib/files"
 import { readTextFile } from "@tauri-apps/plugin-fs"
 import { getFilePathOptions, getWorkspacePath } from "@/lib/workspace"
 import { AgentHandler } from "@/lib/agent/agent-handler"
+import { restoreHarnessEvents } from '@/lib/deepseek-harness/events'
 import { isRequestAbortError } from "@/lib/agent/runtime"
 import { agentDebugLog, previewText } from "@/lib/agent/debug-log"
 import { getToolByName } from "@/lib/agent/tools"
@@ -463,6 +464,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
         steps: currentState.agentState.completedSteps || [],
         toolCalls: currentState.agentState.toolCalls,
         traceEvents,
+        harnessEvents: currentState.agentState.harnessEvents || [],
         changes: currentState.agentState.changes || [],
         runId: currentState.agentState.runId,
         status: aborted ? 'stopped' : 'failed',
@@ -521,6 +523,9 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       attachments: fileAttachments,
       imageAttachments: agentImageAttachments,
       selectedSkills: effectiveSelectedSkills,
+      initialHarnessEvents: restoreHarnessEvents(
+        useChatStore.getState().chats.map(chat => chat.agentHistory),
+      ),
       onFinalAnswerRender: (markdownContent) => {
         // 检测到 Final Answer 时触发渲染
         setAgentState({
@@ -565,6 +570,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
           steps: agentState.completedSteps || [],
           toolCalls: agentState.toolCalls,
           traceEvents,
+          harnessEvents: agentState.harnessEvents || [],
           changes: agentState.changes || [],
           runId: agentState.runId,
           status: effectivelyStopped ? 'stopped' : agentState.status,

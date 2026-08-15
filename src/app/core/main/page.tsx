@@ -3,7 +3,7 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { LeftSidebar } from "./left-sidebar"
 import { EditorLayout } from './editor/editor-layout'
-import Chat from './chat'
+import { DeepSeekHarnessSidebar } from '@/features/deepseek-harness/harness-sidebar'
 import dynamic from 'next/dynamic'
 import { useSidebarStore } from "@/stores/sidebar"
 import { useEffect, useState, useRef } from 'react'
@@ -262,7 +262,7 @@ function ResizableWrapper() {
         collapsedSize="0%"
         onResize={(size) => setRightPanelCollapsed(size.asPercentage < 0.1)}
       >
-        <Chat />
+        <DeepSeekHarnessSidebar />
       </ResizablePanel>
     )
 
