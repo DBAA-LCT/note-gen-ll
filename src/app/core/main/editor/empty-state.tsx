@@ -204,7 +204,7 @@ export function EmptyState({
               className="w-10 h-10 dark:invert"
             />
             <h1 className="text-4xl font-bold tracking-tight">
-              NoteGen
+              NoteGoal
             </h1>
           </div>
           <EmptyTitle className="text-xl">

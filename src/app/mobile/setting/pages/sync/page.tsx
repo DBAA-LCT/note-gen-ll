@@ -144,7 +144,7 @@ export default function SyncPage() {
   }
 
   function getProviderLabel(platform: MobileSyncPlatform) {
-    if (platform === 'oneDrive' || platform === 'cloudFolder') return t('settings.sync.oneDrive.title')
+    if (platform === 'oneDrive' || platform === 'cloudFolder') return t('settings.sync.cloudFolder.title')
     return SYNC_PLATFORM_INFO[platform].name
   }
 
@@ -221,47 +221,26 @@ export default function SyncPage() {
       </p>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold">{t('settings.sync.providerConnections')}</h2>
-        <MobileSelectDrawer
-          title={t('settings.sync.selectPlatform')}
-          value={tab}
-          onValueChange={handleTabChange}
-          placeholder={t('settings.sync.selectPlatform')}
-          className="h-11"
-          options={availablePlatforms.map(platformName => ({
-            value: platformName,
-            label: getProviderLabel(platformName),
-          }))}
-        />
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/20 px-3 py-2">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">{t('settings.sync.currentPlatform')}</p>
-            <p className="truncate text-sm font-medium">{getProviderLabel(effectivePrimaryBackupMethod)}</p>
+        <h2 className="text-sm font-semibold">{t('settings.sync.currentPlatform')}</h2>
+        <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-3">
+          <div className="flex min-h-11 flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">{t('settings.sync.currentPlatform')}</p>
+              <p className="truncate text-sm font-medium">{getProviderLabel(effectivePrimaryBackupMethod)}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {activeWorkspaceSyncState === SyncStateEnum.success ? (
+                <Badge className="bg-green-600 text-white">{t('settings.sync.status.connected')}</Badge>
+              ) : (
+                <Badge variant="destructive">{t('settings.sync.status.disconnected')}</Badge>
+              )}
+              {syncAccessMode === 'read-only' ? (
+                <Badge variant="secondary">{t('settings.sync.readOnly')}</Badge>
+              ) : null}
+            </div>
           </div>
-          {selectedSyncPlatform === effectivePrimaryBackupMethod ? (
-            <Badge>{t('settings.sync.currentPlatform')}</Badge>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={switchingPrimary || selectedSyncState !== SyncStateEnum.success}
-              onClick={() => void handleSetPrimaryPlatform()}
-            >
-              {switchingPrimary ? <Loader2 className="animate-spin" /> : null}
-              {t('settings.sync.setCurrentPlatform')}
-            </Button>
-          )}
+          <p className="text-xs text-muted-foreground">{t('settings.sync.primaryPlatformDesc')}</p>
         </div>
-        {renderSyncContent()}
-        <ConnectorMappingTree
-          platform={selectedSyncPlatform}
-          workspaceOptions={workspaceOptions}
-          currentWorkspacePath={workspacePath}
-        />
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold">{t('settings.sync.noteSettings')}</h2>
 
         <Item variant="outline">
           <ItemMedia variant="icon"><RefreshCcw className="size-4" /></ItemMedia>
@@ -306,7 +285,50 @@ export default function SyncPage() {
             />
           </ItemActions>
         </Item>
+      </section>
 
+      <section className="flex flex-col gap-3">
+        <h2 className="text-sm font-semibold">{t('settings.sync.connectionManagement')}</h2>
+        <p className="text-sm text-muted-foreground">{t('settings.sync.connectionManagementDesc')}</p>
+        <MobileSelectDrawer
+          title={t('settings.sync.selectPlatform')}
+          value={tab}
+          onValueChange={handleTabChange}
+          placeholder={t('settings.sync.selectPlatform')}
+          className="h-11"
+          options={availablePlatforms.map(platformName => ({
+            value: platformName,
+            label: getProviderLabel(platformName),
+          }))}
+        />
+        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/20 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">{t('settings.sync.selectedPlatform')}</p>
+            <p className="truncate text-sm font-medium">{getProviderLabel(tab)}</p>
+          </div>
+          {selectedSyncState === SyncStateEnum.success ? (
+            <Badge className="bg-green-600 text-white">{t('settings.sync.status.connected')}</Badge>
+          ) : (
+            <Badge variant="destructive">{t('settings.sync.status.disconnected')}</Badge>
+          )}
+          {selectedSyncPlatform !== effectivePrimaryBackupMethod ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={switchingPrimary || selectedSyncState !== SyncStateEnum.success}
+              onClick={() => void handleSetPrimaryPlatform()}
+            >
+              {switchingPrimary ? <Loader2 className="animate-spin" /> : null}
+              {t('settings.sync.setCurrentPlatform')}
+            </Button>
+          ) : null}
+        </div>
+        {renderSyncContent()}
+        <ConnectorMappingTree
+          platform={selectedSyncPlatform}
+          workspaceOptions={workspaceOptions}
+          currentWorkspacePath={workspacePath}
+        />
       </section>
 
       <DataSyncOverview

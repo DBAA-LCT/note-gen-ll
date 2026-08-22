@@ -85,6 +85,17 @@ function missingFileReadResult(filePath: string): ToolResult {
   }
 }
 
+function missingFileOpenResult(filePath: string): ToolResult {
+  return {
+    success: true,
+    data: {
+      filePath,
+      exists: false,
+    },
+    message: `文件不存在，无法打开: ${filePath}。请告知用户该文件不存在，不要用相同参数重复尝试。`,
+  }
+}
+
 async function mirrorVectorDocuments(sourcePath: string, targetPath: string): Promise<number | null> {
   const { getVectorDocumentsByFilename, upsertVectorDocument } = await import('@/db/vector')
   const sourceKey = getVectorDocumentKey(sourcePath)
@@ -257,14 +268,14 @@ export const readMarkdownFileTool: Tool = {
 
 export const openMarkdownFileTool: Tool = {
   name: 'open_markdown_file',
-  description: 'Open a specified Markdown file in the editor and load its content.',
+  description: 'Open a specified Markdown file in the editor and load its content. The path must be relative to the workspace.',
   category: 'note',
   requiresConfirmation: false,
   parameters: [
     {
       name: 'filePath',
       type: 'string',
-      description: 'Path of the Markdown file to open',
+      description: 'Workspace-relative path of the Markdown file to open, e.g., "folder/note.md"',
       required: true,
     },
   ],
@@ -291,15 +302,16 @@ export const openMarkdownFileTool: Tool = {
         message: `成功打开文件: ${normalizedFilePath}`,
       }
     } catch (error) {
-      console.error('[open_markdown_file] 打开失败', {
-        filePath: params.filePath,
-        error: String(error),
-        errorName: error instanceof Error ? error.name : 'unknown',
-        errorMessage: error instanceof Error ? error.message : String(error),
-      })
+      if (isFileNotFoundError(error)) {
+        return missingFileOpenResult(String(params.filePath || ''))
+      }
+
+      const filePath = String(params.filePath || '')
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      console.error(`[open_markdown_file] 打开失败: ${filePath} - ${errorMessage}`)
       return {
         success: false,
-        error: `打开文件失败: ${error}`,
+        error: `打开文件失败: ${errorMessage}`,
       }
     }
   },

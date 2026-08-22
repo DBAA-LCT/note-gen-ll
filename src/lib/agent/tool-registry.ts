@@ -1959,7 +1959,8 @@ function buildTools(): AgentTool[] {
     dateDifferenceTool,
     adaptLegacyTool({
       name: 'note_create_file',
-      title: '创建文件',
+      title: '创建笔记',
+      description: 'Create a new Markdown note in the workspace. Use this whenever the user asks to create a new note, article, or document. Choose a suitable fileName ending with ".md" and provide complete Markdown content.',
       category: 'note',
       risk: 'file-create',
       legacy: createFileTool,
