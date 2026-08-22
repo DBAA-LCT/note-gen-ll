@@ -23,48 +23,74 @@ interface MenuState {
   query: string
 }
 
+interface MenuPosition {
+  top: number
+  left: number
+  maxHeight: number
+}
+
 interface CustomPromptState {
   visible: boolean
-  position: { top: number; left: number } | null
+  clientRect: DOMRect | null
+  position: MenuPosition | null
   value: string
 }
 
 // Menu dimensions
-const MENU_MAX_HEIGHT = 288 // max-h-72 = 288px
-const MENU_WIDTH = 416 // 26rem = 416px
+const MENU_MAX_HEIGHT = 288
+const MENU_MIN_HEIGHT = 96
+const MENU_WIDTH = 416
+const CUSTOM_PROMPT_HEIGHT = 64
 const MARGIN = 8
 
-function calculateMenuPosition(clientRect: DOMRect): { top: number; left: number } {
-  // Default position: below the cursor
-  let top = clientRect.bottom + MARGIN
-  let left = clientRect.left
+function getVisualViewportBounds() {
+  const viewport = window.visualViewport
+  const left = viewport?.offsetLeft ?? 0
+  const top = viewport?.offsetTop ?? 0
+  const width = viewport?.width ?? window.innerWidth
+  const height = viewport?.height ?? window.innerHeight
 
-  // Get viewport dimensions
-  const viewportHeight = window.innerHeight
-  const viewportWidth = window.innerWidth
-  const menuWidth = Math.min(MENU_WIDTH, viewportWidth - MARGIN * 2)
-
-  // Check if menu would overflow bottom of screen
-  const availableHeightBelow = viewportHeight - clientRect.bottom - MARGIN
-  const availableHeightAbove = clientRect.top - MARGIN
-
-  if (availableHeightBelow < MENU_MAX_HEIGHT && availableHeightAbove > availableHeightBelow) {
-    // Show above the cursor instead
-    top = clientRect.top - MENU_MAX_HEIGHT - MARGIN
+  return {
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
   }
+}
 
-  // Ensure top is not negative
-  top = Math.max(MARGIN, top)
+function calculateMenuPosition(
+  clientRect: DOMRect,
+  desiredHeight = MENU_MAX_HEIGHT,
+): MenuPosition {
+  const viewport = getVisualViewportBounds()
+  const menuWidth = Math.min(MENU_WIDTH, Math.max(0, viewport.width - MARGIN * 2))
+  const availableHeightBelow = Math.max(0, viewport.bottom - clientRect.bottom - MARGIN)
+  const availableHeightAbove = Math.max(0, clientRect.top - viewport.top - MARGIN)
+  const showAbove = availableHeightBelow < desiredHeight && availableHeightAbove > availableHeightBelow
+  const availableHeight = showAbove ? availableHeightAbove : availableHeightBelow
+  const viewportUsableHeight = Math.max(0, viewport.height - MARGIN * 2)
+  const minimumHeight = Math.min(MENU_MIN_HEIGHT, desiredHeight, viewportUsableHeight)
+  const maxHeight = Math.min(
+    desiredHeight,
+    viewportUsableHeight,
+    Math.max(minimumHeight, availableHeight),
+  )
 
-  // Ensure left doesn't overflow right edge
-  if (left + menuWidth > viewportWidth - MARGIN) {
-    left = viewportWidth - menuWidth - MARGIN
-  }
+  const preferredTop = showAbove
+    ? clientRect.top - maxHeight - MARGIN
+    : clientRect.bottom + MARGIN
+  const top = Math.min(
+    Math.max(preferredTop, viewport.top + MARGIN),
+    Math.max(viewport.top + MARGIN, viewport.bottom - maxHeight - MARGIN),
+  )
+  const left = Math.min(
+    Math.max(clientRect.left, viewport.left + MARGIN),
+    Math.max(viewport.left + MARGIN, viewport.right - menuWidth - MARGIN),
+  )
 
-  // Ensure left is not negative
-  left = Math.max(MARGIN, left)
-
-  return { top, left }
+  return { top, left, maxHeight }
 }
 
 export const SlashCommandPortal = () => {
@@ -77,13 +103,14 @@ export const SlashCommandPortal = () => {
   })
   const [customPrompt, setCustomPrompt] = useState<CustomPromptState>({
     visible: false,
+    clientRect: null,
     position: null,
     value: '',
   })
   const menuRef = useRef<SlashMenuRef>(null)
   const customPromptRef = useRef<HTMLFormElement>(null)
   const customPromptInputRef = useRef<HTMLInputElement>(null)
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
+  const [position, setPosition] = useState<MenuPosition | null>(null)
 
   const hideMenu = useCallback(() => {
     setState((prev) => ({ ...prev, visible: false }))
@@ -93,6 +120,7 @@ export const SlashCommandPortal = () => {
   const hideCustomPrompt = useCallback(() => {
     setCustomPrompt({
       visible: false,
+      clientRect: null,
       position: null,
       value: '',
     })
@@ -138,7 +166,8 @@ export const SlashCommandPortal = () => {
       }>
       setCustomPrompt({
         visible: true,
-        position: calculateMenuPosition(event.detail.clientRect),
+        clientRect: event.detail.clientRect,
+        position: calculateMenuPosition(event.detail.clientRect, CUSTOM_PROMPT_HEIGHT),
         value: '',
       })
       hideMenu()
@@ -156,6 +185,33 @@ export const SlashCommandPortal = () => {
       document.removeEventListener('tiptap-ai-custom-instruction-open', showCustomPromptHandler)
     }
   }, [hideMenu])
+
+  useEffect(() => {
+    if (!state.visible && !customPrompt.visible) {
+      return
+    }
+
+    const handleViewportChange = () => {
+      if (state.visible && state.clientRect) {
+        setPosition(calculateMenuPosition(state.clientRect))
+      }
+      if (customPrompt.visible && customPrompt.clientRect) {
+        const nextPosition = calculateMenuPosition(customPrompt.clientRect, CUSTOM_PROMPT_HEIGHT)
+        setCustomPrompt((prev) => ({ ...prev, position: nextPosition }))
+      }
+    }
+    const visualViewport = window.visualViewport
+
+    visualViewport?.addEventListener('resize', handleViewportChange)
+    visualViewport?.addEventListener('scroll', handleViewportChange)
+    window.addEventListener('resize', handleViewportChange)
+
+    return () => {
+      visualViewport?.removeEventListener('resize', handleViewportChange)
+      visualViewport?.removeEventListener('scroll', handleViewportChange)
+      window.removeEventListener('resize', handleViewportChange)
+    }
+  }, [customPrompt.clientRect, customPrompt.visible, state.clientRect, state.visible])
 
   useEffect(() => {
     if (!customPrompt.visible) {
@@ -250,6 +306,7 @@ export const SlashCommandPortal = () => {
             editor={slashMenuContext.editor}
             clientRect={slashMenuContext.clientRect}
             query={state.query}
+            maxHeight={slashMenuContext.position.maxHeight}
           />
         </div>
       )}

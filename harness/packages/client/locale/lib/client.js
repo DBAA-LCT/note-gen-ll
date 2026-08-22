@@ -875,8 +875,8 @@ window.__ModuleLoader__.load({
 		/** English dictionary, checked complete against the zh key set. */
 		const en = { "language.title": "Language" };
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\locale\src\client\LanguageRow.module.css.mjs
-		const css = ".ffwsva_row{border-bottom:1px solid var(--dsw-alias-border-l2);align-items:center;gap:8px;padding:16px 0;display:flex}.ffwsva_rowText{flex-direction:column;flex:1;gap:4px;min-width:0;padding-right:48px;display:flex}.ffwsva_title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px}.ffwsva_selector{background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:none;border-radius:18px;align-items:center;gap:12px;padding:0 14px;font-size:14px;line-height:22px;display:inline-flex}.ffwsva_selector:hover{background:var(--dsw-alias-interactive-bg-hover)}.ffwsva_chevron{flex:none}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\locale\src\client\LanguageRow.module.css.mjs
+		const css = ".zSwyDG_row{border-bottom:1px solid var(--dsw-alias-border-l2);align-items:center;gap:8px;padding:16px 0;display:flex}.zSwyDG_rowText{flex-direction:column;flex:1;gap:4px;min-width:0;padding-right:48px;display:flex}.zSwyDG_title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px}.zSwyDG_selector{background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:none;border-radius:18px;align-items:center;gap:12px;padding:0 14px;font-size:14px;line-height:22px;display:inline-flex}.zSwyDG_selector:hover{background:var(--dsw-alias-interactive-bg-hover)}.zSwyDG_chevron{flex:none}";
 		const tagId = "@deepseek-ai/dsh-client-locale/LanguageRow.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -886,11 +886,11 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var LanguageRow_module_css_default = {
-			"selector": "ffwsva_selector",
-			"title": "ffwsva_title",
-			"chevron": "ffwsva_chevron",
-			"row": "ffwsva_row",
-			"rowText": "ffwsva_rowText"
+			"title": "zSwyDG_title",
+			"chevron": "zSwyDG_chevron",
+			"rowText": "zSwyDG_rowText",
+			"selector": "zSwyDG_selector",
+			"row": "zSwyDG_row"
 		};
 		//#endregion
 		//#region lib/types/client/LanguageRow.js

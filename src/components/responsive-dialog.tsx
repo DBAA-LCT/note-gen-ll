@@ -63,7 +63,7 @@ export function ResponsiveDialogContent({
     void _showCloseButton
     return (
       <DrawerContent
-        className={cn(className, 'max-h-[92vh] !w-full !max-w-none')}
+        className={cn(className, 'max-h-[min(92dvh,var(--mobile-viewport-height,100dvh))] !w-full !max-w-none')}
         {...drawerProps}
       >
         {children}

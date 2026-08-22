@@ -6,17 +6,16 @@ import { useSkillsStore } from '@/stores/skills'
 import { reloadMcpTools } from './tools'
 import { AgentRuntime, isRequestAbortError } from './runtime'
 import { readCurrentEditorState } from './tools/editor-tools'
-import type { AgentApprovalDecision, AgentChange, AgentPermissionMode, AgentRuntimeResult, AgentSkillSummary, AgentSteeringPayload, AgentStep, AgentTraceEvent, ToolCall } from './types'
+import type { AgentApprovalDecision, AgentChange, AgentPermissionMode, AgentRuntimeResult, AgentSkillSummary, AgentState, AgentSteeringPayload, AgentStep, AgentTraceEvent, ToolCall } from './types'
+import type { KernelEvent } from './kernel'
 import type { RuntimeChatAttachment } from '@/lib/chat-attachments'
 import type { AgentImageAttachment } from '@/lib/chat-image-context'
 import { retainCompletedAgentTraceEvents } from './trace-retention'
 import { appendHarnessEvent, harnessSessionId, type HarnessEventInput, type HarnessSessionEvent } from '@/lib/deepseek-harness/events'
-import { deepSeekHarnessClient, type HarnessWireEvent, type HarnessWireNotification } from '@/lib/deepseek-harness/client'
-import { getAISettings } from '@/lib/ai/utils'
-import { cancelHarnessQuestions, requestHarnessQuestions, type HarnessQuestion } from '@/lib/deepseek-harness/interaction'
-import { getDefaultArticleAbsolutePath, getWorkspacePath } from '@/lib/workspace'
 
 export interface AgentHandlerConfig {
+  /** Immutable UI run ownership token. */
+  runToken: string
   activeChatId?: number
   activeFilePath?: string
   activeCanvasId?: string
@@ -27,14 +26,16 @@ export interface AgentHandlerConfig {
   onThought?: (thought: string) => void
   onAction?: (action: string, params: Record<string, any>) => void
   onObservation?: (observation: string) => void
-  onComplete?: (result: string, steps?: AgentStep[], stopped?: boolean) => void
-  onError?: (error: string) => void
+  onComplete?: (result: string, steps?: AgentStep[], stopped?: boolean) => void | Promise<void>
+  onError?: (error: string) => void | Promise<void>
   onFinalAnswerRender?: (markdownContent: string) => void
   formatAutoFinalAnswer?: (key: string, values?: Record<string, string>) => string
   requestConfirmation?: (
     toolName: string,
     params: Record<string, any>,
     context?: {
+      runId?: string
+      toolCallId?: string
       previewParams?: Record<string, any>
       originalContent?: string
       modifiedContent?: string
@@ -64,7 +65,7 @@ export class AgentHandler {
   private steeringPending = false
   private pendingSteering: AgentSteeringPayload[] = []
   private readonly harnessSessionId: string
-  private harnessActive = false
+  private kernelEventsActive = false
   private retrievedKnowledgeSources = new Map<string, {
     filepath: string
     filename: string
@@ -87,7 +88,21 @@ export class AgentHandler {
     this.harnessSessionId = harnessSessionId(config.conversationId, config.activeChatId)
   }
 
+  private isCurrentRun() {
+    const state = useChatStore.getState()
+    return state.agentState.clientRunToken === this.config.runToken
+      && state.agentState.activeChatId === this.config.activeChatId
+      && (this.config.conversationId === undefined
+        ? state.isTemporaryConversation
+        : state.currentConversationId === this.config.conversationId)
+  }
+
+  private setOwnedAgentState(state: Partial<AgentState>) {
+    if (this.isCurrentRun()) useChatStore.getState().setAgentState(state)
+  }
+
   private appendHarnessEvent<T>(event: Omit<HarnessEventInput<T>, 'sessionId'>) {
+    if (!this.isCurrentRun()) return
     const store = useChatStore.getState()
     store.setAgentState({
       harnessEvents: appendHarnessEvent(store.agentState.harnessEvents || [], {
@@ -97,26 +112,75 @@ export class AgentHandler {
     })
   }
 
+  private appendKernelEvent(event: KernelEvent) {
+    if (!this.isCurrentRun()) return
+    const store = useChatStore.getState()
+    store.setAgentState({ runId: event.runId })
+    const common = { runId: event.runId, timestamp: event.timestamp }
+
+    if (event.type === 'session/start') {
+      if (!(store.agentState.harnessEvents || []).some(item => item.kind === 'session/start')) {
+        this.appendHarnessEvent({ ...common, kind: 'session/start', data: event.data })
+      }
+      this.appendHarnessEvent({ ...common, kind: 'run/start', data: { runtime: 'notegoal-embedded', kernelSeq: event.seq } })
+      return
+    }
+    if (event.type === 'session/end') {
+      const data = event.data && typeof event.data === 'object'
+        ? event.data as Record<string, unknown>
+        : {}
+      const kind = data.reason === 'stopped' || data.reason === 'cancelled'
+        ? 'run/stopped'
+        : data.reason === 'error' ? 'run/error' : 'run/end'
+      this.appendHarnessEvent({ ...common, kind, data: { ...data, kernelSeq: event.seq } })
+      return
+    }
+    if (event.type === 'turn/start') {
+      this.appendHarnessEvent({ ...common, kind: 'turn/start', data: { ...this.asRecord(event.data), turn: event.turn, kernelSeq: event.seq } })
+      return
+    }
+    if (event.type === 'user/message' || event.type === 'assistant/message' || event.type === 'tool/call' || event.type === 'tool/result') {
+      this.appendHarnessEvent({ ...common, kind: event.type, data: { ...this.asRecord(event.data), turn: event.turn, step: event.step, kernelSeq: event.seq } })
+      return
+    }
+    if (event.type === 'step/end') {
+      this.appendHarnessEvent({ ...common, kind: 'step/complete', data: { ...this.asRecord(event.data), turn: event.turn, step: event.step, kernelSeq: event.seq } })
+      return
+    }
+    this.appendHarnessEvent({
+      ...common,
+      kind: 'trace/event',
+      data: { ...this.asRecord(event.data), upstreamType: event.type, turn: event.turn, step: event.step, kernelSeq: event.seq },
+    })
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  }
+
   async execute(
     userInput: string,
     contextOrMessages?: string | OpenAI.Chat.ChatCompletionMessageParam[],
     imageUrls?: string[]
   ): Promise<string> {
-    void imageUrls
-    return this.executeHarness(userInput, contextOrMessages)
+    return this.executeEmbedded(userInput, contextOrMessages, imageUrls)
   }
 
-  /** Retained only while old persisted trace records are upgraded to Harness events. */
-  private async executeLegacy(
+  /** Run NoteGoal's in-process runtime with the embedded DSH-style kernel. */
+  private async executeEmbedded(
     userInput: string,
     contextOrMessages?: string | OpenAI.Chat.ChatCompletionMessageParam[],
     imageUrls?: string[],
   ): Promise<string> {
     const store = useChatStore.getState()
+    this.stopped = false
+    this.kernelEventsActive = true
     this.retrievedKnowledgeSources.clear()
 
+    if (!this.isCurrentRun()) return ''
     store.resetAgentState()
     store.setAgentState({
+      clientRunToken: this.config.runToken,
       activeChatId: this.config.activeChatId,
       isRunning: true,
       isThinking: false,
@@ -125,12 +189,6 @@ export class AgentHandler {
       currentStepStartTime: Date.now(),
       harnessEvents: this.config.initialHarnessEvents || [],
     })
-    if (!this.config.initialHarnessEvents?.length) {
-      this.appendHarnessEvent({ kind: 'session/start', data: { conversationId: this.config.conversationId } })
-    }
-    this.appendHarnessEvent({ kind: 'turn/start', data: { activeChatId: this.config.activeChatId } })
-    this.appendHarnessEvent({ kind: 'user/message', data: { content: userInput, imageUrls: imageUrls || [] } })
-    this.appendHarnessEvent({ kind: 'run/start', data: { activeFilePath: this.config.activeFilePath } })
 
     this.runtime = new AgentRuntime()
     if (this.steeringPending) {
@@ -140,6 +198,7 @@ export class AgentHandler {
       this.runtime.steer(payload)
     }
 
+    try {
     await this.initializeMcp()
     const { useMcpStore } = await import('@/stores/mcp')
     const selectedMcpServerIds = [...useMcpStore.getState().selectedServerIds]
@@ -148,6 +207,7 @@ export class AgentHandler {
       ? await readCurrentEditorState().catch(() => undefined)
       : undefined
 
+    if (!this.isCurrentRun()) return ''
     if (this.stopped) {
       store.setAgentState({
         isRunning: false,
@@ -164,7 +224,6 @@ export class AgentHandler {
         ? [{ role: 'system' as const, content: contextOrMessages }]
         : []
 
-    try {
       const result = await this.runtime.run({
         userInput,
         messages,
@@ -184,7 +243,11 @@ export class AgentHandler {
         workspaceId: this.config.workspaceId,
         useMemories: this.config.useMemories,
       }, {
+        onKernelEvent: (event) => {
+          this.appendKernelEvent(event)
+        },
         onStatus: (status) => {
+          if (!this.isCurrentRun()) return
           this.appendHarnessEvent({
             kind: 'run/status',
             runId: useChatStore.getState().agentState.runId,
@@ -218,6 +281,7 @@ export class AgentHandler {
           }
         },
         onCandidateAnswerRender: (content) => {
+          if (!this.isCurrentRun()) return
           store.setAgentState({
             activeChatId: this.config.activeChatId,
             isFinalAnswerMode: true,
@@ -225,12 +289,14 @@ export class AgentHandler {
           })
         },
         onCandidateAnswerClear: () => {
+          if (!this.isCurrentRun()) return
           store.setAgentState({
             isFinalAnswerMode: false,
             finalAnswerContent: undefined,
           })
         },
         onFinalAnswerRender: (content) => {
+          if (!this.isCurrentRun()) return
           store.setAgentState({
             activeChatId: this.config.activeChatId,
             isFinalAnswerMode: true,
@@ -239,22 +305,13 @@ export class AgentHandler {
           this.config.onFinalAnswerRender?.(content)
         },
         requestConfirmation: async (toolName, params, context) => {
+          if (!this.isCurrentRun()) return 'denied'
           return await this.config.requestConfirmation?.(toolName, params, context) || 'denied'
         },
       })
 
       this.finishRun(result)
-      this.appendHarnessEvent({
-        kind: 'assistant/message',
-        runId: result.runId,
-        data: { content: result.content },
-      })
-      this.appendHarnessEvent({
-        kind: result.stopped ? 'run/stopped' : 'run/end',
-        runId: result.runId,
-        data: { stopped: result.stopped, steps: result.steps.length, toolCalls: result.toolCalls.length },
-      })
-      this.config.onComplete?.(result.content, result.steps, result.stopped)
+      if (this.isCurrentRun()) await this.config.onComplete?.(result.content, result.steps, result.stopped)
       return result.content
     } catch (error) {
       if (this.stopped || isRequestAbortError(error)) {
@@ -272,8 +329,7 @@ export class AgentHandler {
           isThinking: false,
           status: 'stopped',
         })
-        this.appendHarnessEvent({ kind: 'run/stopped', data: { content: partialContent } })
-        this.config.onComplete?.(partialContent, agentState.completedSteps, true)
+        await this.config.onComplete?.(partialContent, agentState.completedSteps, true)
         return partialContent
       }
 
@@ -283,254 +339,31 @@ export class AgentHandler {
         status: 'failed',
       })
       const errorMessage = error instanceof Error ? error.message : String(error)
-      this.appendHarnessEvent({ kind: 'run/error', data: { message: errorMessage } })
       await this.config.onError?.(errorMessage)
       throw error
-    }
-  }
-
-  private async executeHarness(
-    userInput: string,
-    contextOrMessages?: string | OpenAI.Chat.ChatCompletionMessageParam[],
-  ): Promise<string> {
-    const store = useChatStore.getState()
-    const runId = `harness-${Date.now()}`
-    let streamedContent = ''
-    store.resetAgentState()
-    store.setAgentState({
-      activeChatId: this.config.activeChatId,
-      runId,
-      isRunning: true,
-      isThinking: false,
-      status: 'preparing_context',
-      selectedSkills: this.config.selectedSkills,
-      currentStepStartTime: Date.now(),
-      harnessEvents: this.config.initialHarnessEvents || [],
-    })
-    if (!this.config.initialHarnessEvents?.length) {
-      this.appendHarnessEvent({ kind: 'session/start', data: { conversationId: this.config.conversationId } })
-    }
-    this.appendHarnessEvent({ kind: 'turn/start', runId, data: { source: 'deepseek-harness' } })
-    this.appendHarnessEvent({ kind: 'user/message', runId, data: { content: userInput } })
-    this.appendHarnessEvent({ kind: 'run/start', runId, data: { runtime: 'deepseek-harness' } })
-
-    try {
-      const ai = await getAISettings()
-      if (!ai?.baseURL || !ai.model) throw new Error('请先在 AI 设置中选择可用的主模型。')
-      const workspace = await getWorkspacePath()
-      const cwd = workspace.isCustom ? workspace.path : await getDefaultArticleAbsolutePath('')
-      await deepSeekHarnessClient.start({ cwd, ai, permissionMode: this.config.permissionMode })
-      if (this.stopped) return ''
-
-      const contextBlocks: string[] = []
-      if (typeof contextOrMessages === 'string' && contextOrMessages.trim()) {
-        contextBlocks.push(contextOrMessages.trim())
-      } else if (Array.isArray(contextOrMessages)) {
-        const systemContext = contextOrMessages.flatMap(message => (
-          message.role === 'system' && typeof message.content === 'string' ? [message.content] : []
-        ))
-        contextBlocks.push(...systemContext)
-        if (!this.config.initialHarnessEvents?.length) {
-          const history = contextOrMessages.flatMap(message => (
-            (message.role === 'user' || message.role === 'assistant') && typeof message.content === 'string'
-              ? [`${message.role === 'user' ? 'User' : 'Assistant'}: ${message.content}`]
-              : []
-          ))
-          if (history.length) contextBlocks.push(`<previous-conversation>\n${history.join('\n\n')}\n</previous-conversation>`)
-        }
-      }
-      if (this.config.activeFilePath) {
-        const editor = await readCurrentEditorState().catch(() => undefined)
-        contextBlocks.push([
-          '<active-note>',
-          `Path: ${this.config.activeFilePath}`,
-          editor?.numberedLines || '(The note content is unavailable; read it from the workspace if needed.)',
-          '</active-note>',
-        ].join('\n'))
-      }
-      let harnessInput = contextBlocks.length
-        ? `<notegoal-context>\n${contextBlocks.join('\n\n')}\n</notegoal-context>\n\n${userInput}`
-        : userInput
-      const queuedSteering = this.pendingSteering.splice(0)
-      if (queuedSteering.length) {
-        harnessInput += queuedSteering.map(payload => (
-          `\n\n<steering>\n${payload.additionalContext ? `${payload.additionalContext}\n\n` : ''}${payload.text}\n</steering>`
-        )).join('')
-      }
-
-      const toolCalls = new Map<string, ToolCall>()
-      const applyNotification = (notification: HarnessWireNotification) => {
-        if (notification.method === 'session.status') {
-          const running = notification.params.status === 'running'
-          store.setAgentState({
-            isRunning: running,
-            isThinking: running,
-            status: running ? 'thinking' : 'completed',
-          })
-          this.appendHarnessEvent({ kind: 'run/status', runId, data: { status: notification.params.status } })
-          return
-        }
-        if (notification.method !== 'session.event') return
-        const event = notification.params.event as HarnessWireEvent | undefined
-        if (!event || typeof event.type !== 'string') return
-        const data = event.data || {}
-        const timestamp = typeof event.time === 'number' ? event.time : Date.now()
-
-        if (event.type === 'assistant/chunk') {
-          const chunk = data.chunk
-          if (chunk && typeof chunk === 'object') {
-            const typedChunk = chunk as Record<string, unknown>
-            if (typedChunk.type === 'text-delta' && typeof typedChunk.text === 'string') {
-              streamedContent += typedChunk.text
-              store.setAgentState({
-                isFinalAnswerMode: true,
-                finalAnswerContent: streamedContent,
-                isThinking: false,
-                status: 'thinking',
-              })
-              this.config.onFinalAnswerRender?.(streamedContent)
-            } else if (typedChunk.type === 'reasoning-delta' && typeof typedChunk.text === 'string') {
-              const current = useChatStore.getState().agentState.currentThought || ''
-              store.setAgentState({ currentThought: current + typedChunk.text, isThinking: true })
-              this.config.onThought?.(typedChunk.text)
-            }
-          }
-        } else if (event.type === 'tool/call') {
-          const callId = String(data.callId || `${runId}-${event.seq}`)
-          let params: Record<string, unknown> = {}
-          if (typeof data.arguments === 'string') {
-            try { params = JSON.parse(data.arguments) as Record<string, unknown> } catch { params = { raw: data.arguments } }
-          }
-          const call: ToolCall = {
-            id: callId,
-            toolName: String(data.name || 'unknown'),
-            params,
-            status: 'running',
-            timestamp,
-          }
-          toolCalls.set(callId, call)
-          this.upsertToolCall(call)
-          store.setAgentState({ isThinking: false, status: 'calling_tool' })
-        } else if (event.type === 'tool/result') {
-          const message = data.message && typeof data.message === 'object'
-            ? data.message as Record<string, unknown>
-            : {}
-          const callId = String(message.source && typeof message.source === 'object'
-            ? (message.source as Record<string, unknown>).callId || ''
-            : '')
-          const existing = toolCalls.get(callId)
-          if (existing) {
-            const blocks = Array.isArray(message.content) ? message.content : []
-            const output = blocks.flatMap(block => (
-              block && typeof block === 'object' && typeof (block as Record<string, unknown>).text === 'string'
-                ? [(block as Record<string, unknown>).text]
-                : []
-            )).join('')
-            const failed = Boolean(data.error) || blocks.some(block => (
-              block && typeof block === 'object' && (block as Record<string, unknown>).isError === true
-            ))
-            const completed: ToolCall = {
-              ...existing,
-              status: failed ? 'error' : 'success',
-              result: failed
-                ? { success: false, error: output }
-                : { success: true, data: output, message: output },
-            }
-            toolCalls.set(callId, completed)
-            this.upsertToolCall(completed)
-          }
-        } else if (event.type === 'step/end') {
-          this.appendStep({ thought: 'Harness 完成一个 Agent 步骤' })
-        } else if (event.type === 'turn/end') {
-          this.appendHarnessEvent({ kind: 'run/end', runId, timestamp, data })
-        }
-
-        this.appendHarnessEvent({
-          kind: event.type === 'tool/call' || event.type === 'tool/result' || event.type === 'assistant/message'
-            ? event.type
-            : 'trace/event',
-          runId,
-          timestamp,
-          data: { ...data, upstreamType: event.type, sequence: event.seq },
-        })
-      }
-
-      this.harnessActive = true
-      const result = await deepSeekHarnessClient.run(this.harnessSessionId, harnessInput, {
-        onNotification: applyNotification,
-        onRequest: async request => {
-          if (request.method === 'user.approval') {
-            const callId = typeof request.params.callId === 'string' ? request.params.callId : ''
-            const call = toolCalls.get(callId)
-            const toolName = typeof request.params.toolName === 'string'
-              ? request.params.toolName
-              : call?.toolName || 'Harness 操作'
-            const params = call?.params || {
-              ...(callId ? { callId } : {}),
-              ...(typeof request.params.reason === 'string' ? { reason: request.params.reason } : {}),
-            }
-            store.setAgentState({ status: 'waiting_approval', isThinking: false, isRunning: true })
-            const decision = await this.config.requestConfirmation?.(toolName, params) || 'denied'
-            return decision === 'approved'
-              ? 'allowed-once'
-              : decision === 'steered' ? 'cancelled' : 'rejected'
-          }
-          if (request.method === 'user.questions') {
-            const questions = Array.isArray(request.params.questions)
-              ? request.params.questions.filter((question): question is HarnessQuestion => (
-                  Boolean(question)
-                  && typeof question === 'object'
-                  && typeof (question as { id?: unknown }).id === 'string'
-                  && typeof (question as { question?: unknown }).question === 'string'
-                ))
-              : []
-            if (!questions.length) throw new Error('Harness 发出了空的问题请求。')
-            store.setAgentState({ isThinking: false, isRunning: true })
-            return requestHarnessQuestions(questions)
-          }
-          throw new Error(`不支持的 Harness 客户端请求：${request.method}`)
-        },
-      })
-      const content = result.finalResponse || streamedContent
-      store.setAgentState({
-        isRunning: false,
-        isThinking: false,
-        status: this.stopped ? 'stopped' : 'completed',
-        isFinalAnswerMode: true,
-        finalAnswerContent: content,
-      })
-      this.appendHarnessEvent({ kind: 'assistant/message', runId, data: { content } })
-      this.config.onFinalAnswerRender?.(content)
-      this.config.onComplete?.(content, useChatStore.getState().agentState.completedSteps, this.stopped)
-      return content
-    } catch (error) {
-      if (this.stopped) {
-        const partial = useChatStore.getState().agentState.finalAnswerContent || streamedContent
-        store.setAgentState({ isRunning: false, isThinking: false, status: 'stopped' })
-        this.appendHarnessEvent({ kind: 'run/stopped', runId, data: { content: partial } })
-        this.config.onComplete?.(partial, useChatStore.getState().agentState.completedSteps, true)
-        return partial
-      }
-      const message = error instanceof Error ? error.message : String(error)
-      store.setAgentState({ isRunning: false, isThinking: false, status: 'failed' })
-      this.appendHarnessEvent({ kind: 'run/error', runId, data: { message } })
-      this.config.onError?.(message)
-      throw error
     } finally {
-      this.harnessActive = false
+      this.kernelEventsActive = false
+      this.runtime = null
+      this.steeringPending = false
     }
   }
 
   stop() {
+    if (!this.isCurrentRun()) return
     this.stopped = true
     const state = useChatStore.getState()
     const pending = state.agentState.pendingConfirmation
-    if (pending) {
+    if (pending && pending.runToken === this.config.runToken) {
       state.setAgentState({
         pendingConfirmation: undefined,
         confirmationHistory: [
           ...state.agentState.confirmationHistory,
           {
+            approvalId: pending.approvalId,
+            runToken: pending.runToken,
+            conversationId: pending.conversationId,
+            runId: pending.runId,
+            toolCallId: pending.toolCallId,
             toolName: pending.toolName,
             params: pending.params,
             status: 'cancelled',
@@ -540,19 +373,23 @@ export class AgentHandler {
       })
     }
     this.runtime?.stop()
-    cancelHarnessQuestions()
-    void deepSeekHarnessClient.stop().catch(() => {})
   }
 
   beginSteering() {
+    if (!this.isCurrentRun()) return
     const state = useChatStore.getState()
     const pending = state.agentState.pendingConfirmation
-    if (pending) {
+    if (pending && pending.runToken === this.config.runToken) {
       state.setAgentState({
         pendingConfirmation: undefined,
         confirmationHistory: [
           ...state.agentState.confirmationHistory,
           {
+            approvalId: pending.approvalId,
+            runToken: pending.runToken,
+            conversationId: pending.conversationId,
+            runId: pending.runId,
+            toolCallId: pending.toolCallId,
             toolName: pending.toolName,
             params: pending.params,
             status: 'superseded',
@@ -569,16 +406,7 @@ export class AgentHandler {
 
   steer(payload: AgentSteeringPayload) {
     this.steeringPending = true
-    if (this.harnessActive) {
-      const input = payload.additionalContext
-        ? `<notegoal-context>\n${payload.additionalContext}\n</notegoal-context>\n\n${payload.text}`
-        : payload.text
-      void deepSeekHarnessClient.followup(this.harnessSessionId, input).catch(error => {
-        const message = error instanceof Error ? error.message : String(error)
-        useChatStore.getState().setAgentState({ status: 'failed', isRunning: false, isThinking: false })
-        this.config.onError?.(message)
-      })
-    } else if (this.runtime) {
+    if (this.runtime) {
       this.runtime.steer(payload)
     } else {
       this.pendingSteering.push(payload)
@@ -634,6 +462,7 @@ export class AgentHandler {
   }
 
   private appendTrace(event: AgentTraceEvent) {
+    if (!this.isCurrentRun()) return
     const current = useChatStore.getState().agentState
     useChatStore.getState().setAgentState({
       runId: event.runId,
@@ -653,6 +482,7 @@ export class AgentHandler {
   }
 
   private upsertToolCall(toolCall: ToolCall) {
+    if (!this.isCurrentRun()) return
     const currentState = useChatStore.getState()
     const existing = currentState.agentState.toolCalls.find((item) => item.id === toolCall.id)
     if (existing) {
@@ -664,12 +494,14 @@ export class AgentHandler {
     currentState.setAgentState({
       currentAction: `${toolCall.toolName}(${JSON.stringify(toolCall.params)})`,
     })
-    this.appendHarnessEvent({
-      kind: toolCall.status === 'success' || toolCall.status === 'error' ? 'tool/result' : 'tool/call',
-      runId: currentState.agentState.runId,
-      timestamp: toolCall.timestamp,
-      data: toolCall,
-    })
+    if (!this.kernelEventsActive) {
+      this.appendHarnessEvent({
+        kind: toolCall.status === 'success' || toolCall.status === 'error' ? 'tool/result' : 'tool/call',
+        runId: currentState.agentState.runId,
+        timestamp: toolCall.timestamp,
+        data: toolCall,
+      })
+    }
 
     if (toolCall.toolName === 'skill_load' && toolCall.status === 'success') {
       this.appendLoadedSkill(toolCall.params.skill_id)
@@ -753,6 +585,7 @@ export class AgentHandler {
   }
 
   private captureCitedKnowledgeSources(toolCall: ToolCall) {
+    if (!this.isCurrentRun()) return
     const data = toolCall.result?.data
     if (!data || typeof data !== 'object') return
     const sourceKeys = (data as { sourceKeys?: unknown }).sourceKeys
@@ -763,12 +596,13 @@ export class AgentHandler {
         : []
     ))
     useChatStore.getState().setAgentState({
-      ragSources: ragSourceDetails.map(detail => detail.filename),
+      ragSources: ragSourceDetails.map(detail => detail.sourceKey || detail.filename),
       ragSourceDetails,
     })
   }
 
   private appendLoadedSkill(skillId: unknown) {
+    if (!this.isCurrentRun()) return
     if (typeof skillId !== 'string' || !skillId) {
       return
     }
@@ -793,20 +627,24 @@ export class AgentHandler {
   }
 
   private appendStep(step: AgentStep) {
+    if (!this.isCurrentRun()) return
     const current = useChatStore.getState().agentState
     useChatStore.getState().setAgentState({
       completedSteps: [...current.completedSteps, step],
       currentObservation: step.observation,
       currentThought: step.thought,
     })
-    this.appendHarnessEvent({
-      kind: 'step/complete',
-      runId: current.runId,
-      data: step,
-    })
+    if (!this.kernelEventsActive) {
+      this.appendHarnessEvent({
+        kind: 'step/complete',
+        runId: current.runId,
+        data: step,
+      })
+    }
   }
 
   private appendChange(change: AgentChange) {
+    if (!this.isCurrentRun()) return
     const current = useChatStore.getState().agentState
     useChatStore.getState().setAgentState({
       changes: [
@@ -817,6 +655,7 @@ export class AgentHandler {
   }
 
   private finishRun(result: AgentRuntimeResult) {
+    if (!this.isCurrentRun()) return
     const store = useChatStore.getState()
     store.setAgentState({
       runId: result.runId,

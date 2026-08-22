@@ -6,10 +6,19 @@ export type AgentApprovalScope = "once" | "conversation"
 export function confirmPendingAgentAction(scope: AgentApprovalScope = "once") {
   const latestState = useChatStore.getState()
   const pendingConfirmation = latestState.agentState.pendingConfirmation
-  if (!pendingConfirmation) return
+  if (
+    !pendingConfirmation
+    || latestState.agentState.clientRunToken !== pendingConfirmation.runToken
+    || latestState.currentConversationId !== pendingConfirmation.conversationId
+  ) return
 
   const effectiveScope = scope
   const confirmationRecord = {
+    approvalId: pendingConfirmation.approvalId,
+    runToken: pendingConfirmation.runToken,
+    conversationId: pendingConfirmation.conversationId,
+    runId: pendingConfirmation.runId,
+    toolCallId: pendingConfirmation.toolCallId,
     toolName: pendingConfirmation.toolName,
     params: pendingConfirmation.params,
     status: "confirmed" as const,
@@ -19,8 +28,14 @@ export function confirmPendingAgentAction(scope: AgentApprovalScope = "once") {
     sessionApprovalKey: pendingConfirmation.sessionApprovalKey,
   }
 
-  if (effectiveScope === "conversation" && latestState.currentConversationId !== null) {
-    latestState.setAgentAutoApproveConversationId(latestState.currentConversationId)
+  if (
+    effectiveScope === "conversation"
+    && pendingConfirmation.canApproveForSession
+    && pendingConfirmation.conversationId !== null
+    && latestState.currentConversationId === pendingConfirmation.conversationId
+    && latestState.agentState.clientRunToken === pendingConfirmation.runToken
+  ) {
+    latestState.setAgentAutoApproveConversationId(pendingConfirmation.conversationId)
     latestState.setAgentAutoApproveRuntimeScriptKey(
       pendingConfirmation.sessionApprovalType === "runtime-script"
         ? pendingConfirmation.sessionApprovalKey || null
@@ -40,9 +55,18 @@ export function confirmPendingAgentAction(scope: AgentApprovalScope = "once") {
 export function cancelPendingAgentAction() {
   const latestState = useChatStore.getState()
   const pendingConfirmation = latestState.agentState.pendingConfirmation
-  if (!pendingConfirmation) return
+  if (
+    !pendingConfirmation
+    || latestState.agentState.clientRunToken !== pendingConfirmation.runToken
+    || latestState.currentConversationId !== pendingConfirmation.conversationId
+  ) return
 
   const confirmationRecord = {
+    approvalId: pendingConfirmation.approvalId,
+    runToken: pendingConfirmation.runToken,
+    conversationId: pendingConfirmation.conversationId,
+    runId: pendingConfirmation.runId,
+    toolCallId: pendingConfirmation.toolCallId,
     toolName: pendingConfirmation.toolName,
     params: pendingConfirmation.params,
     status: "cancelled" as const,

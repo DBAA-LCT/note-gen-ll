@@ -139,59 +139,35 @@ export async function uploadFile(
 export async function getFiles({ path, repo, ref }: { path: string, repo: string, ref?: string }) {
   const store = await Store.load('store.json');
   const accessToken = await store.get('accessToken')
-  if (!accessToken) return;
+  if (!accessToken) throw new Error('GitHub 访问令牌未配置');
 
   const githubUsername = await store.get('githubUsername')
-
+  if (!githubUsername) throw new Error('GitHub 用户名未配置');
   const encodedPath = buildRepoContentPath({ path })
   debugSyncPath('github.getFiles', {
     inputPath: path,
     encodedPath,
   })
 
-  // 获取代理设置
   const proxyUrl = await store.get<string>('proxy')
-  const proxy: Proxy | undefined = proxyUrl ? {
-    all: proxyUrl
-  } : undefined
+  const proxy: Proxy | undefined = proxyUrl ? { all: proxyUrl } : undefined
+  const headers = new Headers();
+  headers.append('Authorization', `Bearer ${accessToken}`);
+  headers.append('Accept', 'application/vnd.github+json');
+  headers.append('X-GitHub-Api-Version', '2022-11-28');
+  headers.append('If-None-Match', '');
 
-  try {
-    // 设置请求头
-    const headers = new Headers();
-    headers.append('Authorization', `Bearer ${accessToken}`);
-    headers.append('Accept', 'application/vnd.github+json');
-    headers.append('X-GitHub-Api-Version', '2022-11-28');
-    headers.append('If-None-Match', '');
+  const refParam = ref ? `?ref=${ref}` : '';
+  const url = `https://api.github.com/repos/${githubUsername}/${repo}/contents/${encodedPath}${refParam}`;
+  const response = await fetch(url, { method: 'GET', headers, proxy });
+  if (response.status >= 200 && response.status < 300) return await response.json();
+  if (response.status === 404) return null;
 
-    const requestOptions = {
-      method: 'GET',
-      headers,
-      proxy
-    };
-
-    // 如果有 ref 参数，添加到 URL 查询参数中
-    const refParam = ref ? `?ref=${ref}` : '';
-    const url = `https://api.github.com/repos/${githubUsername}/${repo}/contents/${encodedPath}${refParam}`;
-    
-    try {
-      const response = await fetch(url, requestOptions);
-      if (response.status >= 200 && response.status < 300) {
-        const data = await response.json();
-        return data;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  } catch (error) {
-    if ((error as GithubError).status !== 404) {
-      toast({
-        title: '查询失败',
-        description: (error as GithubError).message,
-        variant: 'destructive',
-      })
-    }
-  }
+  const errorData = await response.json().catch(() => ({}));
+  throw {
+    status: response.status,
+    message: errorData.message || `GitHub 文件查询失败: ${response.status}`,
+  } as GithubError;
 }
 
 export async function deleteFile(

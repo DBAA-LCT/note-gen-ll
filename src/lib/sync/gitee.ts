@@ -203,7 +203,7 @@ export async function uploadFile(
       if (existingFile && !Array.isArray(existingFile)) {
         resolvedExistingFile = existingFile
         targetPath = existingFile.path || path
-        sha = existingFile.sha || sha
+        sha = sha || existingFile.sha
       }
     }
 
@@ -296,9 +296,10 @@ export async function uploadFile(
 export async function getFiles({ path, repo, ref }: { path: string, repo: string, ref?: string }): Promise<GiteeGetFilesResult> {
   const store = await Store.load('store.json');
   const accessToken = await store.get<string>('giteeAccessToken')
-  if (!accessToken) return;
+  if (!accessToken) throw new Error('Gitee 访问令牌未配置');
 
   const giteeUsername = await store.get<string>('giteeUsername')
+  if (!giteeUsername) throw new Error('Gitee 用户名未配置');
   const normalizedPath = buildRepoContentPath({ path })
   debugSyncPath('gitee.getFiles', {
     inputPath: path,
@@ -358,9 +359,14 @@ export async function getFiles({ path, repo, ref }: { path: string, repo: string
         }
         return data;
       }
-      return null;
-    } catch {
-      return null;
+      if (response.status === 404) return null;
+      const errorData = await response.json().catch(() => ({}));
+      throw {
+        status: response.status,
+        message: errorData.message || `Gitee 文件查询失败: ${response.status}`,
+      } as GiteeError;
+    } catch (error) {
+      throw error;
     }
   } catch (error) {
     if ((error as GiteeError).status !== 404) {
@@ -370,6 +376,7 @@ export async function getFiles({ path, repo, ref }: { path: string, repo: string
         variant: 'destructive',
       })
     }
+    throw error;
   }
 }
 

@@ -9,8 +9,8 @@ window.__ModuleLoader__.load({
 		let react = require("react");
 		let _deepseek_ai_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
 		let _deepseek_ai_dsh_client_runtime_client = require("@deepseek-ai/dsh-client-runtime/client");
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-settings-plugins\src\client\fields.module.css.mjs
-		const css$2 = ".zR-e1G_field{flex-direction:column;gap:6px;padding:12px 0;display:flex}.zR-e1G_field+.zR-e1G_field{border-top:1px solid var(--dsw-alias-border-l2)}.zR-e1G_head{align-items:center;gap:8px;display:flex}.zR-e1G_label{min-width:0;color:var(--dsw-alias-label-primary);flex:1;font-size:13px;font-weight:500;line-height:1.5}.zR-e1G_badges{align-items:center;gap:8px;display:inline-flex}.zR-e1G_badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}.zR-e1G_badgeMuted{white-space:nowrap;color:var(--dsw-alias-label-tertiary);border-radius:999px;padding:1px 8px;font-size:11px;line-height:17px}.zR-e1G_reset{font:inherit;color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:none;padding:0;font-size:12px;line-height:1.5}.zR-e1G_reset:hover:not(:disabled){color:var(--dsw-alias-label-primary)}.zR-e1G_reset:disabled{cursor:default}.zR-e1G_input{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5}.zR-e1G_input:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:none}.zR-e1G_input:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}.zR-e1G_inputInvalid{border-color:var(--dsw-alias-label-error);}.zR-e1G_invalid{color:var(--dsw-alias-label-error);margin:0;font-size:12px;line-height:1.5}.zR-e1G_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-settings-plugins\src\client\fields.module.css.mjs
+		const css$2 = ".PGRKNa_field{flex-direction:column;gap:6px;padding:12px 0;display:flex}.PGRKNa_field+.PGRKNa_field{border-top:1px solid var(--dsw-alias-border-l2)}.PGRKNa_head{align-items:center;gap:8px;display:flex}.PGRKNa_label{min-width:0;color:var(--dsw-alias-label-primary);flex:1;font-size:13px;font-weight:500;line-height:1.5}.PGRKNa_badges{align-items:center;gap:8px;display:inline-flex}.PGRKNa_badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}.PGRKNa_badgeMuted{white-space:nowrap;color:var(--dsw-alias-label-tertiary);border-radius:999px;padding:1px 8px;font-size:11px;line-height:17px}.PGRKNa_reset{font:inherit;color:var(--dsw-alias-label-secondary);cursor:pointer;background:0 0;border:none;padding:0;font-size:12px;line-height:1.5}.PGRKNa_reset:hover:not(:disabled){color:var(--dsw-alias-label-primary)}.PGRKNa_reset:disabled{cursor:default}.PGRKNa_input{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5}.PGRKNa_input:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:none}.PGRKNa_input:disabled{color:var(--dsw-alias-label-tertiary);cursor:default}.PGRKNa_inputInvalid{border-color:var(--dsw-alias-label-error);}.PGRKNa_invalid{color:var(--dsw-alias-label-error);margin:0;font-size:12px;line-height:1.5}.PGRKNa_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}";
 		const tagId$2 = "@deepseek-ai/dsh-client-ui-settings-plugins/fields.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$2) + "]") === null) {
 			const tag = document.createElement("style");
@@ -20,17 +20,17 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var fields_module_css_default = {
-			"badges": "zR-e1G_badges",
-			"input": "zR-e1G_input",
-			"reset": "zR-e1G_reset",
-			"field": "zR-e1G_field",
-			"head": "zR-e1G_head",
-			"label": "zR-e1G_label",
-			"hint": "zR-e1G_hint",
-			"badgeMuted": "zR-e1G_badgeMuted",
-			"badge": "zR-e1G_badge",
-			"inputInvalid": "zR-e1G_inputInvalid",
-			"invalid": "zR-e1G_invalid"
+			"badgeMuted": "PGRKNa_badgeMuted",
+			"field": "PGRKNa_field",
+			"head": "PGRKNa_head",
+			"badge": "PGRKNa_badge",
+			"input": "PGRKNa_input",
+			"label": "PGRKNa_label",
+			"reset": "PGRKNa_reset",
+			"inputInvalid": "PGRKNa_inputInvalid",
+			"badges": "PGRKNa_badges",
+			"hint": "PGRKNa_hint",
+			"invalid": "PGRKNa_invalid"
 		};
 		//#endregion
 		//#region lib/types/client/fields.js
@@ -151,8 +151,8 @@ window.__ModuleLoader__.load({
 			return n;
 		}
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-settings-plugins\src\client\PluginCard.module.css.mjs
-		const css$1 = ".qXWUSG_card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;list-style:none;transition:border-color .16s,background .16s}.qXWUSG_card:hover{border-color:var(--dsw-alias-label-dimmed)}.qXWUSG_cardOpen{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}.qXWUSG_header{appearance:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;background:0 0;border:0;border-radius:12px;align-items:center;gap:12px;padding:14px 16px;display:flex}.qXWUSG_header:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}.qXWUSG_headText{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}.qXWUSG_name{color:var(--dsw-alias-label-primary);font-size:15px;font-weight:600;line-height:1.4}.qXWUSG_description{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.qXWUSG_chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .16s}.qXWUSG_chevronOpen{transform:rotate(180deg)}.qXWUSG_body{border-top:1px solid var(--dsw-alias-border-l2);margin:0 16px;padding-bottom:8px}.qXWUSG_readOnly{color:var(--dsw-alias-label-tertiary);margin:12px 0 0;font-size:12px;line-height:1.5}.qXWUSG_pending{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;flex:none;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}.qXWUSG_footer{border-top:1px solid var(--dsw-alias-border-l2);justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;display:flex}.qXWUSG_failed{min-width:0;color:var(--dsw-alias-label-error);flex:1;margin:0;font-size:12px;line-height:1.5}.qXWUSG_discard,.qXWUSG_save{appearance:none;font:inherit;cursor:pointer;border:1px solid #0000;border-radius:8px;padding:5px 14px;font-size:13px;line-height:1.5}.qXWUSG_discard{border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);background:0 0}.qXWUSG_discard:hover:not(:disabled){color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-dimmed)}.qXWUSG_save{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.qXWUSG_discard:disabled,.qXWUSG_save:disabled{opacity:.4;cursor:default}.qXWUSG_discard:focus-visible,.qXWUSG_save:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-settings-plugins\src\client\PluginCard.module.css.mjs
+		const css$1 = ".NwHUeq_card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;list-style:none;transition:border-color .16s,background .16s}.NwHUeq_card:hover{border-color:var(--dsw-alias-label-dimmed)}.NwHUeq_cardOpen{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}.NwHUeq_header{appearance:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;background:0 0;border:0;border-radius:12px;align-items:center;gap:12px;padding:14px 16px;display:flex}.NwHUeq_header:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}.NwHUeq_headText{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}.NwHUeq_name{color:var(--dsw-alias-label-primary);font-size:15px;font-weight:600;line-height:1.4}.NwHUeq_description{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}.NwHUeq_chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .16s}.NwHUeq_chevronOpen{transform:rotate(180deg)}.NwHUeq_body{border-top:1px solid var(--dsw-alias-border-l2);margin:0 16px;padding-bottom:8px}.NwHUeq_readOnly{color:var(--dsw-alias-label-tertiary);margin:12px 0 0;font-size:12px;line-height:1.5}.NwHUeq_pending{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;flex:none;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}.NwHUeq_footer{border-top:1px solid var(--dsw-alias-border-l2);justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;display:flex}.NwHUeq_failed{min-width:0;color:var(--dsw-alias-label-error);flex:1;margin:0;font-size:12px;line-height:1.5}.NwHUeq_discard,.NwHUeq_save{appearance:none;font:inherit;cursor:pointer;border:1px solid #0000;border-radius:8px;padding:5px 14px;font-size:13px;line-height:1.5}.NwHUeq_discard{border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);background:0 0}.NwHUeq_discard:hover:not(:disabled){color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-dimmed)}.NwHUeq_save{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.NwHUeq_discard:disabled,.NwHUeq_save:disabled{opacity:.4;cursor:default}.NwHUeq_discard:focus-visible,.NwHUeq_save:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}";
 		const tagId$1 = "@deepseek-ai/dsh-client-ui-settings-plugins/PluginCard.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$1) + "]") === null) {
 			const tag = document.createElement("style");
@@ -162,21 +162,21 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var PluginCard_module_css_default = {
-			"card": "qXWUSG_card",
-			"chevronOpen": "qXWUSG_chevronOpen",
-			"save": "qXWUSG_save",
-			"cardOpen": "qXWUSG_cardOpen",
-			"headText": "qXWUSG_headText",
-			"description": "qXWUSG_description",
-			"failed": "qXWUSG_failed",
-			"footer": "qXWUSG_footer",
-			"readOnly": "qXWUSG_readOnly",
-			"body": "qXWUSG_body",
-			"name": "qXWUSG_name",
-			"pending": "qXWUSG_pending",
-			"chevron": "qXWUSG_chevron",
-			"header": "qXWUSG_header",
-			"discard": "qXWUSG_discard"
+			"chevronOpen": "NwHUeq_chevronOpen",
+			"header": "NwHUeq_header",
+			"readOnly": "NwHUeq_readOnly",
+			"pending": "NwHUeq_pending",
+			"headText": "NwHUeq_headText",
+			"failed": "NwHUeq_failed",
+			"body": "NwHUeq_body",
+			"chevron": "NwHUeq_chevron",
+			"description": "NwHUeq_description",
+			"discard": "NwHUeq_discard",
+			"cardOpen": "NwHUeq_cardOpen",
+			"card": "NwHUeq_card",
+			"save": "NwHUeq_save",
+			"name": "NwHUeq_name",
+			"footer": "NwHUeq_footer"
 		};
 		//#endregion
 		//#region lib/types/client/PluginCard.js
@@ -360,8 +360,8 @@ window.__ModuleLoader__.load({
 			});
 		}
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-settings-plugins\src\client\PluginsSettingsSection.module.css.mjs
-		const css = ".NPY1tW_section{max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:12px;display:flex}.NPY1tW_heading{margin:0;font-size:18px;font-weight:600}.NPY1tW_intro{color:var(--dsw-alias-label-tertiary);margin:0;font-size:13px}.NPY1tW_tabs{border-bottom:1px solid var(--dsw-alias-border-l2);align-items:flex-end;gap:22px;margin-top:2px;display:flex}.NPY1tW_tab{color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer;background:0 0;border:0;padding:7px 1px 9px;font-size:13px;line-height:20px;position:relative}.NPY1tW_tab:hover,.NPY1tW_tab[data-active=true]{color:var(--dsw-alias-label-primary)}.NPY1tW_tab[data-active=true]:after,.NPY1tW_tab:focus-visible:after{background:var(--dsw-alias-label-primary);content:\"\";border-radius:2px 2px 0 0;height:2px;position:absolute;bottom:-1px;left:0;right:0}.NPY1tW_tab:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px;color:var(--dsw-alias-label-primary);border-radius:2px}.NPY1tW_panel{min-width:0;padding-top:2px}.NPY1tW_cards{flex-direction:column;gap:10px;margin:0;padding:0;list-style:none;display:flex}.NPY1tW_empty{color:var(--dsw-alias-label-tertiary);margin:0;font-size:13px}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-settings-plugins\src\client\PluginsSettingsSection.module.css.mjs
+		const css = ".eWsrgG_section{max-width:760px;color:var(--dsw-alias-label-primary);flex-direction:column;gap:12px;display:flex}.eWsrgG_heading{margin:0;font-size:18px;font-weight:600}.eWsrgG_intro{color:var(--dsw-alias-label-tertiary);margin:0;font-size:13px}.eWsrgG_tabs{border-bottom:1px solid var(--dsw-alias-border-l2);align-items:flex-end;gap:22px;margin-top:2px;display:flex}.eWsrgG_tab{color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer;background:0 0;border:0;padding:7px 1px 9px;font-size:13px;line-height:20px;position:relative}.eWsrgG_tab:hover,.eWsrgG_tab[data-active=true]{color:var(--dsw-alias-label-primary)}.eWsrgG_tab[data-active=true]:after,.eWsrgG_tab:focus-visible:after{background:var(--dsw-alias-label-primary);content:\"\";border-radius:2px 2px 0 0;height:2px;position:absolute;bottom:-1px;left:0;right:0}.eWsrgG_tab:focus-visible{outline:2px solid var(--dsw-alias-state-business-primary);outline-offset:2px;color:var(--dsw-alias-label-primary);border-radius:2px}.eWsrgG_panel{min-width:0;padding-top:2px}.eWsrgG_cards{flex-direction:column;gap:10px;margin:0;padding:0;list-style:none;display:flex}.eWsrgG_empty{color:var(--dsw-alias-label-tertiary);margin:0;font-size:13px}";
 		const tagId = "@deepseek-ai/dsh-client-ui-settings-plugins/PluginsSettingsSection.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -371,14 +371,14 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var PluginsSettingsSection_module_css_default = {
-			"cards": "NPY1tW_cards",
-			"intro": "NPY1tW_intro",
-			"tab": "NPY1tW_tab",
-			"section": "NPY1tW_section",
-			"heading": "NPY1tW_heading",
-			"panel": "NPY1tW_panel",
-			"empty": "NPY1tW_empty",
-			"tabs": "NPY1tW_tabs"
+			"section": "eWsrgG_section",
+			"tab": "eWsrgG_tab",
+			"panel": "eWsrgG_panel",
+			"heading": "eWsrgG_heading",
+			"empty": "eWsrgG_empty",
+			"tabs": "eWsrgG_tabs",
+			"cards": "eWsrgG_cards",
+			"intro": "eWsrgG_intro"
 		};
 		//#endregion
 		//#region lib/types/client/ConfigurablePluginsTab.js

@@ -12,11 +12,7 @@ pub fn setup_window_events(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn handle_window_event(
-    event: &WindowEvent,
-    window: &tauri::WebviewWindow,
-    app_handle: &AppHandle,
-) {
+fn handle_window_event(event: &WindowEvent, window: &tauri::WebviewWindow, app_handle: &AppHandle) {
     let WindowEvent::CloseRequested { api, .. } = event else {
         return;
     };

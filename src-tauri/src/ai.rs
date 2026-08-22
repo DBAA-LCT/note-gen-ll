@@ -1,8 +1,8 @@
 use futures_util::StreamExt;
 use reqwest::{
     header::{
-        HeaderMap, HeaderName, HeaderValue, ACCEPT, ACCEPT_ENCODING, AUTHORIZATION,
-        CACHE_CONTROL, CONTENT_TYPE,
+        HeaderMap, HeaderName, HeaderValue, ACCEPT, ACCEPT_ENCODING, AUTHORIZATION, CACHE_CONTROL,
+        CONTENT_TYPE,
     },
     multipart::{Form, Part},
     Client, Method, Proxy, Url, Version,

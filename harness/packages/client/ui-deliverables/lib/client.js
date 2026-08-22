@@ -156,8 +156,8 @@ window.__ModuleLoader__.load({
 			return matches.length === 1 ? matches[0] : void 0;
 		}
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-deliverables\src\client\ProducedFiles.module.css.mjs
-		const css = ".lQv3qG_root{grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:6px 8px;margin-top:16px;font-size:13px;line-height:22px;display:grid;position:relative}.lQv3qG_label{color:var(--dsw-alias-label-tertiary);grid-area:1/1}.lQv3qG_row{flex-wrap:nowrap;grid-area:1/2;align-items:center;gap:8px;min-width:0;display:flex;overflow:hidden}.lQv3qG_file{text-overflow:ellipsis;white-space:nowrap;background:var(--dsw-alias-interactive-bg-hover);max-width:320px;color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;border:none;border-radius:6px;flex:none;margin:0;padding:0 8px;overflow:hidden}.lQv3qG_file:hover{color:var(--dsw-alias-label-primary);text-decoration:underline}.lQv3qG_file:focus-visible,.lQv3qG_showFolder:focus-visible{box-shadow:inset 0 0 0 2px var(--dsw-alias-border-l3);outline:none}.lQv3qG_more{white-space:nowrap;color:var(--dsw-alias-label-tertiary);flex:none}.lQv3qG_showFolder{color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer;background:0 0;border:none;border-radius:4px;grid-area:2/2;justify-self:start;margin:0;padding:0 2px;line-height:20px}.lQv3qG_showFolder:hover{color:var(--dsw-alias-label-secondary);text-decoration:underline}.lQv3qG_measure{visibility:hidden;pointer-events:none;contain:strict;width:0;height:0;position:absolute;overflow:hidden}.lQv3qG_probe{width:max-content;position:absolute;inset:0 auto auto 0}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-deliverables\src\client\ProducedFiles.module.css.mjs
+		const css = ".f-vHgq_root{grid-template-columns:max-content minmax(0,1fr);align-items:center;gap:6px 8px;margin-top:16px;font-size:13px;line-height:22px;display:grid;position:relative}.f-vHgq_label{color:var(--dsw-alias-label-tertiary);grid-area:1/1}.f-vHgq_row{flex-wrap:nowrap;grid-area:1/2;align-items:center;gap:8px;min-width:0;display:flex;overflow:hidden}.f-vHgq_file{text-overflow:ellipsis;white-space:nowrap;background:var(--dsw-alias-interactive-bg-hover);max-width:320px;color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;border:none;border-radius:6px;flex:none;margin:0;padding:0 8px;overflow:hidden}.f-vHgq_file:hover{color:var(--dsw-alias-label-primary);text-decoration:underline}.f-vHgq_file:focus-visible,.f-vHgq_showFolder:focus-visible{box-shadow:inset 0 0 0 2px var(--dsw-alias-border-l3);outline:none}.f-vHgq_more{white-space:nowrap;color:var(--dsw-alias-label-tertiary);flex:none}.f-vHgq_showFolder{color:var(--dsw-alias-label-tertiary);font:inherit;cursor:pointer;background:0 0;border:none;border-radius:4px;grid-area:2/2;justify-self:start;margin:0;padding:0 2px;line-height:20px}.f-vHgq_showFolder:hover{color:var(--dsw-alias-label-secondary);text-decoration:underline}.f-vHgq_measure{visibility:hidden;pointer-events:none;contain:strict;width:0;height:0;position:absolute;overflow:hidden}.f-vHgq_probe{width:max-content;position:absolute;inset:0 auto auto 0}";
 		const tagId = "@deepseek-ai/dsh-client-ui-deliverables/ProducedFiles.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -167,14 +167,14 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var ProducedFiles_module_css_default = {
-			"label": "lQv3qG_label",
-			"root": "lQv3qG_root",
-			"probe": "lQv3qG_probe",
-			"row": "lQv3qG_row",
-			"file": "lQv3qG_file",
-			"showFolder": "lQv3qG_showFolder",
-			"more": "lQv3qG_more",
-			"measure": "lQv3qG_measure"
+			"more": "f-vHgq_more",
+			"root": "f-vHgq_root",
+			"file": "f-vHgq_file",
+			"measure": "f-vHgq_measure",
+			"probe": "f-vHgq_probe",
+			"label": "f-vHgq_label",
+			"showFolder": "f-vHgq_showFolder",
+			"row": "f-vHgq_row"
 		};
 		//#endregion
 		//#region lib/types/client/ProducedFiles.js

@@ -12,6 +12,7 @@ interface SlashMenuProps {
   editor: Editor
   clientRect?: DOMRect | null
   query: string
+  maxHeight: number
 }
 
 export interface SlashMenuRef {
@@ -33,7 +34,7 @@ function ShortcutHint({ keys }: { keys: string[] }) {
   )
 }
 
-export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, query }, ref) => {
+export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, query, maxHeight }, ref) => {
   const t = useTranslations('editor.slashCommand')
   const hasQuery = query.trim().length > 0
   const [selectedGroupIndex, setSelectedGroupIndex] = useState(0)
@@ -297,7 +298,10 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, que
 
   if (hasQuery) {
     return (
-      <div className="max-h-72 w-[min(26rem,calc(100vw-1rem))] overflow-auto rounded-lg border border-border bg-background/95 p-1 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div
+        className="w-[min(26rem,calc(100vw-1rem))] overflow-auto rounded-lg border border-border bg-background/95 p-1 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/60"
+        style={{ maxHeight }}
+      >
         {visibleItems.map((item, itemIdx) => {
           const isSelected = itemIdx === selectedIndex
 
@@ -336,8 +340,11 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, que
   }
 
   return (
-    <div className="grid max-h-72 w-[min(26rem,calc(100vw-1rem))] grid-cols-[7.5rem_minmax(0,1fr)] overflow-hidden rounded-lg border border-border bg-background/95 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex max-h-72 min-w-0 flex-col border-r border-border p-1">
+    <div
+      className="grid w-[min(26rem,calc(100vw-1rem))] grid-cols-[7.5rem_minmax(0,1fr)] overflow-hidden rounded-lg border border-border bg-background/95 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      style={{ maxHeight }}
+    >
+      <div className="flex min-h-0 min-w-0 flex-col border-r border-border p-1">
         <div className="flex h-7 shrink-0 items-center justify-end px-1">
           <ShortcutHint keys={['←', '→']} />
         </div>
@@ -366,7 +373,7 @@ export const SlashMenu = forwardRef<SlashMenuRef, SlashMenuProps>(({ editor, que
         </div>
       </div>
 
-      <div className="flex max-h-72 min-w-0 flex-col p-1">
+      <div className="flex min-h-0 min-w-0 flex-col p-1">
         {activeGroup && (
           <div className="flex h-7 shrink-0 items-center justify-between gap-2 px-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             <span className="min-w-0 truncate">{activeGroup[0]}</span>

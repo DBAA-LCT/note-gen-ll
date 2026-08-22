@@ -33,6 +33,7 @@ import { isMobileDevice as checkIsMobileDevice } from '@/lib/check'
 import emitter from '@/lib/emitter'
 import { getSyncPushQueue } from '@/lib/sync/sync-push-queue'
 import { useEffect } from 'react'
+import type { SyncPlatform } from '@/types/sync'
 
 // 初始化 dayjs 插件
 dayjs.extend(relativeTime)
@@ -63,6 +64,12 @@ export function SyncConfirmDialog() {
       workspacePath: string
       localSha?: string
       remoteSha?: string
+      mapping: {
+        id: string
+        platform: SyncPlatform
+        remoteTarget: string
+        remoteFilePath: string
+      }
     }) => {
       const fileName = data.path.split('/').pop() || data.path
       const syncPushQueue = getSyncPushQueue()
@@ -73,7 +80,7 @@ export function SyncConfirmDialog() {
         remoteSha: data.remoteSha,
         onForceUpload: async () => {
           // 用户确认强制上传
-          await syncPushQueue.forcePush(data.path, data.workspacePath)
+          await syncPushQueue.forcePush(data.path, data.workspacePath, data.mapping)
         },
         onCancel: () => {
           // 用户取消，不做任何操作

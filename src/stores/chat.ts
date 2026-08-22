@@ -132,6 +132,11 @@ interface ChatState {
 }
 
 let nextTemporaryChatId = -1
+let conversationTransitionGeneration = 0
+
+function isAgentRunActive(state: Pick<ChatState, 'loading' | 'agentState'>) {
+  return state.loading || state.agentState.isRunning || Boolean(state.agentState.clientRunToken)
+}
 
 const useChatStore = create<ChatState>((set, get) => ({
   loading: false,
@@ -317,8 +322,8 @@ const useChatStore = create<ChatState>((set, get) => ({
     }
 
     // 确保有 conversationId，如果没有则创建新会话
-    let conversationId = chat.conversationId || currentConversationId
-    if (!conversationId) {
+    let conversationId = chat.conversationId ?? currentConversationId
+    if (conversationId === null || conversationId === undefined) {
       // 没有当前会话，创建一个新会话
       const { createConversation } = await import('@/db/conversations')
       conversationId = await createConversation('新对话')
@@ -429,7 +434,11 @@ const useChatStore = create<ChatState>((set, get) => ({
 
   // 兼容旧代码：clearChats 现在会清空当前会话的聊天记录
   clearChats: async (tagId) => {
+    if (get().loading) return
+
     const isTemporaryConversation = get().isTemporaryConversation
+    const currentConversationId = get().currentConversationId
+    const removedCount = get().chats.length
     set({ chats: [] })
     // 清空聊天记录时同步清理 Agent 状态
     get().resetAgentState()
@@ -441,24 +450,32 @@ const useChatStore = create<ChatState>((set, get) => ({
       return
     }
 
-    // 更新会话的消息数量
-    const { currentConversationId } = get()
-    if (currentConversationId) {
-      // 获取当前消息数量
-      const { chats } = get()
-      const count = chats.length
+    try {
+      if (currentConversationId !== null) {
+        await clearChatsByConversationId(currentConversationId)
+        const { deleteConversationCompactions } = await import('@/db/conversation-compactions')
+        await deleteConversationCompactions(currentConversationId)
 
-      // 删除数据库中的记录
-      await clearChatsByConversationId(currentConversationId)
-      const { deleteConversationCompactions } = await import('@/db/conversation-compactions')
-      await deleteConversationCompactions(currentConversationId)
-
-      const { updateConversationMessageCount } = await import('@/db/conversations')
-      await updateConversationMessageCount(currentConversationId, -count)
-      await get().initConversations()
-    } else {
-      // 兼容旧代码：如果没有 conversationId，使用 tagId
-      await clearChatsByTagId(tagId)
+        const { updateConversationMessageCount, syncConversationMessageCount } = await import('@/db/conversations')
+        if (removedCount > 0) {
+          await updateConversationMessageCount(currentConversationId, -removedCount)
+        }
+        await syncConversationMessageCount(currentConversationId)
+        await get().initConversations()
+      } else {
+        // 兼容旧代码：如果没有 conversationId，使用 tagId
+        await clearChatsByTagId(tagId)
+      }
+    } catch (error) {
+      // 数据库失败时恢复当前会话，避免 UI 显示已清空但数据仍存在。
+      if (
+        currentConversationId !== null
+        && currentConversationId === get().currentConversationId
+      ) {
+        const chats = await getChatsByConversation(currentConversationId)
+        set({ chats })
+      }
+      throw error
     }
   },
 
@@ -540,26 +557,33 @@ const useChatStore = create<ChatState>((set, get) => ({
   },
 
   createConversation: async (title = '新对话') => {
+    if (isAgentRunActive(get())) {
+      throw new Error('Agent 运行期间不能创建或切换会话')
+    }
+    const transitionGeneration = ++conversationTransitionGeneration
     const { createConversation: createConv } = await import('@/db/conversations')
     const id = await createConv(title)
-    // 设置为当前会话并刷新会话列表
+    if (transitionGeneration !== conversationTransitionGeneration || isAgentRunActive(get())) {
+      return id
+    }
     set({ currentConversationId: id, isTemporaryConversation: false })
     await get().initConversations()
     return id
   },
 
   switchConversation: async (id: number) => {
+    if (isAgentRunActive(get())) return
+    const transitionGeneration = ++conversationTransitionGeneration
     const previousConversationId = get().currentConversationId
-    if (previousConversationId && previousConversationId !== id) {
+    if (previousConversationId !== null && previousConversationId !== id) {
       const { scheduleConversationMemoryExtraction } = await import('@/lib/memory/auto-memory')
       scheduleConversationMemoryExtraction(previousConversationId)
     }
-    // 先同步消息数量，确保 messageCount 与实际消息数量一致
     const { syncConversationMessageCount } = await import('@/db/conversations')
     await syncConversationMessageCount(id)
-    // 然后加载消息
     const { getChatsByConversation } = await import('@/db/chats')
     const data = await getChatsByConversation(id)
+    if (transitionGeneration !== conversationTransitionGeneration || isAgentRunActive(get())) return
     set({
       currentConversationId: id,
       chats: data,
@@ -567,30 +591,28 @@ const useChatStore = create<ChatState>((set, get) => ({
       pendingQuote: null,
       editorSelectionQuote: null,
     })
-    // 刷新会话列表以确保 UI 显示最新的会话状态
     await get().initConversations()
   },
 
   updateConversationTitle: async (id: number, title: string) => {
     const { updateConversationTitle: updateTitle } = await import('@/db/conversations')
     await updateTitle(id, title)
-    // 刷新会话列表
     await get().initConversations()
   },
 
   deleteConversation: async (id: number) => {
+    if (isAgentRunActive(get())) return
+    ++conversationTransitionGeneration
     const { deleteConversation: deleteConv } = await import('@/db/conversations')
     await deleteConv(id)
+    if (isAgentRunActive(get())) return
 
     const { currentConversationId, conversations, switchConversation } = get()
-
-    // 如果删除的是当前会话，切换到另一个会话
     if (id === currentConversationId) {
       const remainingConversations = conversations.filter(c => c.id !== id)
       if (remainingConversations.length > 0) {
         await switchConversation(remainingConversations[0].id)
       } else {
-        // 没有其他会话了，清空状态，不创建新会话
         set({
           currentConversationId: null,
           chats: [],
@@ -604,41 +626,35 @@ const useChatStore = create<ChatState>((set, get) => ({
         get().clearMcpToolCalls()
       }
     }
-
-    // 刷新会话列表
     await get().initConversations()
   },
 
   toggleConversationPin: async (id: number) => {
     const { toggleConversationPin: togglePin } = await import('@/db/conversations')
     const isPinned = await togglePin(id)
-    // 刷新会话列表
     await get().initConversations()
     return isPinned
   },
 
   startNewConversation: async () => {
+    if (isAgentRunActive(get())) return
+    const transitionGeneration = ++conversationTransitionGeneration
     const { currentConversationId } = get()
-    if (currentConversationId) {
+    if (currentConversationId !== null) {
       const { scheduleConversationMemoryExtraction } = await import('@/lib/memory/auto-memory')
       scheduleConversationMemoryExtraction(currentConversationId)
-    }
-
-    // 如果当前会话无消息，删除它（从数据库查询最新状态）
-    if (currentConversationId) {
       const { getConversation } = await import('@/db/conversations')
       const currentConv = await getConversation(currentConversationId)
+      if (transitionGeneration !== conversationTransitionGeneration || isAgentRunActive(get())) return
       if (currentConv && currentConv.messageCount === 0) {
-        // 空会话，直接删除
         const { deleteConversation: deleteConv } = await import('@/db/conversations')
         await deleteConv(currentConversationId)
       }
-      // 刷新会话列表
+      if (transitionGeneration !== conversationTransitionGeneration || isAgentRunActive(get())) return
       await get().initConversations()
     }
 
-    // 清空聊天，不立即创建新会话
-    // 等到用户发送第一条消息时才创建会话
+    if (transitionGeneration !== conversationTransitionGeneration || isAgentRunActive(get())) return
     set({
       currentConversationId: null,
       chats: [],
@@ -648,12 +664,13 @@ const useChatStore = create<ChatState>((set, get) => ({
       agentAutoApproveConversationId: null,
       agentAutoApproveRuntimeScriptKey: null
     })
-    // 清空 Agent 状态
     get().resetAgentState()
     get().clearMcpToolCalls()
   },
 
   startTemporaryConversation: () => {
+    if (isAgentRunActive(get())) return
+    ++conversationTransitionGeneration
     set({
       currentConversationId: null,
       chats: [],

@@ -432,7 +432,20 @@ select,
   right: auto;
   bottom: auto;
   left: auto;
-  padding-bottom: 0.25rem;
+  min-height: 0;
+  max-height: min(62vh, calc(var(--mobile-viewport-height, 100vh) - 3.5rem));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+  scrollbar-gutter: stable;
+}
+
+.mobile-keyboard-open .mobile-chat-input-wrapper > footer {
+  min-height: 0;
+}
+
+.mobile-keyboard-open .mobile-chat-input-wrapper textarea {
+  max-height: min(9rem, calc(var(--mobile-viewport-height, 100vh) * 0.28)) !important;
 }
 
 #mobile-chat {
@@ -440,6 +453,9 @@ select,
 }
 
 #mobile-chat #chats-wrapper {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding-bottom: calc(var(--mobile-footbar-reserved-space) + 9rem);
   scroll-padding-bottom: calc(var(--mobile-footbar-reserved-space) + 9rem);
 }

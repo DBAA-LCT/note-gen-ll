@@ -10,6 +10,7 @@ export type SyncMappingEntryType = 'directory' | 'file'
 export type SyncMappingAccessMode = 'read-write' | 'read-only'
 export type SyncMappingMode = 'automatic' | 'manual'
 export type SyncPathPolicy = 'local-only' | 'pull-only' | 'sync' | 'ignore-remote'
+export type SyncOperation = 'read' | 'write'
 
 export interface ConnectorSyncMapping {
   id: string
@@ -194,6 +195,7 @@ export async function deleteConnectorMapping(platform: SyncPlatform, id: string)
 export async function resolveSyncMappings(
   localPath: string,
   workspacePath?: string,
+  operation: SyncOperation = 'read',
 ): Promise<ResolvedSyncMapping[]> {
   const store = await Store.load('store.json')
   const targetWorkspace = normalizeWorkspacePath(
@@ -203,7 +205,7 @@ export async function resolveSyncMappings(
   const mappings = (await getConnectorMappings()).filter((mapping) => {
     if (!mapping.enabled || mapping.localWorkspacePath !== targetWorkspace) return false
     const policy = getEffectiveSyncPathPolicy(mapping, targetPath)
-    if (policy === 'local-only' || policy === 'ignore-remote') return false
+    if (policy === 'local-only' || (operation === 'read' && policy === 'ignore-remote')) return false
     if (mapping.entryType === 'file') return targetPath === mapping.localPath
     return !mapping.localPath
       || targetPath === mapping.localPath
@@ -247,8 +249,9 @@ export function getEffectiveSyncPathPolicy(
 export async function resolvePrimarySyncMapping(
   localPath: string,
   workspacePath?: string,
+  operation: SyncOperation = 'read',
 ): Promise<ResolvedSyncMapping | undefined> {
-  return (await resolveSyncMappings(localPath, workspacePath))[0]
+  return (await resolveSyncMappings(localPath, workspacePath, operation))[0]
 }
 
 export interface SyncPathWritePolicy {
@@ -274,11 +277,11 @@ export async function getSyncPathWritePolicy(
   const path = normalizePath(localPath)
 
   if (!options.includeDescendants) {
-    const mappings = await resolveSyncMappings(path, workspacePath)
+    const mappings = await resolveSyncMappings(path, workspacePath, 'write')
     const blockedByReadOnly = mappings.some(mapping => mapping.syncPolicy === 'pull-only')
     return {
       configured: mappings.length > 0,
-      writable: mappings.length === 1 && mappings[0].syncPolicy === 'sync',
+      writable: mappings.length === 1 && ['sync', 'ignore-remote'].includes(mappings[0].syncPolicy),
       blockedByReadOnly,
       ambiguous: mappings.length > 1,
     }
@@ -296,7 +299,7 @@ export async function getSyncPathWritePolicy(
   const blockedByReadOnly = policies.some(policy => policy === 'pull-only')
   return {
     configured: mappings.length > 0,
-    writable: mappings.length === 1 && policies[0] === 'sync',
+    writable: mappings.length === 1 && ['sync', 'ignore-remote'].includes(policies[0]),
     blockedByReadOnly,
     ambiguous: mappings.length > 1,
   }

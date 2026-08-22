@@ -107,7 +107,7 @@ export const TYPERT = {
         "description": "Human-command registry. Plain-context definitions are global; definitions registered through a command-injected child of an agent context shadow globals for that agent.",
         "summary": "Human-command registry.",
         "tags": [],
-        "jsDoc": "/**\n * Human-command registry. Plain-context definitions are global; definitions\n * registered through a command-injected child of an agent context shadow\n * globals for that agent.\n */",
+        "jsDoc": "/**\r\n * Human-command registry. Plain-context definitions are global; definitions\r\n * registered through a command-injected child of an agent context shadow\r\n * globals for that agent.\r\n */",
         "key": "commands",
         "exportName": "CommandRuntime",
         "members": [
@@ -116,28 +116,28 @@ export const TYPERT = {
             "name": "register",
             "signature": "register(definition: CommandDefinition): () => void",
             "summary": "Register a global or calling-agent-scoped command.",
-            "jsDoc": "/**\n * Register a global or calling-agent-scoped command.\n * @param definition - discovery metadata and direct UI handler.\n * @returns the exact effect disposer that unregisters this definition.\n */"
+            "jsDoc": "/**\r\n * Register a global or calling-agent-scoped command.\r\n * @param definition - discovery metadata and direct UI handler.\r\n * @returns the exact effect disposer that unregisters this definition.\r\n */"
           },
           {
             "kind": "method",
             "name": "list",
             "signature": "@Remote list(agent: Agent): readonly CommandDescriptor[]",
             "summary": "List the effective immutable command descriptors for one agent.",
-            "jsDoc": "/**\n * List the effective immutable command descriptors for one agent.\n * @param agent - exact receiving agent and scoped-layer key.\n * @returns name-sorted descriptors after scoped shadowing.\n */"
+            "jsDoc": "/**\r\n * List the effective immutable command descriptors for one agent.\r\n * @param agent - exact receiving agent and scoped-layer key.\r\n * @returns name-sorted descriptors after scoped shadowing.\r\n */"
           },
           {
             "kind": "method",
             "name": "find",
             "signature": "find(agent: Agent, name: string): CommandDefinition | undefined",
             "summary": "Resolve one effective command definition.",
-            "jsDoc": "/**\n * Resolve one effective command definition.\n * @param agent - exact receiving agent and scoped-layer key.\n * @param name - command name without a slash.\n * @returns the scoped shadow or global definition.\n */"
+            "jsDoc": "/**\r\n * Resolve one effective command definition.\r\n * @param agent - exact receiving agent and scoped-layer key.\r\n * @param name - command name without a slash.\r\n * @returns the scoped shadow or global definition.\r\n */"
           },
           {
             "kind": "method",
             "name": "execute",
             "signature": "@Remote async execute( agent: Agent, line: string, signal: AbortSignal, ): Promise<CommandExecution | undefined>",
             "summary": "Parse and execute a known command without sending it to the model.",
-            "jsDoc": "/**\n * Parse and execute a known command without sending it to the model.\n *\n * A resolved command's lifecycle is logged: `command/run` is appended\n * before the handler is invoked and `command/done` after settlement (a\n * thrown or aborted handler settles as `kind: 'error'`). Both are direct\n * log-only appends — no turn wraps them, and persistence drains them at\n * ordinary checkpoints. Admission misses (syntax or unknown name) log\n * nothing — they never entered a handler. A `command/run` append failure\n * fails the execution loud; a `command/done` append failure on the\n * handler-failure path is contained so the handler's own error stays the\n * reported failure.\n *\n * @param agent - exact receiving agent.\n * @param line - complete slash-command line.\n * @param signal - cancellation signal owned by the UI request.\n * @returns the settled execution (result + lifecycle pairing id), or\n *   `undefined` when syntax or name does not resolve.\n */"
+            "jsDoc": "/**\r\n * Parse and execute a known command without sending it to the model.\r\n *\r\n * A resolved command's lifecycle is logged: `command/run` is appended\r\n * before the handler is invoked and `command/done` after settlement (a\r\n * thrown or aborted handler settles as `kind: 'error'`). Both are direct\r\n * log-only appends — no turn wraps them, and persistence drains them at\r\n * ordinary checkpoints. Admission misses (syntax or unknown name) log\r\n * nothing — they never entered a handler. A `command/run` append failure\r\n * fails the execution loud; a `command/done` append failure on the\r\n * handler-failure path is contained so the handler's own error stays the\r\n * reported failure.\r\n *\r\n * @param agent - exact receiving agent.\r\n * @param line - complete slash-command line.\r\n * @param signal - cancellation signal owned by the UI request.\r\n * @returns the settled execution (result + lifecycle pairing id), or\r\n *   `undefined` when syntax or name does not resolve.\r\n */"
           }
         ],
         "types": [
@@ -491,7 +491,7 @@ export const TYPERT = {
             "text": "@mode emit"
           }
         ],
-        "jsDoc": "/**\n * A command was registered or unregistered. This is an unfiltered registry\n * notification because a global or scoped change may affect any UI view.\n * Observer failures are contained and cannot veto the registry mutation.\n * @mode emit\n */",
+        "jsDoc": "/**\r\n * A command was registered or unregistered. This is an unfiltered registry\r\n * notification because a global or scoped change may affect any UI view.\r\n * Observer failures are contained and cannot veto the registry mutation.\r\n * @mode emit\r\n */",
         "name": "commands/change",
         "mode": "emit",
         "signature": "'commands/change'(): void"

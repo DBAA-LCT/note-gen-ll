@@ -257,10 +257,7 @@ mod tests {
 
     #[test]
     fn strips_notion_id_from_names() {
-        assert_eq!(
-            strip_notion_id("AI 2cc2b6745dc680849b5ef051ef87c612"),
-            "AI"
-        );
+        assert_eq!(strip_notion_id("AI 2cc2b6745dc680849b5ef051ef87c612"), "AI");
         assert_eq!(strip_notion_id("plain name"), "plain name");
         assert_eq!(
             clean_segment("RAG 39d2b6745dc68012930afe9bc14d27eb.md", true),
@@ -285,4 +282,3 @@ mod tests {
         assert_eq!(output, "[a](%E8%8F%9C%20%281%29/img.png)");
     }
 }
-

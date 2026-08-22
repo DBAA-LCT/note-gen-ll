@@ -183,7 +183,7 @@ export const TYPERT = {
         "description": "Storage-domain sidecar service. It inspects persisted Session history and never creates or resumes an Agent or Session.",
         "summary": "Storage-domain sidecar service.",
         "tags": [],
-        "jsDoc": "/**\n * Storage-domain sidecar service. It inspects persisted Session history and\n * never creates or resumes an Agent or Session.\n */",
+        "jsDoc": "/**\r\n * Storage-domain sidecar service. It inspects persisted Session history and\r\n * never creates or resumes an Agent or Session.\r\n */",
         "key": "messageFeedback",
         "exportName": "MessageFeedbackService",
         "members": [
@@ -192,21 +192,21 @@ export const TYPERT = {
             "name": "list",
             "signature": "@Remote('list') async list(request: MessageFeedbackListRequest): Promise<MessageFeedbackListResult>",
             "summary": "Read feedback belonging to the current persisted Session lifecycle.",
-            "jsDoc": "/**\n * Read feedback belonging to the current persisted Session lifecycle.\n * A stale row from a reused Session id is invisible.\n * @param request - Session identity to inspect and list.\n * @returns current immutable items or `session-not-found`.\n */"
+            "jsDoc": "/**\r\n * Read feedback belonging to the current persisted Session lifecycle.\r\n * A stale row from a reused Session id is invisible.\r\n * @param request - Session identity to inspect and list.\r\n * @returns current immutable items or `session-not-found`.\r\n */"
           },
           {
             "kind": "method",
             "name": "put",
             "signature": "@Remote('put') put(request: MessageFeedbackPutRequest): Promise<MessageFeedbackPutResult>",
             "summary": "Create or replace feedback for one derived append-origin assistant message.",
-            "jsDoc": "/**\n * Create or replace feedback for one derived append-origin assistant\n * message. Every request must match the addressed item's current version;\n * a matching no-op returns the stored item without changing its revision.\n * @param request - target, desired value, and observed item version.\n * @returns the committed item or an explicit business failure.\n */"
+            "jsDoc": "/**\r\n * Create or replace feedback for one derived append-origin assistant\r\n * message. Every request must match the addressed item's current version;\r\n * a matching no-op returns the stored item without changing its revision.\r\n * @param request - target, desired value, and observed item version.\r\n * @returns the committed item or an explicit business failure.\r\n */"
           },
           {
             "kind": "method",
             "name": "delete",
             "signature": "@Remote('delete') delete(request: MessageFeedbackDeleteRequest): Promise<MessageFeedbackDeleteResult>",
             "summary": "Delete one feedback item.",
-            "jsDoc": "/**\n * Delete one feedback item. Absence is successful regardless of the\n * supplied version; an existing item requires an exact version match.\n * @param request - Session, message, and observed item version.\n * @returns the stable absent postcondition, or an explicit failure.\n */"
+            "jsDoc": "/**\r\n * Delete one feedback item. Absence is successful regardless of the\r\n * supplied version; an existing item requires an exact version match.\r\n * @param request - Session, message, and observed item version.\r\n * @returns the stable absent postcondition, or an explicit failure.\r\n */"
           }
         ],
         "types": [

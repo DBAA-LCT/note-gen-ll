@@ -386,7 +386,8 @@ export async function s3Upload(
   key: string,
   content: string | Uint8Array,
   proxy?: Proxy,
-  contentType = 'text/markdown; charset=utf-8'
+  contentType = 'text/markdown; charset=utf-8',
+  condition?: { ifMatch?: string; ifNoneMatch?: boolean; throwOnError?: boolean },
 ): Promise<{ etag: string } | null> {
   const uploadStartedAt = getPerfNow()
   let previousPerfAt = uploadStartedAt
@@ -412,11 +413,13 @@ export async function s3Upload(
       byteLength: contentBytes.byteLength,
     })
 
-    const headers = {
+    const headers: Record<string, string> = {
       Host: new URL(url).host,
       'Content-Type': contentType,
       'Content-Length': contentBytes.byteLength.toString()
     }
+    if (condition?.ifMatch) headers['If-Match'] = condition.ifMatch
+    if (condition?.ifNoneMatch) headers['If-None-Match'] = '*'
 
     const { authorization, amzDate, payloadHashHex } = await generateSignature(
       'PUT',
@@ -432,6 +435,8 @@ export async function s3Upload(
     requestHeaders.append('X-Amz-Date', amzDate)
     requestHeaders.append('Content-Type', contentType)
     requestHeaders.append('X-Amz-Content-Sha256', payloadHashHex)
+    if (condition?.ifMatch) requestHeaders.append('If-Match', condition.ifMatch)
+    if (condition?.ifNoneMatch) requestHeaders.append('If-None-Match', '*')
 
     const response = await fetch(url, {
       method: 'PUT',
@@ -460,6 +465,9 @@ export async function s3Upload(
         bodyLength: errorText.length,
       })
       console.error('S3 Upload failed:', response.status, errorText)
+      if (condition?.throwOnError) {
+        throw Object.assign(new Error(errorText || `S3 upload failed (${response.status})`), { status: response.status })
+      }
       return null
     }
   } catch (error) {
@@ -467,6 +475,7 @@ export async function s3Upload(
       message: error instanceof Error ? error.message : String(error),
     })
     console.error('S3 Upload error:', error)
+    if (condition?.throwOnError) throw error
     return null
   }
 }
@@ -824,13 +833,13 @@ export async function s3HeadObject(
         bodyLength: errorText.length,
       })
       console.error('S3 HeadObject failed:', response.status, errorText)
-      return null
+      throw new Error(`S3 HeadObject failed: ${response.status} ${errorText}`)
     }
   } catch (error) {
     logPerf('failed', {
       message: error instanceof Error ? error.message : String(error),
     })
     console.error('S3 HeadObject error:', error)
-    return null
+    throw error
   }
 }

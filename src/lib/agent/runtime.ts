@@ -13,6 +13,7 @@ import { skillManager } from '@/lib/skills'
 import { buildMcpAgentToolCatalog } from '@/lib/mcp/agent-tools'
 import { agentDebugLog, previewText } from './debug-log'
 import { getRagAgentPolicy } from '@/lib/rag-agent-policy'
+import { EmbeddedAgentKernel } from './kernel'
 import { routeAgentTools, type AgentToolRoutingResult } from './tool-router'
 import type {
   AgentChange,
@@ -647,7 +648,7 @@ export class AgentRuntime {
   private readonly promptAssembler = new AgentPromptAssembler()
   private readonly permissionEngine = new AgentPermissionEngine()
   private readonly recoveryManager = new AgentRecoveryManager()
-  private abortController: AbortController | null = null
+  private kernel: EmbeddedAgentKernel<AgentSteeringPayload> | null = null
   private stopped = false
   private steeringRequested = false
   private steeringQueue: AgentSteeringPayload[] = []
@@ -659,30 +660,46 @@ export class AgentRuntime {
     this.steeringRequested = false
     this.steeringReadyResolver?.()
     this.steeringReadyResolver = null
-    this.abortController?.abort()
+    this.kernel?.cancel({ kind: 'user-stop' })
   }
 
   beginSteering() {
     if (!this.stopped) {
       this.steeringRequested = true
+      this.kernel?.markSteeringRequested()
     }
   }
 
   steer(payload: AgentSteeringPayload) {
     if (this.stopped) return
     this.steeringRequested = true
-    this.steeringQueue.push(payload)
-    this.steeringQueue.sort((a, b) => a.sequence - b.sequence)
+    if (this.kernel) {
+      this.kernel.steer(payload)
+    } else {
+      this.steeringQueue.push(payload)
+      this.steeringQueue.sort((a, b) => a.sequence - b.sequence)
+    }
     this.steeringReadyResolver?.()
     this.steeringReadyResolver = null
   }
 
   async run(input: AgentRuntimeInput, callbacks: AgentRuntimeCallbacks = {}): Promise<AgentRuntimeResult> {
     this.stopped = false
-    this.abortController = new AbortController()
 
     const recorder = new AgentTraceRecorder()
     const runId = recorder.getRunId()
+    const kernel = new EmbeddedAgentKernel<AgentSteeringPayload>(runId, callbacks.onKernelEvent)
+    this.kernel = kernel
+    kernel.start({ activeChatId: input.activeChatId })
+    kernel.beginTurn({ source: 'notegoal-embedded' })
+    kernel.recordUserMessage({ content: input.userInput, imageUrls: input.imageUrls || [] })
+    for (const payload of this.steeringQueue.splice(0)) kernel.steer(payload)
+    const finishKernel = (reason: 'completed' | 'stopped' | 'error', data: unknown = {}) => {
+      kernel.finish(reason, data)
+      if (this.kernel === kernel) this.kernel = null
+    }
+
+    try {
     const steps: AgentStep[] = []
     const toolCalls: ToolCall[] = []
     const changes: AgentChange[] = []
@@ -705,15 +722,8 @@ export class AgentRuntime {
     const validatedBaseURL = await validateAIService(aiConfig?.baseURL)
     if (!aiConfig || validatedBaseURL === null) {
       agentDebugLog('ai_service_invalid', { runId })
-      return {
-        runId,
-        content: '',
-        stopped: false,
-        steps,
-        toolCalls,
-        changes,
-        trace: recorder.all(),
-      }
+      finishKernel('error', { detailReason: 'invalid-ai-service' })
+      throw new Error('请先在 AI 设置中选择并配置可用的主模型。')
     }
 
     const mcpToolCatalog = buildMcpAgentToolCatalog(input.selectedMcpServerIds)
@@ -868,9 +878,27 @@ export class AgentRuntime {
         tool,
         args,
         runId,
-        this.abortController?.signal,
+        kernel.signal,
         context
       )
+    }
+    const executeExclusiveTool = async (
+      callId: string,
+      tool: AgentTool,
+      args: Record<string, unknown>
+    ): Promise<AgentToolResult> => {
+      const [outcome] = await kernel.executeTools([{
+        id: callId,
+        name: tool.name,
+        mode: 'exclusive',
+        run: () => executeToolWithBudget(tool, args),
+      }])
+      if (outcome?.kind === 'completed') return outcome.value
+      return {
+        ok: false,
+        message: '工具调用因本轮取消而未完成。',
+        error: 'CANCELLED_TOOL_CALL',
+      }
     }
     const appendToolResult = (
       toolCallId: string,
@@ -883,6 +911,7 @@ export class AgentRuntime {
         tool_call_id: toolCallId,
         content: stringifyToolResult(result),
       })
+      kernel.recordToolResult({ callId: toolCallId, name: toolName, arguments: args, result })
       toolResultEvidence.add([
         toolName,
         JSON.stringify(args),
@@ -1004,15 +1033,15 @@ export class AgentRuntime {
     }
 
     const drainSteering = async () => {
-      if (!this.steeringRequested) return false
-      if (this.steeringQueue.length === 0 && !this.stopped) {
+      if (!this.steeringRequested && !kernel.steeringRequested) return false
+      if (kernel.inbox.nextStep.length === 0 && !this.stopped) {
         await new Promise<void>((resolve) => {
           this.steeringReadyResolver = resolve
         })
       }
       if (this.stopped) return false
 
-      const payloads = this.steeringQueue.splice(0)
+      const payloads = kernel.claim('next-step').sort((a, b) => a.sequence - b.sequence)
       if (payloads.length === 0) return false
       this.steeringRequested = false
       callbacks.onStatus?.('steering')
@@ -1021,6 +1050,7 @@ export class AgentRuntime {
         const text = payload.additionalContext
           ? `## App Context\n${payload.additionalContext}\n\n## User steering message\n${payload.text}`
           : payload.text
+        kernel.recordUserMessage({ content: payload.text, imageUrls: payload.imageUrls || [], steering: true })
         messages.push(await this.contextManager.buildCurrentUserMessage(text, payload.imageUrls))
       }
 
@@ -1139,6 +1169,7 @@ export class AgentRuntime {
           if (stoppedContent) {
             callbacks.onFinalAnswerRender?.(stoppedContent)
           }
+          finishKernel('stopped', { content: stoppedContent })
           return {
             runId,
             content: stoppedContent,
@@ -1150,6 +1181,8 @@ export class AgentRuntime {
           }
         }
 
+        kernel.endStep('completed')
+        kernel.beginStep({ iteration })
         await drainSteering()
         const evidenceCountAtRoundStart = toolResultEvidence.size
 
@@ -1223,7 +1256,7 @@ export class AgentRuntime {
             ...toolParams,
             ...getChatTokenLimitParams(aiConfig),
           }, aiConfig), {
-            signal: this.abortController?.signal,
+            signal: kernel.signal,
           })
         )
         let assistantContent = ''
@@ -1310,6 +1343,13 @@ export class AgentRuntime {
             streamedToolCalls.set(index, current)
           }
 
+          kernel.recordAssistantChunk({
+            content: typeof delta.content === 'string' ? delta.content : '',
+            reasoning: typeof reasoningDelta === 'string' ? reasoningDelta : '',
+            toolCalls: delta.tool_calls || [],
+            finishReason: choice.finish_reason,
+          })
+
           const now = Date.now()
           if (streamedText && now - lastModelProgressTraceAt >= 100) {
             streamedTokenCount = estimateTokens(streamedText)
@@ -1341,10 +1381,15 @@ export class AgentRuntime {
           }
           return rewritten
         })
-        if (toolUses.some(toolCall => toolCall.function.name === 'learning_ask_interview_question')) {
-          forceLearningInterviewQuestion = false
-        }
         if (steeringInterrupted) {
+          kernel.recordAssistantMessage({
+            content: assistantContent,
+            reasoning: assistantReasoning,
+            finishReason: 'steered',
+            toolCalls: [],
+            interrupted: true,
+          })
+          kernel.endStep('steered')
           finalizeInterruptedModelTrace('success', '模型响应已被追加信息引导', true)
           if (assistantContent) {
             messages.push({ role: 'assistant', content: assistantContent })
@@ -1352,6 +1397,26 @@ export class AgentRuntime {
           await drainSteering()
           iteration -= 1
           continue
+        }
+        if (toolUses.some(toolCall => toolCall.function.name === 'learning_ask_interview_question')) {
+          forceLearningInterviewQuestion = false
+        }
+        kernel.recordAssistantMessage({
+          content: assistantContent,
+          reasoning: assistantReasoning,
+          finishReason,
+          toolCalls: toolUses.map(toolCall => ({
+            id: toolCall.id,
+            name: toolCall.function.name,
+            arguments: toolCall.function.arguments,
+          })),
+        })
+        for (const toolCall of toolUses) {
+          kernel.recordToolCall({
+            callId: toolCall.id,
+            name: toolCall.function.name,
+            arguments: toolCall.function.arguments,
+          })
         }
         agentDebugLog('model_call_end', {
           runId,
@@ -1498,6 +1563,7 @@ export class AgentRuntime {
           })
           callbacks.onTrace?.(finalTrace)
 
+          finishKernel('completed', { content: resolvedContent })
           return {
             runId,
             content: resolvedContent,
@@ -1528,6 +1594,7 @@ export class AgentRuntime {
         for (let toolIndex = 0; toolIndex < toolUses.length; toolIndex += 1) {
           const toolUse = toolUses[toolIndex]
           if (this.stopped) {
+            cancelRemainingToolCalls(toolIndex - 1, '用户已停止本轮运行。')
             throw new Error('USER_STOPPED')
           }
           const toolName = toolUse.function.name
@@ -1670,11 +1737,7 @@ export class AgentRuntime {
             toolCall.status = 'error'
             toolCall.result = toolResultToLegacy(notLoadedResult)
             callbacks.onToolCall?.(toolCall)
-            messages.push({
-              role: 'tool',
-              tool_call_id: toolUse.id,
-              content: stringifyToolResult(notLoadedResult),
-            })
+            appendToolResult(toolUse.id, toolName, args, notLoadedResult)
             continue
           }
 
@@ -1696,11 +1759,7 @@ export class AgentRuntime {
               toolCall.status = 'error'
               toolCall.result = toolResultToLegacy(invalidScriptResult)
               callbacks.onToolCall?.(toolCall)
-              messages.push({
-                role: 'tool',
-                tool_call_id: toolUse.id,
-                content: stringifyToolResult(invalidScriptResult),
-              })
+              appendToolResult(toolUse.id, toolName, args, invalidScriptResult)
               continue
             }
           }
@@ -1807,8 +1866,28 @@ export class AgentRuntime {
             })
             callbacks.onTrace?.(approvalTrace)
 
+            const cancelStoppedApproval = () => {
+              const stoppedResult: AgentToolResult = {
+                ok: false,
+                message: '用户已停止本轮运行，本次待确认操作未执行。',
+                error: 'CANCELLED_BY_USER_STOP',
+              }
+              toolCall.status = 'error'
+              toolCall.result = toolResultToLegacy(stoppedResult)
+              callbacks.onToolCall?.(toolCall)
+              const updatedApprovalTrace = recorder.update(approvalTrace.id, {
+                status: 'error',
+                message: stoppedResult.message,
+                output: stoppedResult,
+              })
+              if (updatedApprovalTrace) callbacks.onTrace?.(updatedApprovalTrace)
+              appendToolResult(toolUse.id, toolName, args, stoppedResult)
+              cancelRemainingToolCalls(toolIndex, stoppedResult.message)
+            }
+
             const approvalPreview = await buildEditorApprovalPreview(tool.name, args)
             if (this.stopped) {
+              cancelStoppedApproval()
               throw new Error('USER_STOPPED')
             }
             let approvalDecision = this.steeringRequested
@@ -1816,7 +1895,11 @@ export class AgentRuntime {
               : await callbacks.requestConfirmation?.(
                   tool.name,
                   args,
-                  approvalPreview ?? { previewParams: args }
+                  {
+                    ...(approvalPreview ?? { previewParams: args }),
+                    runId,
+                    toolCallId: toolUse.id,
+                  }
                 )
 
             agentDebugLog('approval_result', {
@@ -1827,6 +1910,7 @@ export class AgentRuntime {
             })
 
             if (this.stopped) {
+              cancelStoppedApproval()
               throw new Error('USER_STOPPED')
             }
             if (this.steeringRequested) {
@@ -1868,6 +1952,7 @@ export class AgentRuntime {
               })
               if (updatedApprovalTrace) callbacks.onTrace?.(updatedApprovalTrace)
               appendToolResult(toolUse.id, toolName, args, deniedResult)
+              cancelRemainingToolCalls(toolIndex, deniedResult.message)
               finalContent = changes.length > 0
                 ? `已取消当前待确认操作；此前已有 ${changes.length} 项改动成功执行，请以改动记录为准。`
                 : '已取消当前待确认操作，未执行该项改动。'
@@ -1886,6 +1971,7 @@ export class AgentRuntime {
               })
               callbacks.onTrace?.(finalTrace)
 
+              finishKernel('completed', { content: finalContent, detailReason: 'approval-denied' })
               return {
                 runId,
                 content: finalContent,
@@ -1964,7 +2050,7 @@ export class AgentRuntime {
                   '本轮已经读取过相同的编辑器状态，请直接使用此前返回的内容，不要再次读取。',
                 ].join('\n\n'),
               }
-            : await executeToolWithBudget(tool, args)
+            : await executeExclusiveTool(toolUse.id, tool, args)
           const folderAttachmentProgress = getFolderAttachmentProgress(tool.name, args, result)
           const duration = Date.now() - startedAt
           agentDebugLog('tool_execute_end', {
@@ -2184,6 +2270,7 @@ export class AgentRuntime {
 
       finalContent = finalContent || `已达到 ${ABSOLUTE_MAX_MODEL_ROUNDS} 轮绝对安全上限，任务可能未完全完成。`
       callbacks.onFinalAnswerRender?.(finalContent)
+      finishKernel('completed', { content: finalContent, detailReason: 'absolute-round-limit' })
       return {
         runId,
         content: finalContent,
@@ -2208,6 +2295,7 @@ export class AgentRuntime {
         if (finalContent) {
           callbacks.onFinalAnswerRender?.(finalContent)
         }
+        finishKernel('stopped', { content: finalContent })
         return {
           runId,
           content: finalContent,
@@ -2229,7 +2317,19 @@ export class AgentRuntime {
         message,
       })
       callbacks.onTrace?.(errorTrace)
+      finishKernel('error', { message })
       throw new Error(message)
+    }
+    } catch (error) {
+      if (kernel.phase === 'running') {
+        const message = error instanceof Error ? error.message : String(error)
+        finishKernel(this.stopped ? 'stopped' : 'error', { message })
+      }
+      throw error
+    } finally {
+      if (kernel.phase === 'running') {
+        finishKernel(this.stopped ? 'stopped' : 'error', { detailReason: 'runtime-convergence' })
+      }
     }
   }
 }

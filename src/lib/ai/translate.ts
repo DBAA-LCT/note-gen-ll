@@ -3,7 +3,6 @@ import {
   getEditorAISettings,
   prepareMessages,
   createOpenAIClient,
-  handleAIError,
   validateAIService,
   withEditorFastAiRequestOptions,
 } from './utils';
@@ -21,8 +20,8 @@ export async function fetchAiTranslate(text: string, targetLanguage: string): Pr
     // 若不存在则使用编辑器模型，并在未选择时回退到主要模型。
     const aiConfig = await getAISettings('translateModel') || await getEditorAISettings()
 
-    if (await validateAIService(aiConfig?.baseURL) === null) {
-      return ''
+    if (!aiConfig?.model || await validateAIService(aiConfig.baseURL) === null) {
+      throw new Error('AI_CONFIGURATION_INVALID')
     }
     
     // 构建翻译提示词
@@ -41,7 +40,7 @@ export async function fetchAiTranslate(text: string, targetLanguage: string): Pr
     
     return completion.choices[0]?.message?.content || ''
   } catch (error) {
-    return handleAIError(error) || ''
+    throw error
   }
 }
 
@@ -55,8 +54,8 @@ export async function fetchAiTranslateStream(
   try {
     const aiConfig = await getAISettings('translateModel') || await getEditorAISettings()
 
-    if (await validateAIService(aiConfig?.baseURL) === null) {
-      return
+    if (!aiConfig?.model || await validateAIService(aiConfig.baseURL) === null) {
+      throw new Error('AI_CONFIGURATION_INVALID')
     }
 
     const translationPrompt = `Translate the following text to ${targetLanguage}. Maintain the original formatting, markdown syntax, and structure. Output ONLY the translated text.`
@@ -108,7 +107,9 @@ export async function fetchAiTranslateStream(
       onChunk(remaining.content, isFirst)
     }
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (abortSignal?.aborted || (error instanceof Error && (
+      error.name === 'AbortError' || error.message === 'Request was aborted.'
+    ))) {
       return
     }
     throw error

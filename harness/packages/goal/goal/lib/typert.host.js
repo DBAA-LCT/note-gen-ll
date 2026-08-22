@@ -379,70 +379,70 @@ export const TYPERT = {
             "name": "get",
             "signature": "get(agent: Agent): GoalView | undefined",
             "summary": "Read the current goal for one exact live agent.",
-            "jsDoc": "/**\n * Read the current goal for one exact live agent.\n * @param agent - owning live agent.\n * @returns a fresh view or `undefined` when no goal is current.\n * @throws {@link GoalError} when the agent is not the registry's live instance.\n */"
+            "jsDoc": "/**\r\n * Read the current goal for one exact live agent.\r\n * @param agent - owning live agent.\r\n * @returns a fresh view or `undefined` when no goal is current.\r\n * @throws {@link GoalError} when the agent is not the registry's live instance.\r\n */"
           },
           {
             "kind": "method",
             "name": "disarm",
             "signature": "disarm(agent: Agent): GoalView | undefined",
             "summary": "Remove process-local continuation authority without changing durable goal phase or revision.",
-            "jsDoc": "/**\n * Remove process-local continuation authority without changing durable goal\n * phase or revision. Lifecycle owners use this before unloading a driver;\n * a later human-authorized {@link resume} records the new activation edge.\n * @param agent - owning live agent.\n * @returns a fresh disarmed view, or `undefined` when no goal is current.\n */"
+            "jsDoc": "/**\r\n * Remove process-local continuation authority without changing durable goal\r\n * phase or revision. Lifecycle owners use this before unloading a driver;\r\n * a later human-authorized {@link resume} records the new activation edge.\r\n * @param agent - owning live agent.\r\n * @returns a fresh disarmed view, or `undefined` when no goal is current.\r\n */"
           },
           {
             "kind": "method",
             "name": "create",
             "signature": "create(agent: Agent, request: CreateGoalRequest): GoalView",
             "summary": "Create and arm a goal.",
-            "jsDoc": "/**\n * Create and arm a goal. A completed goal may be replaced; every other\n * current phase must be cleared or resumed instead.\n * @param agent - owning live agent.\n * @param request - objective and optional round cap.\n * @returns the created live view.\n */"
+            "jsDoc": "/**\r\n * Create and arm a goal. A completed goal may be replaced; every other\r\n * current phase must be cleared or resumed instead.\r\n * @param agent - owning live agent.\r\n * @param request - objective and optional round cap.\r\n * @returns the created live view.\r\n */"
           },
           {
             "kind": "method",
             "name": "edit",
             "signature": "@Remote('edit') edit(agent: Agent, ref: GoalRef, request: EditGoalRequest): GoalView",
             "summary": "Edit objective and/or round cap without changing phase.",
-            "jsDoc": "/**\n * Edit objective and/or round cap without changing phase.\n * @param agent - owning live agent.\n * @param ref - expected current revision.\n * @param request - at least one replacement field.\n * @returns the edited view.\n */"
+            "jsDoc": "/**\r\n * Edit objective and/or round cap without changing phase.\r\n * @param agent - owning live agent.\r\n * @param ref - expected current revision.\r\n * @param request - at least one replacement field.\r\n * @returns the edited view.\r\n */"
           },
           {
             "kind": "method",
             "name": "pause",
             "signature": "@Remote('pause') pause(agent: Agent, ref: GoalRef): GoalView",
             "summary": "Pause an active goal and disarm automatic continuation.",
-            "jsDoc": "/**\n * Pause an active goal and disarm automatic continuation.\n * @param agent - owning live agent.\n * @param ref - expected current revision.\n * @returns the paused view.\n */"
+            "jsDoc": "/**\r\n * Pause an active goal and disarm automatic continuation.\r\n * @param agent - owning live agent.\r\n * @param ref - expected current revision.\r\n * @returns the paused view.\r\n */"
           },
           {
             "kind": "method",
             "name": "resume",
             "signature": "@Remote('resume') resume(agent: Agent, ref: GoalRef): GoalView",
             "summary": "Resume and arm a stopped goal, or rearm an active goal after a session-start edge, while its round budget still has capacity.",
-            "jsDoc": "/**\n * Resume and arm a stopped goal, or rearm an active goal after a\n * session-start edge, while its round budget still has capacity.\n * @param agent - owning live agent.\n * @param ref - expected current revision.\n * @returns the active view.\n */"
+            "jsDoc": "/**\r\n * Resume and arm a stopped goal, or rearm an active goal after a\r\n * session-start edge, while its round budget still has capacity.\r\n * @param agent - owning live agent.\r\n * @param ref - expected current revision.\r\n * @returns the active view.\r\n */"
           },
           {
             "kind": "method",
             "name": "complete",
             "signature": "@Remote('complete') complete(agent: Agent, ref: GoalRef): GoalView",
             "summary": "Mark a current non-complete goal complete and disarm it.",
-            "jsDoc": "/**\n * Mark a current non-complete goal complete and disarm it.\n * @param agent - owning live agent.\n * @param ref - expected current revision.\n * @returns the completed view.\n */"
+            "jsDoc": "/**\r\n * Mark a current non-complete goal complete and disarm it.\r\n * @param agent - owning live agent.\r\n * @param ref - expected current revision.\r\n * @returns the completed view.\r\n */"
           },
           {
             "kind": "method",
             "name": "block",
             "signature": "block(agent: Agent, ref: GoalRef, reason: GoalBlockReason): GoalView",
             "summary": "Mark an active goal blocked and disarm it.",
-            "jsDoc": "/**\n * Mark an active goal blocked and disarm it.\n * @param agent - owning live agent.\n * @param ref - expected current revision.\n * @param reason - policy-owned stable code and human-readable explanation.\n * @returns the blocked view with its durable reason.\n */"
+            "jsDoc": "/**\r\n * Mark an active goal blocked and disarm it.\r\n * @param agent - owning live agent.\r\n * @param ref - expected current revision.\r\n * @param reason - policy-owned stable code and human-readable explanation.\r\n * @returns the blocked view with its durable reason.\r\n */"
           },
           {
             "kind": "method",
             "name": "clear",
             "signature": "@Remote('clear') clear(agent: Agent, ref: GoalRef): GoalRef",
             "summary": "Clear the current goal while retaining a durable tombstone and history.",
-            "jsDoc": "/**\n * Clear the current goal while retaining a durable tombstone and history.\n * @param agent - owning live agent.\n * @param ref - expected current revision.\n * @returns the tombstone ref whose revision is one past the cleared snapshot.\n */"
+            "jsDoc": "/**\r\n * Clear the current goal while retaining a durable tombstone and history.\r\n * @param agent - owning live agent.\r\n * @param ref - expected current revision.\r\n * @returns the tombstone ref whose revision is one past the cleared snapshot.\r\n */"
           },
           {
             "kind": "method",
             "name": "remoteExportCreate",
             "signature": "@Remote('create') remoteExportCreate(agent: Agent, request: CreateGoalRequest): CreateGoalResult",
             "summary": "Create one Goal through the remote boundary.",
-            "jsDoc": "/**\n * Create one Goal through the remote boundary.\n * @param agent - exact live Agent resolved from the wire identity.\n * @param request - objective and optional round cap.\n * @returns the created Goal identity.\n */"
+            "jsDoc": "/**\r\n * Create one Goal through the remote boundary.\r\n * @param agent - exact live Agent resolved from the wire identity.\r\n * @param request - objective and optional round cap.\r\n * @returns the created Goal identity.\r\n */"
           }
         ],
         "types": [
@@ -790,13 +790,13 @@ export const TYPERT = {
             "name": "param",
             "argument": "payload.agent",
             "comment": "- agent whose session owns the goal.",
-            "text": "@param payload.agent - agent whose session owns the goal.\n     *"
+            "text": "@param payload.agent - agent whose session owns the goal.\r\n     *"
           },
           {
             "name": "param",
             "argument": "payload.change",
             "comment": "- fresh current projection or clear tombstone.",
-            "text": "@param payload.change - fresh current projection or clear tombstone.\n     *"
+            "text": "@param payload.change - fresh current projection or clear tombstone.\r\n     *"
           },
           {
             "name": "mode",
@@ -804,7 +804,7 @@ export const TYPERT = {
             "text": "@mode emit"
           }
         ],
-        "jsDoc": "/**\n * Goal mutation accepted by one live agent. The matching `goal/change`\n * session event has already committed. Listener failures are contained.\n * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.\n * @param payload.agent - agent whose session owns the goal.\n * @param payload.change - fresh current projection or clear tombstone.\n * @mode emit\n */",
+        "jsDoc": "/**\r\n * Goal mutation accepted by one live agent. The matching `goal/change`\r\n * session event has already committed. Listener failures are contained.\r\n * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.\r\n * @param payload.agent - agent whose session owns the goal.\r\n * @param payload.change - fresh current projection or clear tombstone.\r\n * @mode emit\r\n */",
         "name": "goal/changed",
         "mode": "emit",
         "signature": "'goal/changed'(this: import('@deepseek-ai/dsh-scope').Scoped<Agent>, payload: { agent: Agent; change: GoalChanged; }): void"

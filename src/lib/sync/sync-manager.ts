@@ -1,5 +1,7 @@
 import { Store } from '@tauri-apps/plugin-store'
 import { calculateFileSha, getLocalFileMetadata, getRemoteFileInfo, compareFileVersions, pullRemoteFile, saveLocalFile, setLocalRecordedSha } from './auto-sync'
+import { getSyncMetadataKey } from './sync-context'
+import { getSyncBaseline, setSyncBaseline } from './sync-baseline'
 import { decodeBase64ToString } from './github'
 import { updateFileSyncTime } from './conflict-resolution'
 import { getOptionalSyncRepoName } from './repo-utils'
@@ -57,7 +59,7 @@ async function getS3Config(): Promise<S3Config | null> {
   const store = await Store.load('store.json')
   const config = await store.get<S3Config>('s3SyncConfig')
   if (config && config.accessKeyId && config.secretAccessKey && config.region && config.bucket) {
-    return config
+    return { ...config }
   }
   return null
 }
@@ -69,7 +71,7 @@ async function getWebDAVConfig(): Promise<WebDAVConfig | null> {
   const store = await Store.load('store.json')
   const config = await store.get<WebDAVConfig>('webdavSyncConfig')
   if (config && config.url && config.username && config.password) {
-    return config
+    return { ...config }
   }
   return null
 }
@@ -77,7 +79,7 @@ async function getWebDAVConfig(): Promise<WebDAVConfig | null> {
 async function getCloudFolderWorkspaceConfig(): Promise<CloudFolderConfig | null> {
   const store = await Store.load('store.json')
   const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-  return config && supportsCloudFolderWorkspace(config) ? config : null
+  return config && supportsCloudFolderWorkspace(config) ? { ...config } : null
 }
 
 // 同步配置
@@ -229,8 +231,8 @@ export class SyncManager {
   /**
    * 获取远程文件 SHA
    */
-  async getRemoteSha(path: string): Promise<string | null> {
-    const info = await getRemoteFileInfo(path)
+  async getRemoteSha(path: string, selectedMapping?: ResolvedSyncMapping): Promise<string | null> {
+    const info = await getRemoteFileInfo(path, selectedMapping)
     return info.sha || null
   }
 
@@ -245,7 +247,7 @@ export class SyncManager {
 
     try {
       if (!selectedMapping) {
-        const mappings = await resolveSyncMappings(path)
+        const mappings = await resolveSyncMappings(path, undefined, 'write')
         if (mappings.length > 1) {
           const results = []
           for (const mapping of mappings) results.push(await this.pushFile(path, content, mapping))
@@ -262,11 +264,33 @@ export class SyncManager {
       const platform = mapping.platform
       const remotePath = mapping.remoteFilePath
       const repo = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? '' : mapping.remoteTarget
-      const sha = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? undefined : await this.getRemoteSha(path) || undefined
+      const baseline = await getSyncBaseline(path, mapping)
+      const remoteInfoBeforeWrite = await getRemoteFileInfo(path, mapping)
+      if (mapping.syncPolicy !== 'ignore-remote') {
+        const existenceChanged = baseline
+          ? baseline.remoteExists !== remoteInfoBeforeWrite.exists
+          : remoteInfoBeforeWrite.exists
+        const revisionChanged = Boolean(
+          baseline?.lastRemoteRevision
+          && remoteInfoBeforeWrite.sha
+          && baseline.lastRemoteRevision !== remoteInfoBeforeWrite.sha
+        )
+        if (existenceChanged || revisionChanged) {
+          return {
+            success: false,
+            action: 'conflict',
+            error: '远程文件在写入前发生变化，已阻止覆盖',
+          }
+        }
+      }
+      const sha = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder')
+        ? undefined
+        : remoteInfoBeforeWrite.sha
       const message = `Sync: ${path} - ${new Date().toLocaleString('zh-CN')}`
       const filename = path.split('/').pop() || path
 
       let uploadSuccess = false
+      let uploadedRevision: string | undefined
 
       switch (platform) {
         case 'github': {
@@ -296,10 +320,24 @@ export class SyncManager {
           }
           s3Config.bucket = mapping.remoteTarget || s3Config.bucket
           // S3 使用相对路径作为 key，不需要添加 pathPrefix
-          const result = await s3Upload(s3Config, remotePath, content)
+          const result = await s3Upload(
+            s3Config,
+            remotePath,
+            content,
+            undefined,
+            'text/markdown; charset=utf-8',
+            mapping.syncPolicy === 'ignore-remote'
+              ? { throwOnError: true }
+              : {
+                  throwOnError: true,
+                  ifMatch: remoteInfoBeforeWrite.exists ? baseline?.lastRemoteRevision || remoteInfoBeforeWrite.sha : undefined,
+                  ifNoneMatch: !remoteInfoBeforeWrite.exists,
+                },
+          )
           uploadSuccess = !!result
           if (uploadSuccess && result) {
-            // 更新 ETag 记录
+            uploadedRevision = result.etag
+            // 保留 path-only ETag 作为 UI 缓存；同步正确性使用 scoped baseline。
             useSyncStore.getState().updateS3FileEtag(path, result.etag)
           }
           break
@@ -310,10 +348,24 @@ export class SyncManager {
             return { success: false, action: 'push', error: 'WebDAV 配置未找到' }
           }
           webdavConfig.url = mapping.remoteTarget || webdavConfig.url
-          const result = await webdavUpload(webdavConfig, remotePath, content)
+          const result = await webdavUpload(
+            webdavConfig,
+            remotePath,
+            content,
+            undefined,
+            'text/markdown; charset=utf-8',
+            mapping.syncPolicy === 'ignore-remote'
+              ? { throwOnError: true }
+              : {
+                  throwOnError: true,
+                  ifMatch: remoteInfoBeforeWrite.exists ? baseline?.lastRemoteRevision || remoteInfoBeforeWrite.sha : undefined,
+                  ifNoneMatch: !remoteInfoBeforeWrite.exists,
+                },
+          )
           uploadSuccess = !!result
           if (uploadSuccess && result) {
-            // 更新 ETag 记录
+            uploadedRevision = result.etag
+            // 保留 path-only ETag 作为 UI 缓存；同步正确性使用 scoped baseline。
             useSyncStore.getState().updateWebDAVFileEtag(path, result.etag)
           }
           break
@@ -324,19 +376,29 @@ export class SyncManager {
             return { success: false, action: 'push', error: '网盘文件夹未配置' }
           }
           config.path = mapping.remoteTarget || config.path
-          uploadSuccess = Boolean(await androidCloudFolderWorkspaceUpload(config, remotePath, content))
+          const result = await androidCloudFolderWorkspaceUpload(config, remotePath, content)
+          uploadSuccess = Boolean(result)
+          uploadedRevision = result?.etag
           break
         }
       }
 
       if (uploadSuccess) {
-        // 推送成功后更新本地记录的远程 SHA
-        if (platform !== 's3' && platform !== 'webdav') {
-          const newRemoteSha = await this.getRemoteSha(path)
-          if (newRemoteSha) {
-            await setLocalRecordedSha(path, newRemoteSha)
-          }
+        const remoteInfo = uploadedRevision
+          ? { exists: true, sha: uploadedRevision }
+          : await getRemoteFileInfo(path, mapping)
+        if (remoteInfo.sha) {
+          await setLocalRecordedSha(
+            path,
+            remoteInfo.sha,
+            await getSyncMetadataKey(path, mapping),
+          )
         }
+        await setSyncBaseline(path, mapping, {
+          lastLocalContentSha: await calculateFileSha(content),
+          lastRemoteRevision: remoteInfo.sha,
+          remoteExists: true,
+        })
         await this.logSync(path, 'push', true)
         return { success: true, action: 'push', message: '推送成功' }
       }
@@ -352,12 +414,12 @@ export class SyncManager {
   /**
    * 从远程拉取文件
    */
-  async pullFile(path: string): Promise<SyncResult> {
+  async pullFile(path: string, selectedMapping?: ResolvedSyncMapping): Promise<SyncResult> {
     if (shouldExclude(path)) {
       return { success: true, action: 'none', message: '文件被排除在同步之外' }
     }
     try {
-      const mapping = await resolvePrimarySyncMapping(path)
+      const mapping = selectedMapping || await resolvePrimarySyncMapping(path, undefined, 'read')
       if (mapping?.syncPolicy === 'ignore-remote') return { success: true, action: 'none', message: '当前远端文件已设为不拉取' }
       if (!mapping) return { success: true, action: 'none', message: '没有匹配的同步映射' }
       const platform = mapping.platform
@@ -429,6 +491,7 @@ export class SyncManager {
       }
 
       if (hasRemoteFileContent(content)) {
+        const remoteInfo = await getRemoteFileInfo(path, mapping)
         // S3 和 WebDAV 不需要 base64 解码，其他平台需要
         let decodedContent = content
         if (platform !== 's3' && platform !== 'webdav' && platform !== 'cloudFolder') {
@@ -436,13 +499,19 @@ export class SyncManager {
         }
         await saveLocalFile(path, decodedContent)
 
-        // 获取远程文件的 SHA 并更新本地记录
-        if (platform !== 's3' && platform !== 'webdav') {
-          const remoteSha = await this.getRemoteSha(path)
-          if (remoteSha) {
-            await setLocalRecordedSha(path, remoteSha)
-          }
+        // 更新兼容 revision 记录和 mapping-scoped 三方基线
+        if (remoteInfo.sha) {
+          await setLocalRecordedSha(
+            path,
+            remoteInfo.sha,
+            await getSyncMetadataKey(path, mapping),
+          )
         }
+        await setSyncBaseline(path, mapping, {
+          lastLocalContentSha: await calculateFileSha(decodedContent),
+          lastRemoteRevision: remoteInfo.sha,
+          remoteExists: true,
+        })
 
         await updateFileSyncTime(path)
         await this.logSync(path, 'pull', true)
@@ -460,22 +529,24 @@ export class SyncManager {
   /**
    * 删除远程文件
    */
-  async deleteRemoteFile(path: string): Promise<SyncResult> {
+  async deleteRemoteFile(path: string, selectedMapping?: ResolvedSyncMapping): Promise<SyncResult> {
     if (shouldExclude(path)) {
       return { success: true, action: 'none', message: '文件被排除在同步之外' }
     }
     try {
-      const writePolicy = await getSyncPathWritePolicy(path)
-      if (!writePolicy.writable) {
-        return {
-          success: false,
-          action: 'none',
-          error: writePolicy.ambiguous
-            ? '当前文件命中多个同步映射，请在连接器中明确选择远端后再删除'
-            : '当前映射为只读，不允许删除远端文件',
+      if (!selectedMapping) {
+        const writePolicy = await getSyncPathWritePolicy(path)
+        if (!writePolicy.writable) {
+          return {
+            success: false,
+            action: 'none',
+            error: writePolicy.ambiguous
+              ? '当前文件命中多个同步映射，请在连接器中明确选择远端后再删除'
+              : '当前映射为只读，不允许删除远端文件',
+          }
         }
       }
-      const mapping = await resolvePrimarySyncMapping(path)
+      const mapping = selectedMapping || await resolvePrimarySyncMapping(path, undefined, 'write')
       if (!mapping) return { success: true, action: 'none', message: '没有匹配的同步映射' }
       if (mapping.accessMode === 'read-only') {
         return { success: false, action: 'none', error: '当前映射为只读，不允许删除远端文件' }
@@ -483,7 +554,7 @@ export class SyncManager {
       const platform = mapping.platform
       const remotePath = mapping.remoteFilePath
       const repo = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? '' : mapping.remoteTarget
-      const sha = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? undefined : await this.getRemoteSha(path)
+      const sha = (platform === 's3' || platform === 'webdav' || platform === 'cloudFolder') ? undefined : await this.getRemoteSha(path, mapping)
 
       // S3 和 WebDAV 不需要 SHA，但其他平台需要
       if ((platform !== 's3' && platform !== 'webdav' && platform !== 'cloudFolder') && !sha) {
@@ -544,6 +615,11 @@ export class SyncManager {
       }
 
       if (success) {
+        await setSyncBaseline(path, mapping, {
+          lastLocalContentSha: await this.getLocalSha(path) || undefined,
+          lastRemoteRevision: undefined,
+          remoteExists: false,
+        })
         await this.logSync(path, 'delete', true)
         return { success: true, action: 'delete', message: '删除成功' }
       }
@@ -559,7 +635,13 @@ export class SyncManager {
   /**
    * 处理冲突
    */
-  async resolveConflict(path: string, strategy: 'ask' | 'local' | 'remote', localContent?: string, remoteContent?: string): Promise<SyncResult> {
+  async resolveConflict(
+    path: string,
+    strategy: 'ask' | 'local' | 'remote',
+    localContent?: string,
+    remoteContent?: string,
+    selectedMapping?: ResolvedSyncMapping,
+  ): Promise<SyncResult> {
     try {
       // 如果策略是 ask，需要获取用户选择
       if (strategy === 'ask') {
@@ -581,26 +663,36 @@ export class SyncManager {
       }
 
       if (!remoteContent) {
-        remoteContent = await pullRemoteFile(path)
+        remoteContent = await pullRemoteFile(path, selectedMapping)
       }
 
       switch (strategy) {
         case 'local':
           // 保留本地，删除远程然后重新上传
           {
-            const deleteResult = await this.deleteRemoteFile(path)
+            const deleteResult = await this.deleteRemoteFile(path, selectedMapping)
             if (!deleteResult.success) return deleteResult
-            const pushResult = await this.pushFile(path, localContent)
+            const pushResult = await this.pushFile(path, localContent, selectedMapping)
             if (!pushResult.success) return pushResult
           }
           toast({ title: '冲突处理', description: '保留本地版本' })
           break
-        case 'remote':
+        case 'remote': {
           // 使用远程版本
           await saveLocalFile(path, remoteContent)
           await updateFileSyncTime(path)
+          const mapping = selectedMapping || await resolvePrimarySyncMapping(path, undefined, 'read')
+          if (mapping) {
+            const remoteInfo = await getRemoteFileInfo(path, mapping)
+            await setSyncBaseline(path, mapping, {
+              lastLocalContentSha: await calculateFileSha(remoteContent),
+              lastRemoteRevision: remoteInfo.sha,
+              remoteExists: true,
+            })
+          }
           toast({ title: '冲突处理', description: '使用远程版本' })
           break
+        }
       }
 
       return { success: true, action: 'push', message: '冲突已解决' }
@@ -628,12 +720,33 @@ export class SyncManager {
     this.state.isSyncing = true
 
     try {
-      // 获取本地和远程的 SHA
+      const readMapping = await resolvePrimarySyncMapping(path, undefined, 'read')
+      const writeMappings = await resolveSyncMappings(path, undefined, 'write')
+      const mapping = readMapping
+        ?? writeMappings.find(item => item.syncPolicy === 'ignore-remote' && item.accessMode !== 'read-only')
+      if (!mapping) return { success: true, action: 'none', message: '没有可用的同步映射' }
+
+      // push-only/ignore-remote 明确跳过远端读取，但仍允许手动与自动推送。
+      if (!readMapping && mapping.syncPolicy === 'ignore-remote') {
+        const workspace = await getWorkspacePath()
+        const pathOptions = await getFilePathOptions(path)
+        const content = workspace.isCustom
+          ? await readTextFile(pathOptions.path)
+          : await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
+        const result = await this.pushFile(path, content, mapping)
+        if (shouldRecordSuccessfulSync(result)) {
+          this.state.lastSyncTime = Date.now()
+          this.state.lastSyncSha = await this.getLocalSha(path) || ''
+        }
+        return result
+      }
+
+      // 获取本地和所选远端的 SHA
       const localSha = await this.getLocalSha(path)
-      const remoteSha = await this.getRemoteSha(path)
+      const remoteSha = await this.getRemoteSha(path, mapping)
 
       // 比较版本
-      const syncResult = await compareFileVersions(path)
+      const syncResult = await compareFileVersions(path, mapping)
 
       if (syncResult.action === 'none') {
         return { success: true, action: 'none', message: '文件已同步' }
@@ -647,7 +760,7 @@ export class SyncManager {
           ? await readTextFile(pathOptions.path)
           : await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
 
-        const result = await this.pushFile(path, content)
+        const result = await this.pushFile(path, content, mapping)
         if (shouldRecordSuccessfulSync(result)) {
           this.state.lastSyncTime = Date.now()
           this.state.lastSyncSha = localSha || ''
@@ -657,7 +770,7 @@ export class SyncManager {
 
       if (syncResult.action === 'pull') {
         // 拉取远程版本
-        const result = await this.pullFile(path)
+        const result = await this.pullFile(path, mapping)
         if (shouldRecordSuccessfulSync(result)) {
           this.state.lastSyncTime = Date.now()
           this.state.lastSyncSha = remoteSha || ''
@@ -672,14 +785,14 @@ export class SyncManager {
         const localContent = workspace.isCustom
           ? await readTextFile(pathOptions.path)
           : await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
-        const remoteContent = await pullRemoteFile(path)
+        const remoteContent = await pullRemoteFile(path, mapping)
         const choice = await options.onConflict(localContent, remoteContent)
 
         if (choice === 'cancel') {
           return { success: false, action: 'conflict', error: '用户取消' }
         }
 
-        return await this.resolveConflict(path, choice, localContent, remoteContent)
+        return await this.resolveConflict(path, choice, localContent, remoteContent, mapping)
       }
 
       return { success: true, action: 'none' }
@@ -703,7 +816,7 @@ export class SyncManager {
     if (!this.config.autoSync || !this.config.autoPushOnSave) {
       return
     }
-    const mapping = await resolvePrimarySyncMapping(path)
+    const mapping = await resolvePrimarySyncMapping(path, undefined, 'write')
     if (!mapping || mapping.accessMode === 'read-only' || mapping.syncMode !== 'automatic') return
 
     // 检查是否应该排除
@@ -744,11 +857,14 @@ export class SyncManager {
       return null
     }
 
+    const mapping = await resolvePrimarySyncMapping(path, undefined, 'read')
+    if (!mapping || !mapping.autoPullOnOpen) return null
+
     // 比较版本，决定是否需要拉取
-    const syncResult = await compareFileVersions(path)
+    const syncResult = await compareFileVersions(path, mapping)
 
     if (shouldAutoApplyRemote(syncResult.action)) {
-      const result = await this.pullFile(path)
+      const result = await this.pullFile(path, mapping)
       if (result.success && result.action === 'pull') {
         return { updated: true, content: result.content }
       }
@@ -787,8 +903,29 @@ export class SyncManager {
           content = await readTextFile(pathOptions.path, { baseDir: pathOptions.baseDir })
         }
 
-        const result = await this.pushFile(path, content)
-        if (result.success) {
+        const mappings = (await resolveSyncMappings(path, undefined, 'write')).filter(mapping => (
+          mapping.accessMode !== 'read-only' && mapping.syncMode === 'automatic'
+        ))
+        const results: SyncResult[] = []
+        for (const mapping of mappings) {
+          if (mapping.syncPolicy !== 'ignore-remote') {
+            const version = await compareFileVersions(path, mapping)
+            if (version.action === 'none') {
+              results.push({ success: true, action: 'none', message: '文件已同步' })
+              continue
+            }
+            if (version.action !== 'push') {
+              results.push({
+                success: false,
+                action: 'conflict',
+                error: version.reason || '远程存在未合并变更，已阻止自动覆盖',
+              })
+              continue
+            }
+          }
+          results.push(await this.pushFile(path, content, mapping))
+        }
+        if (mappings.length > 0 && results.every(result => result.success)) {
           this.syncQueue.delete(path)
         }
       }
@@ -869,8 +1006,9 @@ export class SyncManager {
    * 获取文件的同步状态
    */
   async getFileSyncStatus(path: string): Promise<SyncState['syncStatus']> {
+    const mapping = await resolvePrimarySyncMapping(path, undefined, 'read')
     const localSha = await this.getLocalSha(path)
-    const remoteSha = await this.getRemoteSha(path)
+    const remoteSha = mapping ? await this.getRemoteSha(path, mapping) : null
 
     if (!localSha && !remoteSha) {
       return 'unknown'

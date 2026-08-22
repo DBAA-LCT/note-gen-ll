@@ -7,8 +7,8 @@ window.__ModuleLoader__.load({
 		let react_jsx_runtime = require("react/jsx-runtime");
 		let react = require("react");
 		let _deepseek_ai_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-skill\src\client\SkillRow.module.css.mjs
-		const css = ".XIanfG_card{flex-direction:column;display:flex}.XIanfG_row{align-items:center;min-width:0;height:24px;display:flex;position:relative;overflow:hidden}.XIanfG_row[data-expandable]{cursor:pointer}.XIanfG_card[data-state=running] .XIanfG_row:after{content:\"\";background:linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--dsw-alias-bg-base) 60%, transparent) 55%, transparent 100%);pointer-events:none;width:300px;animation:2.6s ease-out infinite XIanfG_dsh-skill-row-sweep;position:absolute;inset:0 auto 0 0}@keyframes XIanfG_dsh-skill-row-sweep{0%{left:-300px}90%,to{left:100%}}.XIanfG_leading{width:16px;height:16px;color:var(--dsw-alias-label-tertiary);flex:none;justify-content:center;align-items:center;margin-right:6px;display:inline-flex;position:relative}.XIanfG_chevron{color:var(--dsw-alias-label-secondary)}.XIanfG_iconIdle{opacity:1;transition:opacity .1s;display:inline-flex}.XIanfG_chevronHover{opacity:0;margin:auto;transition:opacity .1s;position:absolute;inset:0}.XIanfG_row:hover .XIanfG_iconIdle{opacity:0}.XIanfG_row:hover .XIanfG_chevronHover{opacity:1}.XIanfG_title{color:var(--dsw-alias-label-secondary);flex:none;font-size:14px;line-height:24px}.XIanfG_separator{background:var(--dsw-alias-label-caption);border-radius:1px;flex:none;width:2px;height:2px;margin:0 8px}.XIanfG_summary{text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--dsw-alias-label-tertiary);flex:auto;font-size:14px;line-height:24px;overflow:hidden}.XIanfG_errorSummary{color:var(--dsw-alias-state-error-primary)}.XIanfG_bodyWrap{flex-direction:column;display:flex}.XIanfG_instructionsCard{border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-markdown-code-block);border-radius:12px;flex-direction:column;max-height:260px;margin:4px 0 4px 4px;display:flex;overflow:hidden}.XIanfG_instructionsHeader{border-bottom:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-markdown-code-block-banner);color:var(--dsw-alias-label-caption);text-transform:uppercase;letter-spacing:.04em;flex:none;padding:8px 12px;font-size:11px;font-weight:500;line-height:16px}.XIanfG_instructions{white-space:pre-wrap;overflow-wrap:anywhere;min-height:0;font:var(--dsw-font-markdown-code-block-small);color:var(--dsw-alias-label-secondary);margin:0;padding:10px 12px 12px;overflow:auto}.XIanfG_instructions[data-error]{color:var(--dsw-alias-state-error-primary)}.XIanfG_instructions::-webkit-scrollbar-thumb{background-clip:padding-box;border:2px solid #0000;border-radius:6px}.XIanfG_instructions::-webkit-scrollbar-track{margin:6px 0}.XIanfG_inspectButton{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-secondary);cursor:pointer;opacity:0;border-radius:999px;align-self:flex-start;align-items:center;gap:4px;margin:4px 0 2px 4px;padding:2px 8px;font-size:11px;line-height:16px;transition:opacity .1s;display:inline-flex}.XIanfG_card:hover .XIanfG_inspectButton,.XIanfG_inspectButton:focus-visible{opacity:1}.XIanfG_inspectButton:hover{background:var(--dsw-alias-interactive-bg-hover-solid);color:var(--dsw-alias-label-primary)}.XIanfG_visuallyHidden{clip:rect(0 0 0 0);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}@media (prefers-reduced-motion:reduce){.XIanfG_card[data-state=running] .XIanfG_row:after{animation:none;display:none}.XIanfG_iconIdle,.XIanfG_chevronHover,.XIanfG_inspectButton{transition:none}}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-skill\src\client\SkillRow.module.css.mjs
+		const css = "._1LK7oa_card{flex-direction:column;display:flex}._1LK7oa_row{align-items:center;min-width:0;height:24px;display:flex;position:relative;overflow:hidden}._1LK7oa_row[data-expandable]{cursor:pointer}._1LK7oa_card[data-state=running] ._1LK7oa_row:after{content:\"\";background:linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--dsw-alias-bg-base) 60%, transparent) 55%, transparent 100%);pointer-events:none;width:300px;animation:2.6s ease-out infinite _1LK7oa_dsh-skill-row-sweep;position:absolute;inset:0 auto 0 0}@keyframes _1LK7oa_dsh-skill-row-sweep{0%{left:-300px}90%,to{left:100%}}._1LK7oa_leading{width:16px;height:16px;color:var(--dsw-alias-label-tertiary);flex:none;justify-content:center;align-items:center;margin-right:6px;display:inline-flex;position:relative}._1LK7oa_chevron{color:var(--dsw-alias-label-secondary)}._1LK7oa_iconIdle{opacity:1;transition:opacity .1s;display:inline-flex}._1LK7oa_chevronHover{opacity:0;margin:auto;transition:opacity .1s;position:absolute;inset:0}._1LK7oa_row:hover ._1LK7oa_iconIdle{opacity:0}._1LK7oa_row:hover ._1LK7oa_chevronHover{opacity:1}._1LK7oa_title{color:var(--dsw-alias-label-secondary);flex:none;font-size:14px;line-height:24px}._1LK7oa_separator{background:var(--dsw-alias-label-caption);border-radius:1px;flex:none;width:2px;height:2px;margin:0 8px}._1LK7oa_summary{text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--dsw-alias-label-tertiary);flex:auto;font-size:14px;line-height:24px;overflow:hidden}._1LK7oa_errorSummary{color:var(--dsw-alias-state-error-primary)}._1LK7oa_bodyWrap{flex-direction:column;display:flex}._1LK7oa_instructionsCard{border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-markdown-code-block);border-radius:12px;flex-direction:column;max-height:260px;margin:4px 0 4px 4px;display:flex;overflow:hidden}._1LK7oa_instructionsHeader{border-bottom:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-markdown-code-block-banner);color:var(--dsw-alias-label-caption);text-transform:uppercase;letter-spacing:.04em;flex:none;padding:8px 12px;font-size:11px;font-weight:500;line-height:16px}._1LK7oa_instructions{white-space:pre-wrap;overflow-wrap:anywhere;min-height:0;font:var(--dsw-font-markdown-code-block-small);color:var(--dsw-alias-label-secondary);margin:0;padding:10px 12px 12px;overflow:auto}._1LK7oa_instructions[data-error]{color:var(--dsw-alias-state-error-primary)}._1LK7oa_instructions::-webkit-scrollbar-thumb{background-clip:padding-box;border:2px solid #0000;border-radius:6px}._1LK7oa_instructions::-webkit-scrollbar-track{margin:6px 0}._1LK7oa_inspectButton{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-secondary);cursor:pointer;opacity:0;border-radius:999px;align-self:flex-start;align-items:center;gap:4px;margin:4px 0 2px 4px;padding:2px 8px;font-size:11px;line-height:16px;transition:opacity .1s;display:inline-flex}._1LK7oa_card:hover ._1LK7oa_inspectButton,._1LK7oa_inspectButton:focus-visible{opacity:1}._1LK7oa_inspectButton:hover{background:var(--dsw-alias-interactive-bg-hover-solid);color:var(--dsw-alias-label-primary)}._1LK7oa_visuallyHidden{clip:rect(0 0 0 0);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}@media (prefers-reduced-motion:reduce){._1LK7oa_card[data-state=running] ._1LK7oa_row:after{animation:none;display:none}._1LK7oa_iconIdle,._1LK7oa_chevronHover,._1LK7oa_inspectButton{transition:none}}";
 		const tagId = "@deepseek-ai/dsh-client-ui-skill/SkillRow.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -18,23 +18,23 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var SkillRow_module_css_default = {
-			"summary": "XIanfG_summary",
-			"title": "XIanfG_title",
-			"errorSummary": "XIanfG_errorSummary",
-			"visuallyHidden": "XIanfG_visuallyHidden",
-			"card": "XIanfG_card",
-			"bodyWrap": "XIanfG_bodyWrap",
-			"separator": "XIanfG_separator",
-			"row": "XIanfG_row",
-			"chevronHover": "XIanfG_chevronHover",
-			"iconIdle": "XIanfG_iconIdle",
-			"instructions": "XIanfG_instructions",
-			"instructionsCard": "XIanfG_instructionsCard",
-			"leading": "XIanfG_leading",
-			"inspectButton": "XIanfG_inspectButton",
-			"instructionsHeader": "XIanfG_instructionsHeader",
-			"chevron": "XIanfG_chevron",
-			"dsh-skill-row-sweep": "XIanfG_dsh-skill-row-sweep"
+			"instructionsHeader": "_1LK7oa_instructionsHeader",
+			"dsh-skill-row-sweep": "_1LK7oa_dsh-skill-row-sweep",
+			"instructions": "_1LK7oa_instructions",
+			"errorSummary": "_1LK7oa_errorSummary",
+			"separator": "_1LK7oa_separator",
+			"instructionsCard": "_1LK7oa_instructionsCard",
+			"bodyWrap": "_1LK7oa_bodyWrap",
+			"chevron": "_1LK7oa_chevron",
+			"leading": "_1LK7oa_leading",
+			"iconIdle": "_1LK7oa_iconIdle",
+			"title": "_1LK7oa_title",
+			"card": "_1LK7oa_card",
+			"row": "_1LK7oa_row",
+			"summary": "_1LK7oa_summary",
+			"inspectButton": "_1LK7oa_inspectButton",
+			"chevronHover": "_1LK7oa_chevronHover",
+			"visuallyHidden": "_1LK7oa_visuallyHidden"
 		};
 		//#endregion
 		//#region lib/types/client/SkillRow.js

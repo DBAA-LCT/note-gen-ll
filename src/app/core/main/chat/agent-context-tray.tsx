@@ -52,25 +52,34 @@ export function AgentContextTray({
   const [showRag, setShowRag] = React.useState(false)
   const [showSkills, setShowSkills] = React.useState(false)
   const [expandedSkillDescriptions, setExpandedSkillDescriptions] = React.useState<string[]>([])
-  const { setActiveFilePath, readArticle } = useArticleStore()
+  const { setActiveFilePath, readArticle, addTab } = useArticleStore()
   const router = useRouter()
   const pathname = usePathname()
 
-  const detailMap = React.useMemo(
-    () => new Map(ragSourceDetails.map((detail) => [detail.filename, detail])),
-    [ragSourceDetails]
-  )
+  const detailMap = React.useMemo(() => {
+    const map = new Map<string, RagSourceDetail>()
+    const filenameCounts = new Map<string, number>()
+    ragSourceDetails.forEach(detail => {
+      filenameCounts.set(detail.filename, (filenameCounts.get(detail.filename) || 0) + 1)
+      if (detail.sourceKey) map.set(detail.sourceKey, detail)
+    })
+    ragSourceDetails.forEach(detail => {
+      if (filenameCounts.get(detail.filename) === 1) map.set(detail.filename, detail)
+    })
+    return map
+  }, [ragSourceDetails])
 
   const sourceSummary = React.useMemo(() => {
     const counts = { article: 0, record: 0, canvas: 0, unknown: 0 }
     ragSources.forEach((source) => {
       const sourceType = detailMap.get(source)?.sourceType
-      if (sourceType === 'article' || sourceType === 'record') counts[sourceType] += 1
+      if (sourceType === 'article' || sourceType === 'record' || sourceType === 'canvas') counts[sourceType] += 1
       else counts.unknown += 1
     })
     const parts = [
       counts.article ? t('articleCount', { count: counts.article }) : '',
       counts.record ? t('recordCount', { count: counts.record }) : '',
+      counts.canvas ? t('sourceCount', { count: counts.canvas }) : '',
       counts.unknown ? t('sourceCount', { count: counts.unknown }) : '',
     ].filter(Boolean)
     return new Intl.ListFormat(locale, { style: 'short', type: 'conjunction' }).format(parts)
@@ -86,6 +95,27 @@ export function AgentContextTray({
       useMarkStore.getState().setPendingScrollMarkId(detail.locator.markId)
       useMarkStore.getState().setHighlightedMarkId(detail.locator.markId)
       if (pathname.startsWith('/mobile')) router.push('/mobile/record')
+      return
+    }
+
+    if (detail.sourceType === 'canvas') {
+      const canvasId = detail.locator?.canvasId || detail.sourceId
+      if (!canvasId) return
+      const { default: useCanvasStore } = await import('@/stores/canvas')
+      const canvasStore = useCanvasStore.getState()
+      const project = await canvasStore.openProject(canvasId)
+      if (!project) return
+      await addTab({
+        id: `canvas:${canvasId}`,
+        path: `canvas://project/${canvasId}`,
+        name: project.title,
+        isFolder: false,
+        kind: 'canvas',
+        canvasId,
+      })
+      if (detail.locator?.nodeIds?.length) {
+        canvasStore.setPendingFocus({ canvasId, nodeIds: detail.locator.nodeIds })
+      }
       return
     }
 
@@ -150,7 +180,7 @@ export function AgentContextTray({
                   <div key={source} className="flex flex-col gap-1 py-1 text-xs">
                     <Marker>
                       <MarkerIcon>{sourceIcon(detail?.sourceType)}</MarkerIcon>
-                      <MarkerContent className="flex-1 truncate">{source}</MarkerContent>
+                      <MarkerContent className="flex-1 truncate">{detail?.filename || source}</MarkerContent>
                       {detail && (
                         <button
                           type="button"

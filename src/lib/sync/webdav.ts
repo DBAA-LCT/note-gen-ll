@@ -424,7 +424,8 @@ export async function webdavUpload(
   key: string,
   content: string | Uint8Array,
   proxy?: Proxy,
-  contentType = 'text/markdown; charset=utf-8'
+  contentType = 'text/markdown; charset=utf-8',
+  condition?: { ifMatch?: string; ifNoneMatch?: boolean; throwOnError?: boolean },
 ): Promise<{ etag: string } | null> {
   const uploadStartedAt = getPerfNow()
   let previousPerfAt = uploadStartedAt
@@ -463,9 +464,11 @@ export async function webdavUpload(
       headers: {
         'Authorization': buildAuthHeader(config.username, config.password),
         'Content-Type': contentType,
-        'Content-Length': contentBytes.byteLength.toString()
+        'Content-Length': contentBytes.byteLength.toString(),
+        ...(condition?.ifMatch ? { 'If-Match': condition.ifMatch } : {}),
+        ...(condition?.ifNoneMatch ? { 'If-None-Match': '*' } : {}),
       },
-      body: contentBytes,
+      body: contentBytes as BodyInit,
       proxy
     })
     markTemporaryBlocked(config, response, 'upload')
@@ -487,6 +490,9 @@ export async function webdavUpload(
         status: response.status,
         bodyLength: errorText.length,
       })
+      if (condition?.throwOnError && (response.status === 409 || response.status === 412)) {
+        throw Object.assign(new Error(errorText || 'WebDAV conditional write conflict'), { status: response.status })
+      }
       const parentCheck = response.status === 404 || response.status === 409
         ? await inspectParentCollection(config, key, proxy).catch(() => null)
         : null
@@ -507,6 +513,9 @@ export async function webdavUpload(
       if (!isTemporaryBlockStatus(response.status)) {
         console.error('WebDAV Upload failed:', response.status, errorText)
       }
+      if (condition?.throwOnError) {
+        throw Object.assign(new Error(errorText || `WebDAV upload failed (${response.status})`), { status: response.status })
+      }
       return null
     }
   } catch (error) {
@@ -514,6 +523,7 @@ export async function webdavUpload(
       message: error instanceof Error ? error.message : String(error),
     })
     console.error('WebDAV upload error:', error)
+    if (condition?.throwOnError) throw error
     return null
   }
 }
@@ -649,7 +659,7 @@ export async function webdavHeadObject(
   const startedAt = getPerfNow()
   try {
     if (shouldSkipForTemporaryBlock(config, 'headObject', { key })) {
-      return null
+      throw new Error('WebDAV HEAD 暂时受限，请稍后重试')
     }
 
     const url = buildWebDAVUrl(config, key)
@@ -687,7 +697,7 @@ export async function webdavHeadObject(
       if (!isTemporaryBlockStatus(response.status)) {
         console.error('WebDAV HeadObject failed:', response.status, errorText)
       }
-      return null
+      throw new Error(`WebDAV HeadObject failed: ${response.status} ${errorText}`)
     }
   } catch (error) {
     debugSyncPerf('webdav.headObject.failed', {
@@ -696,7 +706,7 @@ export async function webdavHeadObject(
       totalMs: roundMs(getPerfNow() - startedAt),
     })
     console.error('WebDAV head error:', error)
-    return null
+    throw error
   }
 }
 

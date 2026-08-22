@@ -2,6 +2,7 @@ import type OpenAI from 'openai'
 import type { HarnessSessionEvent } from '@/lib/deepseek-harness/events'
 import type { RuntimeChatAttachment } from '@/lib/chat-attachments'
 import type { AgentImageAttachment } from '@/lib/chat-image-context'
+import type { KernelEvent } from './kernel'
 
 export type JsonPrimitive = string | number | boolean | null
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
@@ -253,6 +254,7 @@ export interface AgentSteeringPayload {
 export type AgentApprovalDecision = 'approved' | 'denied' | 'steered'
 
 export interface AgentRuntimeCallbacks {
+  onKernelEvent?: (event: KernelEvent) => void
   onStatus?: (status: AgentRunStatus) => void
   onTrace?: (event: AgentTraceEvent) => void
   onToolCall?: (toolCall: ToolCall) => void
@@ -265,6 +267,8 @@ export interface AgentRuntimeCallbacks {
     toolName: string,
     params: Record<string, unknown>,
     context?: {
+      runId?: string
+      toolCallId?: string
       previewParams?: Record<string, unknown>
       originalContent?: string
       modifiedContent?: string
@@ -323,6 +327,11 @@ export interface ToolCall {
 }
 
 export interface ConfirmationRecord {
+  approvalId: string
+  runToken: string
+  conversationId: number | null
+  runId: string
+  toolCallId: string
   toolName: string
   params: Record<string, any>
   status: 'pending' | 'confirmed' | 'cancelled' | 'superseded'
@@ -334,6 +343,8 @@ export interface ConfirmationRecord {
 
 export interface AgentState {
   activeChatId?: number
+  /** UI-owned immutable token used to reject callbacks from stale agent runs. */
+  clientRunToken?: string
   runId?: string
   status?: AgentRunStatus
   isRunning: boolean
@@ -351,6 +362,11 @@ export interface AgentState {
   maxIterations: number
   currentIteration: number
   pendingConfirmation?: {
+    approvalId: string
+    runToken: string
+    conversationId: number | null
+    runId: string
+    toolCallId: string
     toolName: string
     params: Record<string, any>
     previewParams?: Record<string, any>

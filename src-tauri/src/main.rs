@@ -10,7 +10,6 @@ mod backup;
 mod backup_manager;
 mod cloud_folder_sync;
 mod database_recovery;
-mod deepseek_harness;
 mod device;
 mod file_open;
 mod fonts;
@@ -41,10 +40,6 @@ use cloud_folder_sync::{
     read_cloud_folder_sync_file, test_cloud_folder_sync, write_cloud_folder_sync_file,
 };
 use device::get_device_id;
-use deepseek_harness::{
-    request_deepseek_harness, respond_deepseek_harness, start_deepseek_harness, stop_deepseek_harness,
-    DeepSeekHarnessManager,
-};
 use fonts::list_system_fonts;
 use fuzzy_search::{fuzzy_search, fuzzy_search_parallel};
 use keywords::rank_keywords;
@@ -92,7 +87,6 @@ fn main() {
         .manage(McpServerManager::new())
         .manage(RuntimeInstallManager::new())
         .manage(AiRequestManager::new())
-        .manage(DeepSeekHarnessManager::new())
         .manage(SkillProcessManager::default())
         .manage(RemoteSkillManager::default())
         .manage(WebClipperState::new())
@@ -156,10 +150,6 @@ fn main() {
             ai_multipart_request,
             ai_chat_completion_stream,
             cancel_ai_request,
-            start_deepseek_harness,
-            request_deepseek_harness,
-            respond_deepseek_harness,
-            stop_deepseek_harness,
             update_tray_record_toolbar_config,
             list_ocr_providers,
             run_ocr_provider,

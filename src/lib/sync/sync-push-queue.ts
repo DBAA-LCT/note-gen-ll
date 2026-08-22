@@ -4,27 +4,59 @@ import { Store } from '@tauri-apps/plugin-store'
 import { getWorkspacePath, getFilePathOptions } from '@/lib/workspace'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import emitter from '@/lib/emitter'
-import { pullRemoteFile, setLocalRecordedSha, getLocalRecordedSha } from './auto-sync'
-import { getRemoteFileInfo } from './auto-sync'
+import {
+  calculateFileSha,
+  compareFileVersions,
+  pullRemoteFile,
+  setLocalRecordedSha,
+  getLocalRecordedSha,
+  getRemoteFileInfo,
+} from './auto-sync'
 import useSettingStore from '@/stores/setting'
 import useSyncStore from '@/stores/sync'
 import { CloudFolderConfig, S3Config, WebDAVConfig } from '@/types/sync'
 import { debugSyncPerf } from './remote-file'
 import { generateGitSyncCommitMessage } from './commit-message'
 import { getSyncMetadataKey } from './sync-context'
+import { getSyncBaseline, setSyncBaseline } from './sync-baseline'
 import { supportsCloudFolderWorkspace } from './cloud-folder'
 import {
-  resolvePrimarySyncMapping,
   resolveSyncMappings,
   type ResolvedSyncMapping,
 } from './connector-mappings'
 
 type SyncProvider = 'gitee' | 'github' | 'gitlab' | 'gitea' | 's3' | 'webdav' | 'cloudFolder'
+type SyncMappingIdentity = Pick<ResolvedSyncMapping, 'id' | 'platform' | 'remoteTarget' | 'remoteFilePath'>
+type SyncErrorKind = 'conflict' | 'transient' | 'permanent'
+
+function getMappingIdentity(mapping: ResolvedSyncMapping): SyncMappingIdentity {
+  return {
+    id: mapping.id,
+    platform: mapping.platform,
+    remoteTarget: mapping.remoteTarget,
+    remoteFilePath: mapping.remoteFilePath,
+  }
+}
+
+function classifySyncError(error: unknown): SyncErrorKind {
+  const value = error as { status?: number; response?: { status?: number }; message?: string }
+  const status = value?.status || value?.response?.status || 0
+  const message = (value?.message || String(error)).toLowerCase()
+  const revisionConflict = status === 409
+    || status === 412
+    || (status === 422 && /(sha|revision|blob|commit|out of date|conflict|冲突|过时)/i.test(message))
+    || /(revision|last_commit_id|does not match|out of date|remote file.*变化|远程文件已变化)/i.test(message)
+  if (revisionConflict) return 'conflict'
+  if ([408, 425, 429].includes(status) || status >= 500) return 'transient'
+  if (status >= 400 && status < 500) return 'permanent'
+  if (/(timeout|timed out|network|fetch failed|connection|econn|socket|temporar)/i.test(message)) return 'transient'
+  return 'permanent'
+}
 
 async function getCloudFolderWorkspaceConfig(): Promise<CloudFolderConfig | null> {
   const store = await Store.load('store.json')
   const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-  return config && supportsCloudFolderWorkspace(config) ? config : null
+  return config && supportsCloudFolderWorkspace(config) ? { ...config } : null
 }
 
 /**
@@ -34,7 +66,7 @@ async function getS3Config(): Promise<S3Config | null> {
   const store = await Store.load('store.json')
   const config = await store.get<S3Config>('s3SyncConfig')
   if (config && config.accessKeyId && config.secretAccessKey && config.region && config.bucket) {
-    return config
+    return { ...config }
   }
   return null
 }
@@ -46,7 +78,7 @@ async function getWebDAVConfig(): Promise<WebDAVConfig | null> {
   const store = await Store.load('store.json')
   const config = await store.get<WebDAVConfig>('webdavSyncConfig')
   if (config && config.url && config.username && config.password) {
-    return config
+    return { ...config }
   }
   return null
 }
@@ -65,6 +97,8 @@ interface PushTask {
   timestamp: number
   workspacePath: string
   generation: number
+  retryCount: number
+  notBefore: number
 }
 
 function getPerfNow() {
@@ -94,6 +128,8 @@ class SyncPushQueue {
   private generation = 0
   private workspaceSwitchPauseDepth = 0
   private readonly WORKSPACE_SWITCH_WAIT_TIMEOUT = 3_000
+  private readonly MAX_REQUEUE_ATTEMPTS = 4
+  private readonly RETRY_BASE_DELAY = 500
 
   private get IDLE_THRESHOLD(): number {
     // 动态读取 autoSync 设置
@@ -168,8 +204,8 @@ class SyncPushQueue {
   }
 
   /**
-   * 添加任务到队列 - 只保留最新的任务
-   * 每次调用都会重新开始 10 秒计时
+   * 添加任务到队列：仅合并同一 workspace+path，保留其他文件任务。
+   * 每次调用都会重新开始空闲计时。
    */
   addTask(path: string) {
     if (this.workspaceSwitchPauseDepth > 0) return
@@ -180,21 +216,20 @@ class SyncPushQueue {
       timestamp: now,
       workspacePath: useSettingStore.getState().workspacePath,
       generation: this.generation,
+      retryCount: 0,
+      notBefore: now,
     }
 
     // 重置 lastInputTime，确保从现在开始计算 10 秒
     this.lastInputTime = now
 
-    // 如果当前有任务正在处理
-    if (this.isProcessing) {
-      // Bug fix: Instead of silently dropping, add the task to queue for processing
-      // This ensures all file changes are eventually synced
-      this.queue.push(task)
-      return
-    }
+    // 仅合并同一 workspace+path 的旧任务，绝不覆盖其他文件。
+    this.queue = this.queue.filter(existing => !(
+      existing.workspacePath === task.workspacePath && existing.path === task.path
+    ))
+    this.queue.push(task)
 
-    // 清空队列，只保留最新任务
-    this.queue = [task]
+    if (this.isProcessing) return
 
     // 设置防抖定时器
     this.scheduleFlush()
@@ -236,9 +271,14 @@ class SyncPushQueue {
     // Bug fix: Process all tasks in the queue (newest first)
     // Group by path - keep only the newest task for each path
     const taskMap = new Map<string, PushTask>()
-    while (this.queue.length > 0) {
-      const task = this.queue.shift()!
+    const queuedTasks = this.queue
+    this.queue = []
+    for (const task of queuedTasks) {
       if (task.generation !== this.generation) continue
+      if (task.notBefore > Date.now()) {
+        this.queue.push(task)
+        continue
+      }
       // Only keep the newest task for each path
       const taskKey = `${task.workspacePath}\0${task.path}`
       const existing = taskMap.get(taskKey)
@@ -261,9 +301,11 @@ class SyncPushQueue {
         await new Promise(resolve => setTimeout(resolve, 100))
         // 发送开始推送事件
         emitter.emit('sync-push-started', { path: task.path })
-        await this.pushToRemote(task.path, task)
+        const result = await this.pushToRemote(task.path, task)
+        if (!result.success && result.retryable !== false) this.requeueFailedTask(task)
       } catch (error) {
         console.error(`[SyncPushQueue] Failed to push ${task.path}:`, error)
+        this.requeueFailedTask(task)
       } finally {
         this.isProcessing = false
       }
@@ -278,6 +320,22 @@ class SyncPushQueue {
   /**
    * 推送到远程仓库
    */
+  private requeueFailedTask(task: PushTask) {
+    if (!this.isTaskCurrent(task) || task.retryCount >= this.MAX_REQUEUE_ATTEMPTS) return
+    const retryCount = task.retryCount + 1
+    const retryTask: PushTask = {
+      ...task,
+      retryCount,
+      notBefore: Date.now() + Math.min(this.RETRY_BASE_DELAY * 2 ** (retryCount - 1), 8_000),
+    }
+    const hasNewerTask = this.queue.some(existing => (
+      existing.workspacePath === task.workspacePath
+      && existing.path === task.path
+      && existing.timestamp >= task.timestamp
+    ))
+    if (!hasNewerTask) this.queue.push(retryTask)
+  }
+
   private isTaskCurrent(task: PushTask) {
     return task.generation === this.generation
       && task.workspacePath === useSettingStore.getState().workspacePath
@@ -288,9 +346,9 @@ class SyncPushQueue {
     path: string,
     task: PushTask,
     selectedMapping?: ResolvedSyncMapping,
-  ): Promise<{ success: boolean; sha?: string }> {
+  ): Promise<{ success: boolean; sha?: string; retryable?: boolean }> {
     if (!selectedMapping) {
-      const mappings = (await resolveSyncMappings(path)).filter(mapping => (
+      const mappings = (await resolveSyncMappings(path, undefined, 'write')).filter(mapping => (
         mapping.accessMode !== 'read-only' && mapping.syncMode === 'automatic'
       ))
       if (mappings.length > 1) {
@@ -299,16 +357,19 @@ class SyncPushQueue {
         return {
           success: results.every(result => result.success),
           sha: results.find(result => result.sha)?.sha,
+          retryable: results
+            .filter(result => !result.success)
+            .some(result => result.retryable !== false),
         }
       }
       selectedMapping = mappings[0]
     }
     const mapping = selectedMapping
     if (!mapping || mapping.accessMode === 'read-only' || mapping.syncMode !== 'automatic') {
-      return { success: false }
+      return { success: false, retryable: false }
     }
     const remotePath = mapping.remoteFilePath
-    const maxRetries = 3
+    const maxRetries = 1
     const syncStartedAt = getPerfNow()
     let previousPerfAt = syncStartedAt
     let providerForLog: SyncProvider | 'unknown' = 'unknown'
@@ -324,8 +385,31 @@ class SyncPushQueue {
       previousPerfAt = now
     }
 
-    const taskSyncMetadataKey = await getSyncMetadataKey(path)
+    const taskSyncMetadataKey = await getSyncMetadataKey(path, mapping)
+    const expectedRemoteRevision = (await getSyncBaseline(path, mapping))?.lastRemoteRevision
     if (!this.isTaskCurrent(task)) return { success: false }
+
+    if (mapping.syncPolicy !== 'ignore-remote') {
+      const version = await compareFileVersions(path, mapping)
+      if (version.action === 'none') {
+        const remoteInfo = await getRemoteFileInfo(path, mapping)
+        emitter.emit('sync-push-completed', { path, success: true, sha: remoteInfo.sha })
+        return { success: true, sha: remoteInfo.sha }
+      }
+      if (version.action !== 'push') {
+        const remoteInfo = await getRemoteFileInfo(path, mapping)
+        emitter.emit('sync-sha-mismatch', {
+          path,
+          workspacePath: task.workspacePath,
+          localSha: await getLocalRecordedSha(path, mapping) || undefined,
+          remoteSha: remoteInfo.sha,
+          force: false,
+          mapping: getMappingIdentity(mapping),
+        })
+        emitter.emit('sync-push-completed', { path, success: false })
+        return { success: false, retryable: false }
+      }
+    }
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -356,9 +440,12 @@ class SyncPushQueue {
           contentLength: content.length,
         })
 
-        // 检查本地内容是否与远程相同，如果相同则跳过推送
-        try {
-          const remoteContent = await pullRemoteFile(path)
+        // 先显式查询存在性；查询异常必须中止，不能被当成 not-found 后覆盖远端。
+        const currentRemoteInfo = mapping.syncPolicy === 'ignore-remote'
+          ? { exists: false as const, sha: undefined }
+          : await getRemoteFileInfo(path, mapping)
+        if (currentRemoteInfo.exists) {
+          const remoteContent = await pullRemoteFile(path, mapping)
           logPerf('pullRemoteFile', {
             attempt,
             remoteLength: remoteContent.length,
@@ -366,14 +453,12 @@ class SyncPushQueue {
           })
           if (remoteContent === content) {
             if (!this.isTaskCurrent(task)) return { success: false }
-            // 获取远程 SHA 用于更新文件树
-            const remoteSha = await this.getRemoteSha(path)
+            const remoteSha = currentRemoteInfo.sha
             if (!this.isTaskCurrent(task)) return { success: false }
             logPerf('getRemoteShaWhenSame', {
               attempt,
               hasSha: Boolean(remoteSha),
             })
-            // 更新本地记录的 SHA，这样下次推送时就会检测到 SHA 匹配而跳过
             if (remoteSha) {
               await setLocalRecordedSha(path, remoteSha, taskSyncMetadataKey)
               logPerf('recordLocalSha', {
@@ -381,7 +466,11 @@ class SyncPushQueue {
                 hasSha: true,
               })
             }
-            // 发送完成事件
+            await setSyncBaseline(path, mapping, {
+              lastLocalContentSha: await calculateFileSha(content),
+              lastRemoteRevision: remoteSha,
+              remoteExists: true,
+            })
             emitter.emit('sync-push-completed', { path, success: true, sha: remoteSha })
             logPerf('completed', {
               attempt,
@@ -391,12 +480,6 @@ class SyncPushQueue {
             })
             return { success: true, sha: remoteSha }
           }
-        } catch (remoteError) {
-          // 远程文件不存在或获取失败，继续推送
-          logPerf('pullRemoteFileFailed', {
-            attempt,
-            message: remoteError instanceof Error ? remoteError.message : String(remoteError),
-          })
         }
 
         const needsCommitMessage = provider !== 's3' && provider !== 'webdav' && provider !== 'cloudFolder'
@@ -444,14 +527,14 @@ class SyncPushQueue {
                 success: false,
                 reason: 'remote-is-directory',
               })
-              return { success: false }
+              return { success: false, retryable: false }
             }
 
             const result = await githubModule.uploadFile({
               ext: path.split('.').pop() || 'md',
               file: content,
               filename: path.split('/').pop() || path,
-              sha: fileInfo?.sha,
+              sha: expectedRemoteRevision || fileInfo?.sha,
               message: commitMessage,
               repo,
               path: remotePath
@@ -490,14 +573,14 @@ class SyncPushQueue {
                 success: false,
                 reason: 'remote-is-directory',
               })
-              return { success: false }
+              return { success: false, retryable: false }
             }
 
             const result = await giteeModule.uploadFile({
               ext: path.split('.').pop() || 'md',
               file: content,
               filename: path.split('/').pop() || path,
-              sha: fileInfo?.sha,
+              sha: expectedRemoteRevision || fileInfo?.sha,
               message: commitMessage,
               repo,
               path: remotePath
@@ -534,12 +617,12 @@ class SyncPushQueue {
                 success: false,
                 reason: 'remote-is-directory',
               })
-              return { success: false }
+              return { success: false, retryable: false }
             }
             const result = await gitlabModule.uploadFile({
               file: content,
               filename: path.split('/').pop() || path,
-              sha: fileInfo?.sha, // GitLab 会用 sha 获取 last_commit_id
+              sha: expectedRemoteRevision || fileInfo?.sha, // GitLab provider uses this as an update marker
               message: commitMessage,
               repo,
               path: remotePath
@@ -552,7 +635,7 @@ class SyncPushQueue {
             if (result && result.data) {
               success = true
               // GitLab 上传成功后从 commit 获取 SHA
-              uploadedSha = await this.getRemoteSha(path)
+              uploadedSha = await this.getRemoteSha(path, mapping)
               logPerf('refreshUploadedSha', {
                 attempt,
                 hasSha: Boolean(uploadedSha),
@@ -579,12 +662,12 @@ class SyncPushQueue {
                 success: false,
                 reason: 'remote-is-directory',
               })
-              return { success: false }
+              return { success: false, retryable: false }
             }
             const result = await giteaModule.uploadFile({
               file: content,
               filename: path.split('/').pop() || path,
-              sha: fileInfo?.sha, // 传递 SHA 以便 Gitea 进行冲突检测
+              sha: expectedRemoteRevision || fileInfo?.sha, // 基线 SHA 用作条件更新
               message: commitMessage,
               repo,
               path: remotePath
@@ -597,7 +680,7 @@ class SyncPushQueue {
             if (result && result.data) {
               success = true
               // Gitea 上传成功后从 commit 获取 SHA
-              uploadedSha = await this.getRemoteSha(path)
+              uploadedSha = await this.getRemoteSha(path, mapping)
               logPerf('refreshUploadedSha', {
                 attempt,
                 hasSha: Boolean(uploadedSha),
@@ -618,7 +701,7 @@ class SyncPushQueue {
                 success: false,
                 reason: 'missing-config',
               })
-              return { success: false }
+              return { success: false, retryable: false }
             }
 
             // 获取代理配置
@@ -628,16 +711,29 @@ class SyncPushQueue {
               hasProxy: Boolean(proxy),
             })
 
-            // S3 不需要 SHA 检查，直接上传
-            const result = await s3Module.s3Upload(s3Config, remotePath, content, proxy)
+            // S3 条件写
+            const result = await s3Module.s3Upload(
+              s3Config,
+              remotePath,
+              content,
+              proxy,
+              'text/markdown; charset=utf-8',
+              mapping.syncPolicy === 'ignore-remote'
+                ? { throwOnError: true }
+                : {
+                    throwOnError: true,
+                    ifMatch: currentRemoteInfo.exists ? expectedRemoteRevision || currentRemoteInfo.sha : undefined,
+                    ifNoneMatch: !currentRemoteInfo.exists,
+                  },
+            )
             logPerf('uploadFile', {
               attempt,
               hasResult: Boolean(result),
               hasEtag: Boolean(result?.etag),
             })
-            if (result && result.etag) {
+            if (result) {
               success = true
-              uploadedSha = result.etag // 使用 ETag 作为标识
+              uploadedSha = result.etag || undefined // 使用 ETag 作为标识
               // 更新本地记录的 ETag
               if (this.isTaskCurrent(task)) {
                 useSyncStore.getState().updateS3FileEtag(path, result.etag)
@@ -658,7 +754,7 @@ class SyncPushQueue {
                 success: false,
                 reason: 'missing-config',
               })
-              return { success: false }
+              return { success: false, retryable: false }
             }
 
             // 获取代理配置
@@ -668,8 +764,21 @@ class SyncPushQueue {
               hasProxy: Boolean(proxy),
             })
 
-            // WebDAV 不需要 SHA 检查，直接上传
-            const result = await webdavModule.webdavUpload(webdavConfig, remotePath, content, proxy)
+            // WebDAV 条件写
+            const result = await webdavModule.webdavUpload(
+              webdavConfig,
+              remotePath,
+              content,
+              proxy,
+              'text/markdown; charset=utf-8',
+              mapping.syncPolicy === 'ignore-remote'
+                ? { throwOnError: true }
+                : {
+                    throwOnError: true,
+                    ifMatch: currentRemoteInfo.exists ? expectedRemoteRevision || currentRemoteInfo.sha : undefined,
+                    ifNoneMatch: !currentRemoteInfo.exists,
+                  },
+            )
             logPerf('uploadFile', {
               attempt,
               hasResult: Boolean(result),
@@ -677,7 +786,7 @@ class SyncPushQueue {
             })
             if (result) {
               success = true
-              uploadedSha = result.etag || 'uploaded' // 使用 ETag 作为标识，空字符串使用默认值
+              uploadedSha = result.etag || undefined // 使用 ETag 作为标识，空字符串使用默认值
               // 更新本地记录的 ETag
               if (this.isTaskCurrent(task)) {
                 useSyncStore.getState().updateWebDAVFileEtag(path, result.etag || '')
@@ -690,7 +799,7 @@ class SyncPushQueue {
             if (config) config.path = mapping.remoteTarget || config.path
             if (!config) {
               emitter.emit('sync-push-completed', { path, success: false })
-              return { success: false }
+              return { success: false, retryable: false }
             }
             const { androidCloudFolderWorkspaceUpload } = await import('@/lib/sync/cloud-folder')
             const result = await androidCloudFolderWorkspaceUpload(config, remotePath, content)
@@ -705,14 +814,20 @@ class SyncPushQueue {
             emitter.emit('sync-push-completed', { path, success: false })
             return { success: false }
           }
-          // 推送成功后，保存远程 SHA 到本地 store
-          if (uploadedSha) {
-            await setLocalRecordedSha(path, uploadedSha, taskSyncMetadataKey)
+          // 推送成功后，保存 scoped revision 和三方同步基线
+          const remoteRevision = uploadedSha || await this.getRemoteSha(path, mapping)
+          if (remoteRevision) {
+            await setLocalRecordedSha(path, remoteRevision, taskSyncMetadataKey)
             logPerf('recordLocalSha', {
               attempt,
               hasSha: true,
             })
           }
+          await setSyncBaseline(path, mapping, {
+            lastLocalContentSha: await calculateFileSha(content),
+            lastRemoteRevision: remoteRevision,
+            remoteExists: true,
+          })
           emitter.emit('sync-push-completed', { path, success: true, sha: uploadedSha })
           logPerf('completed', {
             attempt,
@@ -728,7 +843,7 @@ class SyncPushQueue {
             success: false,
             reason: 'empty-upload-result',
           })
-          return { success: false }
+          return { success: false, retryable: true }
         }
       } catch (error: any) {
         if (!this.isTaskCurrent(task)) return { success: false }
@@ -737,95 +852,53 @@ class SyncPushQueue {
           message: error instanceof Error ? error.message : String(error),
           status: error?.status,
         })
-        // 检查是否是 SHA 不匹配错误
-        const errorMessage = error?.message || ''
-        const errorStatus = error?.status || 0
-
-        // SHA 不匹配错误的特征：
-        // 1. HTTP 状态码 422 (Unprocessable Entity) - GitHub/GitLab 常用
-        // 2. HTTP 状态码 409 (Conflict) - 文件冲突
-        // 3. 错误消息包含相关关键词
-        const isShaMismatch =
-          errorStatus === 422 ||
-          errorStatus === 409 ||
-          errorMessage.includes('does not match') ||
-          errorMessage.includes('sha') ||
-          errorMessage.includes('SHA') ||
-          errorMessage.includes('blob') ||
-          errorMessage.includes('conflict') ||
-          errorMessage.includes('out of date') ||
-          errorMessage.includes('已过时') ||
-          errorMessage.includes('冲突')
-
-        // 如果是 SHA 不匹配错误且是首次尝试，显示确认对话框让用户选择
-        if (isShaMismatch && attempt === 1) {
-          // 获取本地记录的 SHA 和远程 SHA
-          const localRecordedSha = await getLocalRecordedSha(path)
-          const remoteFileInfo = await getRemoteFileInfo(path)
-          const remoteFileSha = remoteFileInfo.sha
-          logPerf('shaMismatchInfo', {
+        const classification = classifySyncError(error)
+        if (classification === 'conflict') {
+          const localRecordedSha = await getLocalRecordedSha(path, mapping)
+          const remoteFileInfo = await getRemoteFileInfo(path, mapping)
+          logPerf('revisionConflict', {
             attempt,
             hasLocalSha: Boolean(localRecordedSha),
-            hasRemoteSha: Boolean(remoteFileSha),
+            hasRemoteSha: Boolean(remoteFileInfo.sha),
           })
-
-          // 发射事件让 UI 显示确认对话框
           emitter.emit('sync-sha-mismatch', {
             path,
-            workspacePath: useSettingStore.getState().workspacePath,
+            workspacePath: task.workspacePath,
             localSha: localRecordedSha || undefined,
-            remoteSha: remoteFileSha || undefined,
-            force: false
+            remoteSha: remoteFileInfo.sha || undefined,
+            force: false,
+            mapping: getMappingIdentity(mapping),
           })
-
-          // 不再自动重试，等待用户确认
           emitter.emit('sync-push-completed', { path, success: false })
-          logPerf('completed', {
-            attempt,
-            success: false,
-            reason: 'sha-mismatch',
-          })
-          return { success: false }
+          return { success: false, retryable: false }
         }
 
-        if (isShaMismatch && attempt < maxRetries) {
-          // 等待一段时间后重试（指数退避）
-          const waitTime = Math.pow(2, attempt - 1) * 500
-          logPerf('retryWait', {
-            attempt,
-            waitMs: waitTime,
-          })
+        if (classification === 'transient' && attempt < maxRetries) {
+          const waitTime = Math.pow(2, attempt - 1) * 500 + Math.floor(Math.random() * 200)
+          logPerf('retryWait', { attempt, waitMs: waitTime })
           await new Promise(resolve => setTimeout(resolve, waitTime))
           continue
         }
 
-        // 如果是最后一次尝试或不是 SHA 错误，打印错误日志
-        if (attempt === maxRetries || !isShaMismatch) {
-          console.error('[SyncPushQueue] 推送失败:', error)
-          emitter.emit('sync-push-completed', { path, success: false })
-          logPerf('completed', {
-            attempt,
-            success: false,
-            reason: 'error',
-          })
-          return { success: false }
-        }
+        console.error('[SyncPushQueue] 推送失败:', error)
+        emitter.emit('sync-push-completed', { path, success: false })
+        logPerf('completed', { attempt, success: false, reason: classification })
+        return { success: false, retryable: classification === 'transient' }
       }
     }
 
-    return { success: false }
+    return { success: false, retryable: false }
   }
 
   /**
    * 获取远程文件的 SHA
    */
-  private async getRemoteSha(path: string): Promise<string | undefined> {
-    try {
-      const info = await getRemoteFileInfo(path)
-      return info.sha
-    } catch {
-      return undefined
-    }
+  private async getRemoteSha(
+    path: string,
+    mapping: ResolvedSyncMapping,
+  ): Promise<string | undefined> {
+    const info = await getRemoteFileInfo(path, mapping)
+    return info.sha
   }
 
   /**
@@ -835,9 +908,18 @@ class SyncPushQueue {
   async forcePush(
     path: string,
     expectedWorkspacePath = useSettingStore.getState().workspacePath,
+    mappingIdentity?: SyncMappingIdentity,
   ): Promise<{ success: boolean; sha?: string }> {
     try {
-      const mapping = await resolvePrimarySyncMapping(path)
+      const mappings = await resolveSyncMappings(path, undefined, 'write')
+      const mapping = mappingIdentity
+        ? mappings.find(item => (
+            item.id === mappingIdentity.id
+            && item.platform === mappingIdentity.platform
+            && item.remoteTarget === mappingIdentity.remoteTarget
+            && item.remoteFilePath === mappingIdentity.remoteFilePath
+          ))
+        : mappings.length === 1 ? mappings[0] : undefined
       if (!mapping || mapping.accessMode === 'read-only') return { success: false }
       const remotePath = mapping.remoteFilePath
       if (
@@ -866,6 +948,9 @@ class SyncPushQueue {
 
       let success = false
       let uploadedSha: string | undefined
+      // “强制”只跳过本地基线冲突提示；实际更新仍使用刚读取的远端 revision，
+      // 防止确认后到写入前发生的第三方修改被静默覆盖。
+      const currentRemoteInfo = await getRemoteFileInfo(path, mapping)
 
       switch (provider) {
         case 'github': {
@@ -875,7 +960,7 @@ class SyncPushQueue {
             ext: path.split('.').pop() || 'md',
             file: content,
             filename: path.split('/').pop() || path,
-            sha: undefined, // 强制上传，不带 sha
+            sha: currentRemoteInfo.sha,
             message: commitMessage,
             repo,
             path: remotePath
@@ -892,7 +977,7 @@ class SyncPushQueue {
             ext: path.split('.').pop() || 'md',
             file: content,
             filename: path.split('/').pop() || path,
-            sha: undefined, // 强制上传
+            sha: currentRemoteInfo.sha,
             message: commitMessage,
             repo,
             path: remotePath
@@ -909,13 +994,13 @@ class SyncPushQueue {
           await gitlabModule.uploadFile({
             file: content,
             filename: path.split('/').pop() || path,
-            sha: undefined,
+            sha: currentRemoteInfo.sha,
             message: commitMessage,
             repo,
             path: remotePath
           })
           success = true
-          uploadedSha = await this.getRemoteSha(path)
+          uploadedSha = await this.getRemoteSha(path, mapping)
           break
         }
         case 'gitea': {
@@ -923,13 +1008,13 @@ class SyncPushQueue {
           await giteaModule.uploadFile({
             file: content,
             filename: path.split('/').pop() || path,
-            sha: undefined,
+            sha: currentRemoteInfo.sha,
             message: commitMessage,
             repo,
             path: remotePath
           })
           success = true
-          uploadedSha = await this.getRemoteSha(path)
+          uploadedSha = await this.getRemoteSha(path, mapping)
           break
         }
         case 's3': {
@@ -945,13 +1030,23 @@ class SyncPushQueue {
           // 获取代理配置
           const proxy = await getProxyConfig()
 
-          // S3 强制推送：直接上传，不检查 ETag
-          const result = await s3Module.s3Upload(s3Config, remotePath, content, proxy)
-          if (result && result.etag) {
+          const result = await s3Module.s3Upload(
+            s3Config,
+            remotePath,
+            content,
+            proxy,
+            'text/markdown; charset=utf-8',
+            {
+              throwOnError: true,
+              ifMatch: currentRemoteInfo.exists ? currentRemoteInfo.sha : undefined,
+              ifNoneMatch: !currentRemoteInfo.exists,
+            },
+          )
+          if (result) {
             success = true
-            uploadedSha = result.etag
+            uploadedSha = result.etag || undefined
             // 更新本地记录的 ETag
-            useSyncStore.getState().updateS3FileEtag(path, result.etag)
+            useSyncStore.getState().updateS3FileEtag(path, result.etag || '')
           }
           break
         }
@@ -968,13 +1063,23 @@ class SyncPushQueue {
           // 获取代理配置
           const proxy = await getProxyConfig()
 
-          // WebDAV 强制推送：直接上传，不检查 ETag
-          const result = await webdavModule.webdavUpload(webdavConfig, remotePath, content, proxy)
-          if (result && result.etag) {
+          const result = await webdavModule.webdavUpload(
+            webdavConfig,
+            remotePath,
+            content,
+            proxy,
+            'text/markdown; charset=utf-8',
+            {
+              throwOnError: true,
+              ifMatch: currentRemoteInfo.exists ? currentRemoteInfo.sha : undefined,
+              ifNoneMatch: !currentRemoteInfo.exists,
+            },
+          )
+          if (result) {
             success = true
-            uploadedSha = result.etag
+            uploadedSha = result.etag || undefined
             // 更新本地记录的 ETag
-            useSyncStore.getState().updateWebDAVFileEtag(path, result.etag)
+            useSyncStore.getState().updateWebDAVFileEtag(path, result.etag || '')
           }
           break
         }
@@ -994,10 +1099,19 @@ class SyncPushQueue {
       }
 
       if (success) {
-        // 保存新的 SHA
+        // 保存 scoped revision 和三方同步基线
         if (uploadedSha) {
-          await setLocalRecordedSha(path, uploadedSha)
+          await setLocalRecordedSha(
+            path,
+            uploadedSha,
+            await getSyncMetadataKey(path, mapping),
+          )
         }
+        await setSyncBaseline(path, mapping, {
+          lastLocalContentSha: await calculateFileSha(content),
+          lastRemoteRevision: uploadedSha,
+          remoteExists: true,
+        })
         emitter.emit('sync-push-completed', { path, success: true, sha: uploadedSha })
         return { success: true, sha: uploadedSha }
       } else {

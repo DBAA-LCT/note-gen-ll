@@ -2,8 +2,8 @@ import { Store } from '@tauri-apps/plugin-store'
 import { fetch, Proxy } from '@tauri-apps/plugin-http'
 import { decodeBase64ToString, getFiles as getGithubFiles, getFileCommits as getGithubFileCommits } from '@/lib/sync/github'
 import { getFiles as getGiteeFiles, getFileCommits as getGiteeFileCommits } from '@/lib/sync/gitee'
-import { getFileContent as getGitlabFileContent, getFileCommits as getGitlabFileCommits } from '@/lib/sync/gitlab'
-import { getFileContent as getGiteaFileContent, getFileCommits as getGiteaFileCommits, getGiteaApiBaseUrl } from '@/lib/sync/gitea'
+import { getFileContent as getGitlabFileContent, getFileCommits as getGitlabFileCommits, getFiles as getGitlabFiles } from '@/lib/sync/gitlab'
+import { getFileContent as getGiteaFileContent, getFileCommits as getGiteaFileCommits, getFiles as getGiteaFiles, getGiteaApiBaseUrl } from '@/lib/sync/gitea'
 import { s3HeadObject, s3Download } from './s3'
 import { webdavHeadObject, webdavDownload } from './webdav'
 import { CloudFolderConfig, S3Config, WebDAVConfig } from '@/types/sync'
@@ -23,15 +23,16 @@ import {
   mergeSimpleContent,
   updateFileSyncTime,
   cleanupExpiredLocks,
-  getFileSyncStatus,
-  getFileRestoreTime
 } from './conflict-resolution'
 import { sanitizeFilePath, hasInvalidFileNameChars } from './filename-utils'
 import { useSyncConfirmStore } from '@/stores/sync-confirm'
-import useSyncStore from '@/stores/sync'
 import emitter from '@/lib/emitter'
 import { shouldExclude } from '@/config/sync-exclusions'
-import { resolvePrimarySyncMapping } from './connector-mappings'
+import {
+  resolvePrimarySyncMapping,
+  type ResolvedSyncMapping,
+} from './connector-mappings'
+import { getSyncBaseline, setSyncBaseline } from './sync-baseline'
 
 // Store 实例缓存
 let storeInstance: Store | null = null
@@ -65,10 +66,13 @@ async function getGiteaBranch(): Promise<string> {
 /**
  * 从 store 获取本地记录的远程 SHA
  */
-export async function getLocalRecordedSha(filePath: string): Promise<string | null> {
+export async function getLocalRecordedSha(
+  filePath: string,
+  selectedMapping?: ResolvedSyncMapping,
+): Promise<string | null> {
   const store = await getStore()
   const syncedShas = await store.get<Record<string, string>>('syncedFileShas') || {}
-  const scopedKey = await getSyncMetadataKey(filePath)
+  const scopedKey = await getSyncMetadataKey(filePath, selectedMapping)
   if (syncedShas[scopedKey]) return syncedShas[scopedKey]
 
   const context = await getCurrentSyncContext()
@@ -174,289 +178,199 @@ export async function getLocalFileMetadata(path: string): Promise<FileMetadata> 
 /**
  * 获取远程文件信息
  */
-export async function getRemoteFileInfo(path: string): Promise<{ sha?: string; lastModified?: number }> {
+export interface RemoteFileInfo {
+  sha?: string
+  lastModified?: number
+  exists: boolean
+}
+
+export async function getRemoteFileInfo(
+  path: string,
+  selectedMapping?: ResolvedSyncMapping,
+): Promise<RemoteFileInfo> {
   const store = await Store.load('store.json')
-  const mapping = await resolvePrimarySyncMapping(path)
-  if (!mapping) return { sha: undefined, lastModified: undefined }
-  const primaryBackupMethod = mapping.platform
+  const mapping = selectedMapping || await resolvePrimarySyncMapping(path, undefined, 'read')
+  if (!mapping) return { exists: false }
   const remotePath = mapping.remoteFilePath
+  let file
 
-  try {
-    let file
-    switch (primaryBackupMethod) {
-      case 'github':
-        const githubRepo = mapping.remoteTarget || await getSyncRepoName('github', path)
-        file = await getGithubFiles({ path: remotePath, repo: githubRepo })
-        if (file) {
-          // 获取最新提交信息
-          const commits = await getGithubFileCommits({ path: remotePath, repo: githubRepo })
-          if (commits && commits.length > 0) {
-            return {
-              sha: file.sha,
-              lastModified: new Date(commits[0].commit.committer.date).getTime()
-            }
-          }
-          // 当前平台 API 不直接返回 SHA，返回 undefined
-          return { sha: undefined }
-        }
-        break
-
-      case 'gitee':
-        const giteeRepo = mapping.remoteTarget || await getSyncRepoName('gitee', path)
-        file = await getGiteeFiles({ path: remotePath, repo: giteeRepo })
-        if (file) {
-          const commits = await getGiteeFileCommits({ path: remotePath, repo: giteeRepo })
-          if (commits && commits.length > 0) {
-            return {
-              sha: file.sha,
-              lastModified: new Date(commits[0].commit.committer.date).getTime()
-            }
-          }
-          // 当前平台 API 不直接返回 SHA，返回 undefined
-          return { sha: undefined }
-        }
-        break
-
-      case 'gitlab': {
-        const gitlabRepo = mapping.remoteTarget || await getSyncRepoName('gitlab', path)
-        const gitlabBranch = await getGitlabBranch()
-        file = await getGitlabFileContent({ path: remotePath, ref: gitlabBranch, repo: gitlabRepo })
-        if (file) {
-          const commits = await getGitlabFileCommits({ path: remotePath, repo: gitlabRepo })
-          if (commits && commits.data && commits.data.length > 0) {
-            return {
-              sha: commits.data[0].id,
-              lastModified: new Date(commits.data[0].committed_date).getTime()
-            }
-          }
-          // 当前平台 API 不直接返回 SHA，返回 undefined
-          return { sha: undefined }
-        }
-        break
-      }
-
-      case 'gitea': {
-        const giteaRepo = mapping.remoteTarget || await getSyncRepoName('gitea', path)
-        const giteaBranch = await getGiteaBranch()
-        file = await getGiteaFileContent({ path: remotePath, ref: giteaBranch, repo: giteaRepo })
-        if (file) {
-          const commits = await getGiteaFileCommits({ path: remotePath, repo: giteaRepo })
-          if (commits && commits.data && commits.data.length > 0) {
-            return {
-              sha: commits.data[0].sha,
-              lastModified: new Date(commits.data[0].commit.committer.date).getTime()
-            }
-          }
-          // 当前平台 API 不直接返回 SHA，返回 undefined
-          return { sha: undefined }
-        }
-        break
-      }
-
-      case 'cloudFolder': {
-        const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-        if (config) config.path = mapping.remoteTarget || config.path
-        const object = config?.path && supportsCloudFolderWorkspace(config)
-          ? await androidCloudFolderWorkspaceHead(config, remotePath)
-          : null
-        if (object) {
-          return {
-            sha: object.etag,
-            lastModified: object.modifiedAt,
-          }
-        }
-        break
-      }
-
-      case 's3': {
-        const config = await store.get<S3Config>('s3SyncConfig')
-        if (config) config.bucket = mapping.remoteTarget || config.bucket
-        const proxyUrl = await store.get<string>('proxy')
-        const object = config
-          ? await s3HeadObject(config, remotePath, proxyUrl ? { all: proxyUrl } : undefined)
-          : null
-        if (object) {
-          return {
-            sha: object.etag,
-            lastModified: new Date(object.lastModified).getTime(),
-          }
-        }
-        break
-      }
-
-      case 'webdav': {
-        const config = await store.get<WebDAVConfig>('webdavSyncConfig')
-        if (config) config.url = mapping.remoteTarget || config.url
-        const proxyUrl = await store.get<string>('proxy')
-        const object = config
-          ? await webdavHeadObject(config, remotePath, proxyUrl ? { all: proxyUrl } : undefined)
-          : null
-        if (object) {
-          return {
-            sha: object.etag,
-            lastModified: new Date(object.lastModified).getTime(),
-          }
-        }
-        break
+  switch (mapping.platform) {
+    case 'github': {
+      const repo = mapping.remoteTarget || await getSyncRepoName('github', path)
+      file = await getGithubFiles({ path: remotePath, repo })
+      if (!file) return { exists: false }
+      const commits = await getGithubFileCommits({ path: remotePath, repo })
+      return {
+        exists: true,
+        sha: file.sha,
+        lastModified: commits?.length
+          ? new Date(commits[0].commit.committer.date).getTime()
+          : undefined,
       }
     }
-  } catch {
-    // 静默处理错误
+    case 'gitee': {
+      const repo = mapping.remoteTarget || await getSyncRepoName('gitee', path)
+      file = await getGiteeFiles({ path: remotePath, repo })
+      if (!file) return { exists: false }
+      const commits = await getGiteeFileCommits({ path: remotePath, repo })
+      return {
+        exists: true,
+        sha: file.sha,
+        lastModified: commits?.length
+          ? new Date(commits[0].commit.committer.date).getTime()
+          : undefined,
+      }
+    }
+    case 'gitlab': {
+      const repo = mapping.remoteTarget || await getSyncRepoName('gitlab', path)
+      file = await getGitlabFiles({ path: remotePath, repo })
+      if (!file || Array.isArray(file)) return { exists: false }
+      const commits = await getGitlabFileCommits({ path: remotePath, repo })
+      const latestCommit = commits ? commits.data?.[0] : undefined
+      return {
+        exists: true,
+        sha: file.sha,
+        lastModified: latestCommit?.committed_date
+          ? new Date(latestCommit.committed_date).getTime()
+          : undefined,
+      }
+    }
+    case 'gitea': {
+      const repo = mapping.remoteTarget || await getSyncRepoName('gitea', path)
+      file = await getGiteaFiles({ path: remotePath, repo })
+      if (!file || Array.isArray(file)) return { exists: false }
+      const commits = await getGiteaFileCommits({ path: remotePath, repo })
+      const latestCommit = commits ? commits.data?.[0] : undefined
+      return {
+        exists: true,
+        sha: file.sha,
+        lastModified: latestCommit?.commit?.committer?.date
+          ? new Date(latestCommit.commit.committer.date).getTime()
+          : undefined,
+      }
+    }
+    case 'cloudFolder': {
+      const stored = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+      if (!stored) throw new Error('网盘文件夹未配置')
+      const config = { ...stored, path: mapping.remoteTarget || stored.path }
+      const object = config.path && supportsCloudFolderWorkspace(config)
+        ? await androidCloudFolderWorkspaceHead(config, remotePath)
+        : null
+      return object
+        ? { exists: true, sha: object.etag, lastModified: object.modifiedAt }
+        : { exists: false }
+    }
+    case 's3': {
+      const stored = await store.get<S3Config>('s3SyncConfig')
+      if (!stored) throw new Error('S3 未配置')
+      const config = { ...stored, bucket: mapping.remoteTarget || stored.bucket }
+      const proxyUrl = await store.get<string>('proxy')
+      const object = await s3HeadObject(config, remotePath, proxyUrl ? { all: proxyUrl } : undefined)
+      return object
+        ? { exists: true, sha: object.etag, lastModified: new Date(object.lastModified).getTime() }
+        : { exists: false }
+    }
+    case 'webdav': {
+      const stored = await store.get<WebDAVConfig>('webdavSyncConfig')
+      if (!stored) throw new Error('WebDAV 未配置')
+      const config = { ...stored, url: mapping.remoteTarget || stored.url }
+      const proxyUrl = await store.get<string>('proxy')
+      const object = await webdavHeadObject(config, remotePath, proxyUrl ? { all: proxyUrl } : undefined)
+      return object
+        ? { exists: true, sha: object.etag, lastModified: new Date(object.lastModified).getTime() }
+        : { exists: false }
+    }
   }
-
-  return { sha: undefined, lastModified: undefined }
 }
 
 /**
- * 比较本地和远程文件版本
- * 注意：由于本地使用 SHA-256 而远程使用 Git blob SHA（SHA-1），两种算法不同
- * 因此不直接比较 SHA，而是依赖修改时间进行比较
+ * 使用 mapping-scoped 基线执行三方比较：本地内容 SHA、远程 revision/存在性、上次同步状态。
+ * revision 不可用时下载远端内容计算 SHA，绝不以 mtime 作为覆盖依据。
  */
-export async function compareFileVersions(path: string): Promise<SyncResult> {
-  const platform = (await resolvePrimarySyncMapping(path))?.platform
-
-  if (platform === 's3') {
-    return compareS3FileVersions(path)
-  }
-
-  if (platform === 'webdav') {
-    return compareWebDAVFileVersions(path)
-  }
+export async function compareFileVersions(
+  path: string,
+  selectedMapping?: ResolvedSyncMapping,
+): Promise<SyncResult> {
+  const mapping = selectedMapping || await resolvePrimarySyncMapping(path, undefined, 'read')
+  if (!mapping) return { shouldUpdate: false, action: 'none', reason: '没有匹配的同步映射' }
 
   const localMeta = await getLocalFileMetadata(path)
-  const remoteInfo = await getRemoteFileInfo(path)
+  const remoteInfo = await getRemoteFileInfo(path, mapping)
+  const baseline = await getSyncBaseline(path, mapping)
 
-  // 获取最后同步时间和恢复时间
-  const syncStatus = await getFileSyncStatus(path)
-  const lastSyncTime = syncStatus.lastSyncTime
-  const lastRestoreTime = await getFileRestoreTime(path)
-
-  // SHA 比较逻辑：使用本地记录的远程 SHA 与当前远程 SHA 进行比较
-  if (remoteInfo.sha) {
-    const localRecordedSha = await getLocalRecordedSha(path)
-
-    // 如果有本地记录的 SHA 和远程 SHA，进行比较
-    if (localRecordedSha && localRecordedSha !== remoteInfo.sha) {
-      // SHA 不一致，说明远程文件已更新，需要拉取
-      return {
-        shouldUpdate: true,
-        action: 'pull',
-        reason: '远程文件已更新（SHA 不匹配），需要拉取更新'
-      }
+  if (!baseline) {
+    if (!localMeta.localSha && !remoteInfo.exists) {
+      return { shouldUpdate: false, action: 'none' }
+    }
+    if (!localMeta.localSha) {
+      return { shouldUpdate: true, action: 'pull', reason: '本地文件不存在，需要从远程拉取' }
+    }
+    if (!remoteInfo.exists) {
+      return { shouldUpdate: true, action: 'push', reason: '远程文件不存在，需要推送到远程' }
     }
 
-    // 如果没有本地记录的 SHA，但远程有内容，记录 SHA
-    if (!localRecordedSha) {
-      await setLocalRecordedSha(path, remoteInfo.sha)
+    // Legacy syncedFileShas only tracks the remote side. Without a local-content
+    // baseline it cannot prove that the local file is unchanged, so compare the
+    // actual content instead of trusting mtime or silently adopting the revision.
+    const remoteContent = await pullRemoteFile(path, mapping)
+    const remoteContentSha = await calculateFileSha(remoteContent)
+    if (remoteContentSha !== localMeta.localSha) {
+      return {
+        shouldUpdate: true,
+        action: 'conflict',
+        localContent: undefined,
+        remoteContent,
+        reason: '缺少本地同步基线且两端内容不同，需要手动处理',
+      }
+    }
+    await setSyncBaseline(path, mapping, {
+      lastLocalContentSha: localMeta.localSha,
+      lastRemoteRevision: remoteInfo.sha,
+      remoteExists: true,
+    })
+    return { shouldUpdate: false, action: 'none', reason: '两端内容一致，已建立同步基线' }
+  }
+
+  const localChanged = localMeta.localSha !== baseline.lastLocalContentSha
+  let remoteChanged = remoteInfo.exists !== baseline.remoteExists
+  if (!remoteChanged && remoteInfo.exists) {
+    if (baseline.lastRemoteRevision && remoteInfo.sha) {
+      remoteChanged = baseline.lastRemoteRevision !== remoteInfo.sha
     } else {
-      // SHA 匹配，直接返回，无需继续比较时间
-      return {
-        shouldUpdate: false,
-        action: 'none',
-        reason: 'SHA 匹配，文件已同步'
-      }
+      const remoteContent = await pullRemoteFile(path, mapping)
+      remoteChanged = await calculateFileSha(remoteContent) !== baseline.lastLocalContentSha
     }
   }
 
-  // 如果本地文件不存在
-  if (!localMeta.localSha) {
-    if (remoteInfo.sha) {
-      return {
-        shouldUpdate: true,
-        action: 'pull',
-        reason: '本地文件不存在，需要从远程拉取'
-      }
+  if (localChanged && remoteChanged) {
+    return { shouldUpdate: true, action: 'conflict', reason: '本地和远程均在上次同步后发生变更' }
+  }
+  if (localChanged) {
+    if (mapping.accessMode === 'read-only') {
+      return { shouldUpdate: true, action: 'conflict', reason: '只读映射的本地文件已发生变更' }
     }
-    return { shouldUpdate: false, action: 'none' }
+    return localMeta.localSha
+      ? { shouldUpdate: true, action: 'push', reason: '本地文件在上次同步后发生变更' }
+      : { shouldUpdate: true, action: 'conflict', reason: '检测到本地删除，需要手动确认' }
+  }
+  if (remoteChanged) {
+    return remoteInfo.exists
+      ? { shouldUpdate: true, action: 'pull', reason: '远程文件在上次同步后发生变更' }
+      : { shouldUpdate: true, action: 'conflict', reason: '检测到远程删除，需要手动确认' }
   }
 
-  // 如果远程文件不存在，但本地文件存在
-  if (!remoteInfo.sha) {
-    if (localMeta.localSha) {
-      return {
-        shouldUpdate: true,
-        action: 'push',
-        reason: '远程文件不存在，需要推送到远程'
-      }
-    }
-    return { shouldUpdate: false, action: 'none' }
-  }
-
-  // 比较修改时间（不直接比较 SHA，因为算法不同）
-  const localTime = localMeta.lastModified || 0
-  const remoteTime = remoteInfo.lastModified || 0
-
-  // 如果两个时间都未知，且两边都有内容，返回冲突（需要用户判断）
-  if (localTime === 0 && remoteTime === 0) {
-    return {
-      shouldUpdate: true,
-      action: 'conflict',
-      reason: '无法确定文件更新时间，需要手动处理'
-    }
-  }
-
-  // 如果远程时间未知（获取失败），但远程 SHA 存在
-  if (remoteTime === 0 && remoteInfo.sha) {
-    return {
-      shouldUpdate: true,
-      action: 'pull',
-      reason: '无法确定远程文件更新时间，拉取远程版本'
-    }
-  }
-
-  // 如果本地时间未知（获取失败），但本地 SHA 存在
-  if (localTime === 0 && localMeta.localSha) {
-    return {
-      shouldUpdate: true,
-      action: 'push',
-      reason: '无法确定本地文件更新时间，推送本地版本'
-    }
-  }
-
-  // 拉取后缓冲期（10秒）：如果本地时间 > 远程时间，但本地时间 ≈ 最后同步时间
-  // 说明这是刚拉取的内容，不是用户编辑的，不需要推送
-  const PULL_GRACE_PERIOD = 10 * 1000 // 10 秒
-  if (localTime > remoteTime) {
-    // 检查是否在同步或恢复缓冲期内
-    const isInSyncGrace = lastSyncTime && localTime - lastSyncTime < PULL_GRACE_PERIOD
-    const isInRestoreGrace = lastRestoreTime && localTime - lastRestoreTime < PULL_GRACE_PERIOD
-    if (isInSyncGrace || isInRestoreGrace) {
-      return {
-        shouldUpdate: false,
-        action: 'none',
-        reason: '刚完成同步或恢复，处于缓冲期内，不触发推送'
-      }
-    }
-  }
-
-  if (remoteTime > localTime) {
-    return {
-      shouldUpdate: true,
-      action: 'pull',
-      reason: '远程文件较新，需要拉取更新'
-    }
-  } else if (localTime > remoteTime) {
-    return {
-      shouldUpdate: true,
-      action: 'push',
-      reason: '本地文件较新，需要推送更新'
-    }
-  }
-
-  // 如果时间相同，认为已同步（避免频繁冲突）
-  return {
-    shouldUpdate: false,
-    action: 'none',
-    reason: '文件修改时间相同，认为已同步'
-  }
+  return { shouldUpdate: false, action: 'none', reason: '本地和远程均未变更' }
 }
 
 /**
  * 从远程拉取文件内容
  */
-export async function pullRemoteFile(path: string): Promise<string> {
+export async function pullRemoteFile(
+  path: string,
+  selectedMapping?: ResolvedSyncMapping,
+): Promise<string> {
   const store = await Store.load('store.json')
-  const mapping = await resolvePrimarySyncMapping(path)
+  const mapping = selectedMapping || await resolvePrimarySyncMapping(path, undefined, 'read')
   if (mapping?.syncPolicy === 'ignore-remote') throw new Error('当前远端文件已设为不拉取')
   if (!mapping) throw new Error('没有匹配的同步映射')
   const primaryBackupMethod = mapping.platform
@@ -502,8 +416,10 @@ export async function pullRemoteFile(path: string): Promise<string> {
       }
 
       case 's3': {
-        const s3Config = await store.get<S3Config>('s3SyncConfig')
-        if (s3Config) s3Config.bucket = mapping.remoteTarget || s3Config.bucket
+        const stored = await store.get<S3Config>('s3SyncConfig')
+        const s3Config = stored
+          ? { ...stored, bucket: mapping.remoteTarget || stored.bucket }
+          : null
         if (s3Config) {
           const s3File = await s3Download(s3Config, remotePath)
           if (s3File) {
@@ -514,8 +430,10 @@ export async function pullRemoteFile(path: string): Promise<string> {
       }
 
       case 'webdav': {
-        const webdavConfig = await store.get<WebDAVConfig>('webdavSyncConfig')
-        if (webdavConfig) webdavConfig.url = mapping.remoteTarget || webdavConfig.url
+        const stored = await store.get<WebDAVConfig>('webdavSyncConfig')
+        const webdavConfig = stored
+          ? { ...stored, url: mapping.remoteTarget || stored.url }
+          : null
         if (webdavConfig) {
           const webdavFile = await webdavDownload(webdavConfig, remotePath)
           if (webdavFile) {
@@ -526,8 +444,10 @@ export async function pullRemoteFile(path: string): Promise<string> {
       }
 
       case 'cloudFolder': {
-        const config = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
-        if (config) config.path = mapping.remoteTarget || config.path
+        const stored = await store.get<CloudFolderConfig>('cloudFolderSyncConfig')
+        const config = stored
+          ? { ...stored, path: mapping.remoteTarget || stored.path }
+          : null
         const cloudFile = config?.path && supportsCloudFolderWorkspace(config)
           ? await androidCloudFolderWorkspaceDownloadBytes(config, remotePath)
           : null
@@ -615,7 +535,10 @@ export async function saveLocalFile(path: string, content: string): Promise<void
 /**
  * 获取远程文件的最新 commit 信息
  */
-export async function getRemoteCommitInfo(path: string): Promise<{
+export async function getRemoteCommitInfo(
+  path: string,
+  selectedMapping?: ResolvedSyncMapping,
+): Promise<{
   sha: string
   message: string
   author: string
@@ -624,26 +547,28 @@ export async function getRemoteCommitInfo(path: string): Promise<{
   deletions?: number
 } | null> {
   try {
-    const store = await Store.load('store.json')
-    const primaryBackupMethod = await store.get<string>('primaryBackupMethod') || 'github'
-    const repo = await getSyncRepoName(primaryBackupMethod as 'github' | 'gitee' | 'gitlab' | 'gitea')
+    const mapping = selectedMapping || await resolvePrimarySyncMapping(path, undefined, 'read')
+    if (!mapping || !['github', 'gitee', 'gitlab', 'gitea'].includes(mapping.platform)) return null
+    const platform = mapping.platform
+    const repo = mapping.remoteTarget
+    const remotePath = mapping.remoteFilePath
     
     let commits: any[] = []
     
-    switch (primaryBackupMethod) {
+    switch (platform) {
       case 'github':
-        commits = await getGithubFileCommits({ path, repo })
+        commits = await getGithubFileCommits({ path: remotePath, repo })
         break
       case 'gitee':
-        commits = await getGiteeFileCommits({ path, repo })
+        commits = await getGiteeFileCommits({ path: remotePath, repo })
         break
       case 'gitlab':
-        const gitlabResult = await getGitlabFileCommits({ path, repo })
-        commits = Array.isArray(gitlabResult) ? gitlabResult : []
+        const gitlabResult = await getGitlabFileCommits({ path: remotePath, repo })
+        commits = gitlabResult && 'data' in gitlabResult ? gitlabResult.data : []
         break
       case 'gitea':
-        const giteaResult = await getGiteaFileCommits({ path, repo })
-        commits = Array.isArray(giteaResult) ? giteaResult : []
+        const giteaResult = await getGiteaFileCommits({ path: remotePath, repo })
+        commits = giteaResult && 'data' in giteaResult ? giteaResult.data : []
         break
     }
     
@@ -661,24 +586,24 @@ export async function getRemoteCommitInfo(path: string): Promise<{
     let additions: number | undefined
     let deletions: number | undefined
     
-    if (primaryBackupMethod === 'github') {
+    if (platform === 'github') {
       author = latestCommit.commit?.author?.name || 'Unknown'
       message = latestCommit.commit?.message || 'No message'
       date = new Date(latestCommit.commit?.author?.date || Date.now())
       sha = latestCommit.sha || ''
       additions = latestCommit.stats?.additions
       deletions = latestCommit.stats?.deletions
-    } else if (primaryBackupMethod === 'gitee') {
+    } else if (platform === 'gitee') {
       author = latestCommit.author?.name || 'Unknown'
       message = latestCommit.message || 'No message'
       date = new Date(latestCommit.created_at || Date.now())
       sha = latestCommit.sha || ''
-    } else if (primaryBackupMethod === 'gitlab') {
+    } else if (platform === 'gitlab') {
       author = latestCommit.author_name || 'Unknown'
       message = latestCommit.message || 'No message'
       date = new Date(latestCommit.created_at || Date.now())
       sha = latestCommit.id || ''
-    } else if (primaryBackupMethod === 'gitea') {
+    } else if (platform === 'gitea') {
       author = latestCommit.commit?.author?.name || 'Unknown'
       message = latestCommit.commit?.message || 'No message'
       date = new Date(latestCommit.commit?.author?.date || Date.now())
@@ -727,16 +652,18 @@ export async function autoSyncIfNeeded(path: string, options: {
       }
     }
     
-    const syncResult = await compareFileVersions(path)
+    const mapping = await resolvePrimarySyncMapping(path, undefined, 'read')
+    if (!mapping) return null
+    const syncResult = await compareFileVersions(path, mapping)
     
     if (!syncResult.shouldUpdate || syncResult.action === 'none') {
       return null
     }
     
-    if (syncResult.action === 'pull' && autoPull) {
+    if (syncResult.action === 'pull' && autoPull && mapping.autoPullOnOpen) {
       if (showConfirm) {
         // 获取 commit 信息
-        const commitInfo = await getRemoteCommitInfo(path)
+        const commitInfo = await getRemoteCommitInfo(path, mapping)
 
         // 使用新的拉取确认对话框
         return new Promise<string | null>((resolve) => {
@@ -746,7 +673,7 @@ export async function autoSyncIfNeeded(path: string, options: {
             onConfirm: async () => {
               try {
                 // 执行实际的同步逻辑
-                const result = await performSync(path || '', enableConflictResolution)
+                const result = await performSync(path || '', enableConflictResolution, mapping)
                 resolve(result)
               } catch {
                 resolve(null)
@@ -759,7 +686,7 @@ export async function autoSyncIfNeeded(path: string, options: {
         })
       } else {
         // 直接执行同步（不显示确认对话框）
-        return await performSync(path, enableConflictResolution)
+        return await performSync(path, enableConflictResolution, mapping)
       }
     }
     
@@ -772,7 +699,11 @@ export async function autoSyncIfNeeded(path: string, options: {
 /**
  * 执行实际的同步操作
  */
-async function performSync(path: string, enableConflictResolution: boolean): Promise<string | null> {
+async function performSync(
+  path: string,
+  enableConflictResolution: boolean,
+  mapping: ResolvedSyncMapping,
+): Promise<string | null> {
   try {
     // 获取本地内容用于冲突检测
     let localContent = ''
@@ -803,10 +734,10 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
       // 继续处理，将直接拉取远程文件
     }
     
-    const remoteContent = await pullRemoteFile(path)
+    const remoteContent = await pullRemoteFile(path, mapping)
 
     // 获取远程文件的 SHA，用于后续更新记录的 SHA
-    const remoteInfo = await getRemoteFileInfo(path)
+    const remoteInfo = await getRemoteFileInfo(path, mapping)
     const remoteSha = remoteInfo.sha
 
     // 检测和处理冲突
@@ -848,9 +779,16 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
       await saveLocalFile(actualPath, finalContent)
       await updateFileSyncTime(actualPath)
 
-      // 成功拉取后，更新记录的 SHA
-      if (remoteSha) {
-        await setLocalRecordedSha(actualPath, remoteSha)
+      // 只有实际采用远端内容时才能推进基线；保留本地或合并内容仍未上传。
+      if (finalContent === remoteContent) {
+        if (remoteSha) {
+          await setLocalRecordedSha(actualPath, remoteSha, await getSyncMetadataKey(actualPath, mapping))
+        }
+        await setSyncBaseline(actualPath, mapping, {
+          lastLocalContentSha: await calculateFileSha(finalContent),
+          lastRemoteRevision: remoteSha,
+          remoteExists: true,
+        })
       }
 
       // 通知编辑器内容已更新
@@ -862,10 +800,15 @@ async function performSync(path: string, enableConflictResolution: boolean): Pro
       await saveLocalFile(actualPath, remoteContent)
       await updateFileSyncTime(actualPath)
 
-      // 成功拉取后，更新记录的 SHA
+      // 成功拉取后，更新兼容记录和三方同步基线
       if (remoteSha) {
-        await setLocalRecordedSha(actualPath, remoteSha)
+        await setLocalRecordedSha(actualPath, remoteSha, await getSyncMetadataKey(actualPath, mapping))
       }
+      await setSyncBaseline(actualPath, mapping, {
+        lastLocalContentSha: await calculateFileSha(remoteContent),
+        lastRemoteRevision: remoteSha,
+        remoteExists: true,
+      })
 
       // 通知编辑器内容已更新
       emitter.emit('sync-content-updated', { path: actualPath, content: remoteContent })
@@ -980,168 +923,28 @@ export async function hasNetworkConnection(): Promise<boolean> {
  * 比较 S3 本地和远程文件版本
  * 使用 ETag 进行比较
  */
-export async function compareS3FileVersions(path: string): Promise<SyncResult> {
-  // 获取 S3 配置
-  const store = await getStore()
-  const config = await store.get<S3Config>('s3SyncConfig')
-  if (!config) {
+export async function compareS3FileVersions(
+  path: string,
+  selectedMapping?: ResolvedSyncMapping,
+): Promise<SyncResult> {
+  const mapping = selectedMapping || await resolvePrimarySyncMapping(path, undefined, 'read')
+  if (!mapping || mapping.platform !== 's3') {
     return { shouldUpdate: false, action: 'none', reason: 'S3 未配置' }
   }
-
-  // 获取 proxy
-  const proxyUrl = await store.get<string>('proxy')
-  const proxy = proxyUrl ? { all: proxyUrl } : undefined
-
-  // 获取本地文件的元数据
-  const localMeta = await getLocalFileMetadata(path)
-
-  // 从 sync store 获取本地记录的云端 ETag
-  const syncStoreState = useSyncStore.getState()
-  const localRecordedEtag = syncStoreState.s3FileEtags[path]
-
-  // 获取远程文件的 ETag
-  const remoteInfo = await s3HeadObject(config, path, proxy)
-
-  // 如果远程不存在
-  if (!remoteInfo) {
-    if (localMeta.localSha) {
-      return {
-        shouldUpdate: true,
-        action: 'push',
-        reason: '远程文件不存在，需要推送到远程'
-      }
-    }
-    return { shouldUpdate: false, action: 'none' }
-  }
-
-  // 如果本地不存在
-  if (!localMeta.localSha) {
-    return {
-      shouldUpdate: true,
-      action: 'pull',
-      reason: '本地文件不存在，需要从远程拉取'
-    }
-  }
-
-  // 比较 ETag
-  if (localRecordedEtag && localRecordedEtag !== remoteInfo.etag) {
-    return {
-      shouldUpdate: true,
-      action: 'pull',
-      reason: '远程文件已更新（ETag 不匹配），需要拉取更新'
-    }
-  }
-
-  // ETag 匹配
-  if (localRecordedEtag === remoteInfo.etag) {
-    return {
-      shouldUpdate: false,
-      action: 'none',
-      reason: 'ETag 匹配，文件已同步'
-    }
-  }
-
-  // 没有本地记录的 ETag，记录并检查时间
-  // 使用修改时间比较
-  const localTime = localMeta.lastModified || 0
-  const remoteTime = remoteInfo.lastModified ? new Date(remoteInfo.lastModified).getTime() : 0
-
-  if (localTime > remoteTime) {
-    return {
-      shouldUpdate: true,
-      action: 'push',
-      reason: '本地文件较新，需要推送'
-    }
-  }
-
-  return {
-    shouldUpdate: true,
-    action: 'pull',
-    reason: '远程文件较新，需要拉取'
-  }
+  return compareFileVersions(path, mapping)
 }
 
 /**
  * 比较 WebDAV 本地和远程文件版本
  * 使用 ETag 进行比较
  */
-export async function compareWebDAVFileVersions(path: string): Promise<SyncResult> {
-  // 获取 WebDAV 配置
-  const store = await getStore()
-  const config = await store.get<WebDAVConfig>('webdavSyncConfig')
-  if (!config) {
+export async function compareWebDAVFileVersions(
+  path: string,
+  selectedMapping?: ResolvedSyncMapping,
+): Promise<SyncResult> {
+  const mapping = selectedMapping || await resolvePrimarySyncMapping(path, undefined, 'read')
+  if (!mapping || mapping.platform !== 'webdav') {
     return { shouldUpdate: false, action: 'none', reason: 'WebDAV 未配置' }
   }
-
-  // 获取 proxy
-  const proxyUrl = await store.get<string>('proxy')
-  const proxy = proxyUrl ? { all: proxyUrl } : undefined
-
-  // 获取本地文件的元数据
-  const localMeta = await getLocalFileMetadata(path)
-
-  // 从 sync store 获取本地记录的云端 ETag
-  const syncStoreState = useSyncStore.getState()
-  const localRecordedEtag = syncStoreState.webdavFileEtags[path]
-
-  // 获取远程文件的 ETag
-  const remoteInfo = await webdavHeadObject(config, path, proxy)
-
-  // 如果远程不存在
-  if (!remoteInfo) {
-    if (localMeta.localSha) {
-      return {
-        shouldUpdate: true,
-        action: 'push',
-        reason: '远程文件不存在，需要推送到远程'
-      }
-    }
-    return { shouldUpdate: false, action: 'none' }
-  }
-
-  // 如果本地不存在
-  if (!localMeta.localSha) {
-    return {
-      shouldUpdate: true,
-      action: 'pull',
-      reason: '本地文件不存在，需要从远程拉取'
-    }
-  }
-
-  // 比较 ETag
-  if (localRecordedEtag && localRecordedEtag !== remoteInfo.etag) {
-    return {
-      shouldUpdate: true,
-      action: 'pull',
-      reason: '远程文件已更新（ETag 不匹配），需要拉取更新'
-    }
-  }
-
-  // ETag 匹配
-  if (localRecordedEtag === remoteInfo.etag) {
-    return {
-      shouldUpdate: false,
-      action: 'none',
-      reason: 'ETag 匹配，文件已同步'
-    }
-  }
-
-  // 没有本地记录的 ETag，记录并检查时间
-  // 使用修改时间比较
-  const localTime = localMeta.lastModified || 0
-  const remoteTime = remoteInfo.lastModified ? new Date(remoteInfo.lastModified).getTime() : 0
-
-  if (localTime > remoteTime) {
-    return {
-      shouldUpdate: true,
-      action: 'push',
-      reason: '本地文件较新，需要推送'
-    }
-  }
-
-  return {
-    shouldUpdate: true,
-    action: 'pull',
-    reason: '远程文件较新，需要拉取'
-  }
+  return compareFileVersions(path, mapping)
 }

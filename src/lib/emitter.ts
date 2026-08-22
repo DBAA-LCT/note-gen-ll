@@ -1,5 +1,6 @@
 import mitt from 'mitt'
 import type { OnboardingStepId } from '@/app/core/main/editor/onboarding-state'
+import type { SyncPlatform } from '@/types/sync'
 import type { CanvasDocument } from '@/types/canvas'
 import type { AiLearningTaskDraft, CreateLearningGoalInput, DailyReflection, DailyReportGoalEntry } from '@/types/learning'
 
@@ -57,6 +58,12 @@ interface Events {
     localSha?: string
     remoteSha?: string
     force?: boolean
+    mapping: {
+      id: string
+      platform: SyncPlatform
+      remoteTarget: string
+      remoteFilePath: string
+    }
   };
   'revertChat': unknown;
   'fileSelected': {
@@ -105,34 +112,48 @@ interface Events {
     }>;
   };
   'start-ai-streaming': {
+    requestId: string;
     originalText: string;
     type: string;
+    startPosition: number;
     position: { top: number; left: number; right: number; bottom: number };
-    controller?: AbortController;
+    generatedRange: { from: number; to: number };
+    controller: AbortController;
+    releaseEditorLock: () => void;
   };
   'update-ai-streaming-content': {
+    requestId: string;
     suggestedText: string;
     position: { top: number; left: number; right: number; bottom: number };
+    generatedRange: { from: number; to: number };
   };
   'update-ai-thinking-content': {
+    requestId: string;
     thinkingText: string;
     position: { top: number; left: number; right: number; bottom: number };
+    generatedRange: { from: number; to: number };
   };
-  'ai-streaming-complete': {
+  'ai-streaming-complete': ({
+    requestId: string;
     originalText: string;
     suggestedText: string;
     type: string;
+    startPosition: number;
     position: { top: number; left: number; right: number; bottom: number };
-    generatedRange?: { from: number; to: number };
-  } | undefined;
+    generatedRange: { from: number; to: number };
+    releaseEditorLock: () => void;
+  } | { requestId: string });
   'show-ai-suggestion': {
+    requestId: string;
     originalText: string;
     suggestedText: string;
     type: string;
+    startPosition: number;
     position: { top: number; left: number; right: number; bottom: number };
-    generatedRange?: { from: number; to: number };
+    generatedRange: { from: number; to: number };
+    releaseEditorLock: () => void;
   };
-  'abort-ai-streaming': void;
+  'abort-ai-streaming': { requestId: string | null };
   'accept-ai-suggestion': void;
   'reject-ai-suggestion': void;
   // Agent 编辑器工具事件 - 内联定义避免重复

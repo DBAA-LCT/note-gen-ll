@@ -126,6 +126,7 @@ export async function uploadFile({
       encodedTargetPath,
     })
 
+    const url = `${baseUrl}/projects/${projectId}/repository/files/${encodedTargetPath}`;
     const requestBody = {
       branch: 'main',
       content: base64Content,
@@ -133,35 +134,41 @@ export async function uploadFile({
       encoding: 'base64'
     };
 
-    // 如果是更新文件，需要添加 last_commit_id
+    // 更新前校验调用方比较过的 blob revision，并取得条件提交 ID。
     if (sha) {
-      // 获取文件的最新提交 ID
-      const commitsUrl = `${baseUrl}/projects/${projectId}/repository/commits?path=${encodeURIComponent(targetPath)}&per_page=1`;
-      const commitsResponse = await fetch(commitsUrl, {
-        method: 'GET',
-        headers,
-        proxy
-      });
-
-      if (commitsResponse.ok) {
-        const commits = await commitsResponse.json() as GitlabCommit[];
-        if (commits.length > 0) {
-          (requestBody as any).last_commit_id = commits[0].id;
-        }
+      const fileResponse = await fetch(`${url}?ref=main`, { method: 'GET', headers, proxy });
+      if (!fileResponse.ok) {
+        throw { status: fileResponse.status, message: '无法校验 GitLab 远程版本' } as GitlabError;
       }
+      const fileData = await fileResponse.json() as { blob_id?: string; sha?: string };
+      const currentBlobId = fileData.blob_id || fileData.sha;
+      if (!currentBlobId || currentBlobId !== sha) {
+        throw { status: 409, message: 'GitLab 远程文件已变化，已阻止覆盖' } as GitlabError;
+      }
+
+      const commitsUrl = `${baseUrl}/projects/${projectId}/repository/commits?path=${encodeURIComponent(targetPath)}&per_page=1`;
+      const commitsResponse = await fetch(commitsUrl, { method: 'GET', headers, proxy });
+      if (!commitsResponse.ok) {
+        throw { status: commitsResponse.status, message: '无法获取 GitLab 条件提交版本' } as GitlabError;
+      }
+      const commits = await commitsResponse.json() as GitlabCommit[];
+      if (!commits[0]?.id) {
+        throw { status: 409, message: 'GitLab 远程提交版本不存在' } as GitlabError;
+      }
+      (requestBody as any).last_commit_id = commits[0].id;
     }
 
-    const url = `${baseUrl}/projects/${projectId}/repository/files/${encodedTargetPath}`;
-
-    // 首先尝试使用 Commits API 创建文件（会自动创建目录）
-    // GitLab Commits API 可以通过一次 commit 创建多个文件，包括父目录
+    // GitLab Commits API 可原子校验 update action 的 last_commit_id。
     const commitsApiUrl = `${baseUrl}/projects/${projectId}/repository/commits`;
 
     const commitActions = [{
       action: sha ? 'update' : 'create',
       file_path: targetPath,
       content: base64Content,
-      encoding: 'base64'
+      encoding: 'base64',
+      ...((requestBody as any).last_commit_id
+        ? { last_commit_id: (requestBody as any).last_commit_id }
+        : {}),
     }];
 
     const commitBody = {
@@ -182,56 +189,10 @@ export async function uploadFile({
       return { data } as GitlabResponse<any>;
     }
 
-    // 如果是 400 错误，可能文件已存在，尝试用 PUT 更新
     if (commitResponse.status === 400) {
       const commitErrorData = await commitResponse.json();
-
-      // 检查是否是文件已存在的错误
-      if (commitErrorData.error && commitErrorData.error.includes('already exists')) {
-        // 获取当前文件的 SHA
-        const fileUrl = `${baseUrl}/projects/${projectId}/repository/files/${encodedTargetPath}?ref=main`;
-        const fileResponse = await fetch(fileUrl, {
-          method: 'GET',
-          headers,
-          proxy
-        });
-
-        let fileSha = '';
-        if (fileResponse.ok) {
-          const fileData = await fileResponse.json();
-          fileSha = fileData.blob_id || fileData.sha;
-        }
-
-        // 使用 PUT 更新文件
-        const putBody = {
-          branch: 'main',
-          content: base64Content,
-          commit_message: message || `Update ${filename || id}`,
-          encoding: 'base64',
-          sha: fileSha
-        };
-
-        const putResponse = await fetch(url, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(putBody),
-          proxy
-        });
-
-        if (putResponse.status >= 200 && putResponse.status < 300) {
-          const data = await putResponse.json();
-          return { data } as GitlabResponse<any>;
-        }
-
-        const putErrorData = await putResponse.json();
-        throw {
-          status: putResponse.status,
-          message: putErrorData.message || '更新文件失败'
-        } as GitlabError;
-      }
-
       throw {
-        status: commitResponse.status,
+        status: commitErrorData.error?.includes('already exists') ? 409 : commitResponse.status,
         message: commitErrorData.error || '同步失败'
       } as GitlabError;
     }
@@ -295,8 +256,9 @@ export async function getFiles({ path, repo }: { path: string; repo: string }) {
           size: fileData.size,
         };
       }
-    } catch {
-      // 如果获取单个文件失败，继续尝试获取目录列表
+    } catch (error) {
+      // 网络/协议错误不能降级为目录或 not-found。
+      throw error;
     }
 
     // 如果不是单个文件，尝试获取目录列表
@@ -334,15 +296,14 @@ export async function getFiles({ path, repo }: { path: string; repo: string }) {
       } as GitlabError;
     }
 
-    return null;
+    const errorData = await response.text().catch(() => '');
+    throw {
+      status: response.status,
+      message: errorData || `获取文件列表失败: ${response.status}`,
+    } as GitlabError;
 
   } catch (error) {
-    // 重新抛出已处理的错误，静默处理其他错误
-    if ((error as GitlabError).status) {
-      throw error;
-    }
-    // 静默处理错误，不显示 toast，因为这可能只是文件不存在
-    return null;
+    throw error;
   }
 }
 

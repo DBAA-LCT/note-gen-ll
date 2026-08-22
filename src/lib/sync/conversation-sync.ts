@@ -1123,6 +1123,7 @@ async function persistMergedConversationItems(
 async function refreshConversationStoreAfterSync() {
   const { default: useChatStore } = await import('@/stores/chat')
   const state = useChatStore.getState()
+  if (state.loading || state.agentState.isRunning || state.agentState.clientRunToken) return
   const current = state.currentConversationId
     ? await import('@/db/conversations').then(module => module.getConversation(state.currentConversationId as number))
     : null

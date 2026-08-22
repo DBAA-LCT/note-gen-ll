@@ -6,11 +6,11 @@
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:3456",
-    "beforeBuildCommand": "pnpm harness:package && pnpm build",
+    "beforeBuildCommand": "pnpm build",
     "frontendDist": "../out"
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "security": {
       "csp": null,
       "assetProtocol": {
@@ -34,8 +34,7 @@
     "createUpdaterArtifacts": false,
     "targets": "all",
     "resources": [
-      "icons",
-      "resources/harness-runtime.zip"
+      "icons"
     ],
     "fileAssociations": [
       {

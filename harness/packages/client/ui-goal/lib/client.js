@@ -7,8 +7,8 @@ window.__ModuleLoader__.load({
 		let react_jsx_runtime = require("react/jsx-runtime");
 		let react = require("react");
 		let _deepseek_ai_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-goal\src\client\GoalBar.module.css.mjs
-		const css$1 = ".l9eY5a_dock{box-sizing:border-box;width:calc(100% - var(--dsh-composer-side-clearance) - var(--dsh-composer-side-clearance) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset));margin:0 auto}.l9eY5a_bar{box-sizing:border-box;width:100%;max-width:calc(var(--dsh-composer-card-max-width) - 4 * var(--dsh-composer-dock-inset));border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-specific-tip);border-radius:12px;align-items:center;gap:10px;height:36px;margin:0 auto;padding:4px 5px 4px 12px;display:flex}.l9eY5a_goalGlyph{color:var(--dsw-alias-label-tertiary);flex:none;display:inline-flex}.l9eY5a_label{color:var(--dsw-alias-label-primary);flex:none;font-size:13px;font-weight:500;line-height:24px}.l9eY5a_objective{min-width:0;color:var(--dsw-alias-label-primary-dimmed);text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:13px;line-height:20px;overflow:hidden}.l9eY5a_error{min-width:0;color:var(--dsw-alias-state-error-primary);text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:12px;line-height:20px;overflow:hidden}.l9eY5a_objectiveInput{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);min-width:0;height:26px;color:var(--dsw-alias-label-primary);border-radius:6px;outline:none;flex:1;padding:0 8px;font-size:13px;line-height:20px}.l9eY5a_objectiveInput:focus{border-color:var(--dsw-alias-state-business-primary)}.l9eY5a_objectiveInput::placeholder{color:var(--dsw-alias-label-caption)}.l9eY5a_actions{flex:none;align-items:center;gap:10px;display:flex}.l9eY5a_iconBtn{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:999px;justify-content:center;align-items:center;padding:0;display:inline-flex}.l9eY5a_iconBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}.l9eY5a_iconBtn:disabled{opacity:.4;cursor:default}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-goal\src\client\GoalBar.module.css.mjs
+		const css$1 = ".MbCAvG_dock{box-sizing:border-box;width:calc(100% - var(--dsh-composer-side-clearance) - var(--dsh-composer-side-clearance) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset) - var(--dsh-composer-dock-inset));margin:0 auto}.MbCAvG_bar{box-sizing:border-box;width:100%;max-width:calc(var(--dsh-composer-card-max-width) - 4 * var(--dsh-composer-dock-inset));border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-specific-tip);border-radius:12px;align-items:center;gap:10px;height:36px;margin:0 auto;padding:4px 5px 4px 12px;display:flex}.MbCAvG_goalGlyph{color:var(--dsw-alias-label-tertiary);flex:none;display:inline-flex}.MbCAvG_label{color:var(--dsw-alias-label-primary);flex:none;font-size:13px;font-weight:500;line-height:24px}.MbCAvG_objective{min-width:0;color:var(--dsw-alias-label-primary-dimmed);text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:13px;line-height:20px;overflow:hidden}.MbCAvG_error{min-width:0;color:var(--dsw-alias-state-error-primary);text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:12px;line-height:20px;overflow:hidden}.MbCAvG_objectiveInput{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);min-width:0;height:26px;color:var(--dsw-alias-label-primary);border-radius:6px;outline:none;flex:1;padding:0 8px;font-size:13px;line-height:20px}.MbCAvG_objectiveInput:focus{border-color:var(--dsw-alias-state-business-primary)}.MbCAvG_objectiveInput::placeholder{color:var(--dsw-alias-label-caption)}.MbCAvG_actions{flex:none;align-items:center;gap:10px;display:flex}.MbCAvG_iconBtn{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:999px;justify-content:center;align-items:center;padding:0;display:inline-flex}.MbCAvG_iconBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}.MbCAvG_iconBtn:disabled{opacity:.4;cursor:default}";
 		const tagId$1 = "@deepseek-ai/dsh-client-ui-goal/GoalBar.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$1) + "]") === null) {
 			const tag = document.createElement("style");
@@ -18,15 +18,15 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var GoalBar_module_css_default = {
-			"bar": "l9eY5a_bar",
-			"actions": "l9eY5a_actions",
-			"objectiveInput": "l9eY5a_objectiveInput",
-			"iconBtn": "l9eY5a_iconBtn",
-			"error": "l9eY5a_error",
-			"goalGlyph": "l9eY5a_goalGlyph",
-			"label": "l9eY5a_label",
-			"dock": "l9eY5a_dock",
-			"objective": "l9eY5a_objective"
+			"bar": "MbCAvG_bar",
+			"label": "MbCAvG_label",
+			"error": "MbCAvG_error",
+			"objectiveInput": "MbCAvG_objectiveInput",
+			"goalGlyph": "MbCAvG_goalGlyph",
+			"actions": "MbCAvG_actions",
+			"iconBtn": "MbCAvG_iconBtn",
+			"objective": "MbCAvG_objective",
+			"dock": "MbCAvG_dock"
 		};
 		//#endregion
 		//#region lib/types/client/GoalBar.js
@@ -250,8 +250,8 @@ window.__ModuleLoader__.load({
 			});
 		}
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-goal\src\client\GoalCommandInputView.module.css.mjs
-		const css = ".k0KFgq_row{flex-direction:column;align-items:flex-end;gap:6px;display:flex}.k0KFgq_stack{flex-direction:column;align-items:flex-end;min-width:0;max-width:min(525px,82%);display:flex}.k0KFgq_bubble{overflow-wrap:anywhere;background:var(--dsw-specific-bubble);max-width:100%;color:var(--dsw-alias-label-primary);font:var(--dsw-font-markdown-code);white-space:pre-wrap;border-radius:22px;padding:10px 16px}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-goal\src\client\GoalCommandInputView.module.css.mjs
+		const css = ".PDPO4q_row{flex-direction:column;align-items:flex-end;gap:6px;display:flex}.PDPO4q_stack{flex-direction:column;align-items:flex-end;min-width:0;max-width:min(525px,82%);display:flex}.PDPO4q_bubble{overflow-wrap:anywhere;background:var(--dsw-specific-bubble);max-width:100%;color:var(--dsw-alias-label-primary);font:var(--dsw-font-markdown-code);white-space:pre-wrap;border-radius:22px;padding:10px 16px}";
 		const tagId = "@deepseek-ai/dsh-client-ui-goal/GoalCommandInputView.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -261,9 +261,9 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var GoalCommandInputView_module_css_default = {
-			"row": "k0KFgq_row",
-			"stack": "k0KFgq_stack",
-			"bubble": "k0KFgq_bubble"
+			"stack": "PDPO4q_stack",
+			"bubble": "PDPO4q_bubble",
+			"row": "PDPO4q_row"
 		};
 		//#endregion
 		//#region lib/types/client/GoalCommandInputView.js

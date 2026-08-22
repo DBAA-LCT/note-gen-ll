@@ -77,8 +77,7 @@ pub fn run() {
         .manage(RemoteSkillManager::default());
 
     #[cfg(not(target_os = "android"))]
-    let builder = builder
-        .manage(SkillProcessManager::default());
+    let builder = builder.manage(SkillProcessManager::default());
 
     #[cfg(target_os = "android")]
     let builder = builder.plugin(android_cloud_folder::init());

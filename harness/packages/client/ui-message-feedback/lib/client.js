@@ -324,8 +324,8 @@ window.__ModuleLoader__.load({
 			}
 		};
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-message-feedback\src\client\MessageFeedbackActions.module.css.mjs
-		const css = ".mttVFa_action{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:28px;justify-content:center;align-items:center;padding:6px;display:inline-flex}.mttVFa_action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}.mttVFa_action:disabled{cursor:default;opacity:.4}.mttVFa_action[data-active]{color:var(--dsw-alias-label-primary)}.mttVFa_noteOpen{max-width:220px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;text-overflow:ellipsis;cursor:pointer;background:0 0;border:none;border-radius:14px;padding:0 8px;font-size:13px;line-height:28px;overflow:hidden}.mttVFa_noteOpen:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}.mttVFa_noteEditor{align-items:flex-start;gap:6px;display:inline-flex}.mttVFa_noteInput{border:1px solid var(--dsw-alias-border-secondary);background:var(--dsw-alias-bg-primary);width:260px;color:var(--dsw-alias-label-primary);font:inherit;resize:vertical;border-radius:8px;padding:6px 8px;font-size:13px}.mttVFa_noteSave,.mttVFa_noteCancel{cursor:pointer;border:none;border-radius:14px;height:28px;padding:0 10px;font-size:13px}.mttVFa_noteSave{background:var(--dsw-alias-interactive-bg-primary);color:var(--dsw-alias-label-inverse)}.mttVFa_noteSave:disabled{cursor:default;opacity:.4}.mttVFa_noteCancel{color:var(--dsw-alias-label-tertiary);background:0 0}.mttVFa_noteCancel:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}.mttVFa_failure{color:var(--dsw-alias-label-tertiary);padding-left:4px;font-size:13px;line-height:28px}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-message-feedback\src\client\MessageFeedbackActions.module.css.mjs
+		const css = ".c33SAa_action{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:28px;justify-content:center;align-items:center;padding:6px;display:inline-flex}.c33SAa_action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}.c33SAa_action:disabled{cursor:default;opacity:.4}.c33SAa_action[data-active]{color:var(--dsw-alias-label-primary)}.c33SAa_noteOpen{max-width:220px;color:var(--dsw-alias-label-tertiary);white-space:nowrap;text-overflow:ellipsis;cursor:pointer;background:0 0;border:none;border-radius:14px;padding:0 8px;font-size:13px;line-height:28px;overflow:hidden}.c33SAa_noteOpen:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}.c33SAa_noteEditor{align-items:flex-start;gap:6px;display:inline-flex}.c33SAa_noteInput{border:1px solid var(--dsw-alias-border-secondary);background:var(--dsw-alias-bg-primary);width:260px;color:var(--dsw-alias-label-primary);font:inherit;resize:vertical;border-radius:8px;padding:6px 8px;font-size:13px}.c33SAa_noteSave,.c33SAa_noteCancel{cursor:pointer;border:none;border-radius:14px;height:28px;padding:0 10px;font-size:13px}.c33SAa_noteSave{background:var(--dsw-alias-interactive-bg-primary);color:var(--dsw-alias-label-inverse)}.c33SAa_noteSave:disabled{cursor:default;opacity:.4}.c33SAa_noteCancel{color:var(--dsw-alias-label-tertiary);background:0 0}.c33SAa_noteCancel:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}.c33SAa_failure{color:var(--dsw-alias-label-tertiary);padding-left:4px;font-size:13px;line-height:28px}";
 		const tagId = "@deepseek-ai/dsh-client-ui-message-feedback/MessageFeedbackActions.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -335,13 +335,13 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var MessageFeedbackActions_module_css_default = {
-			"noteEditor": "mttVFa_noteEditor",
-			"failure": "mttVFa_failure",
-			"noteCancel": "mttVFa_noteCancel",
-			"noteOpen": "mttVFa_noteOpen",
-			"action": "mttVFa_action",
-			"noteInput": "mttVFa_noteInput",
-			"noteSave": "mttVFa_noteSave"
+			"noteOpen": "c33SAa_noteOpen",
+			"noteEditor": "c33SAa_noteEditor",
+			"noteInput": "c33SAa_noteInput",
+			"noteCancel": "c33SAa_noteCancel",
+			"action": "c33SAa_action",
+			"noteSave": "c33SAa_noteSave",
+			"failure": "c33SAa_failure"
 		};
 		//#endregion
 		//#region lib/types/client/MessageFeedbackActions.js

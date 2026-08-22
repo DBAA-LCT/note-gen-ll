@@ -52,8 +52,8 @@ window.__ModuleLoader__.load({
 			};
 		}
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-layout\src\client\AppFrame.module.css.mjs
-		const css = ".pwwnZW_frame{background:var(--dsw-alias-bg-base);height:100%;transition:grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);grid-template-rows:100%;display:grid;position:relative;overflow:hidden}.pwwnZW_frame[data-dragging]{transition:none}@media (prefers-reduced-motion:reduce){.pwwnZW_frame{transition:none}}.pwwnZW_sidebarCol{background:var(--dsw-specific-sidebar-fill);border-right:1px solid var(--dsw-alias-border-l1);min-width:0;overflow:hidden}.pwwnZW_centerCol{flex-direction:column;min-width:0;display:flex;overflow:hidden}.pwwnZW_detailsCol{border-left:1px solid var(--dsw-alias-border-l2);min-width:0;overflow:hidden}.pwwnZW_frame[data-details-collapsed] .pwwnZW_detailsCol{border-left:none}.pwwnZW_handle{cursor:col-resize;z-index:2;touch-action:none;width:8px;transition:left var(--ds-transition-duration-slow) var(--ds-ease-in-out);margin-left:-4px;position:absolute;top:0;bottom:0}.pwwnZW_frame[data-dragging] .pwwnZW_handle{transition:none}@media (prefers-reduced-motion:reduce){.pwwnZW_handle{transition:none}}.pwwnZW_handle[data-side=details]:after{content:\"\";box-sizing:border-box;background:var(--dsw-alias-button-floating-fill);border:1px solid var(--dsw-alias-border-l2-darkmode-thin);opacity:0;width:12px;height:32px;transition:opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out), background var(--ds-transition-duration-slow) var(--ds-ease-in-out);border-radius:10px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}.pwwnZW_detailsCol:hover~.pwwnZW_handle[data-side=details]:after,.pwwnZW_handle[data-side=details]:hover:after,.pwwnZW_handle[data-side=details][data-dragging=true]:after{opacity:1}.pwwnZW_handle[data-side=details]:hover:after,.pwwnZW_handle[data-side=details][data-dragging=true]:after{background:var(--dsw-alias-button-floating-hover);border-color:var(--dsw-alias-border-l3)}.pwwnZW_overlayLayer{z-index:20;pointer-events:none;position:absolute;inset:0}.pwwnZW_overlayLayer>*{pointer-events:auto}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-layout\src\client\AppFrame.module.css.mjs
+		const css = ".-w7upG_frame{background:var(--dsw-alias-bg-base);height:100%;transition:grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);grid-template-rows:100%;display:grid;position:relative;overflow:hidden}.-w7upG_frame[data-dragging]{transition:none}@media (prefers-reduced-motion:reduce){.-w7upG_frame{transition:none}}.-w7upG_sidebarCol{background:var(--dsw-specific-sidebar-fill);border-right:1px solid var(--dsw-alias-border-l1);min-width:0;overflow:hidden}.-w7upG_centerCol{flex-direction:column;min-width:0;display:flex;overflow:hidden}.-w7upG_detailsCol{border-left:1px solid var(--dsw-alias-border-l2);min-width:0;overflow:hidden}.-w7upG_frame[data-details-collapsed] .-w7upG_detailsCol{border-left:none}.-w7upG_handle{cursor:col-resize;z-index:2;touch-action:none;width:8px;transition:left var(--ds-transition-duration-slow) var(--ds-ease-in-out);margin-left:-4px;position:absolute;top:0;bottom:0}.-w7upG_frame[data-dragging] .-w7upG_handle{transition:none}@media (prefers-reduced-motion:reduce){.-w7upG_handle{transition:none}}.-w7upG_handle[data-side=details]:after{content:\"\";box-sizing:border-box;background:var(--dsw-alias-button-floating-fill);border:1px solid var(--dsw-alias-border-l2-darkmode-thin);opacity:0;width:12px;height:32px;transition:opacity var(--ds-transition-duration-slow) var(--ds-ease-in-out), background var(--ds-transition-duration-slow) var(--ds-ease-in-out);border-radius:10px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}.-w7upG_detailsCol:hover~.-w7upG_handle[data-side=details]:after,.-w7upG_handle[data-side=details]:hover:after,.-w7upG_handle[data-side=details][data-dragging=true]:after{opacity:1}.-w7upG_handle[data-side=details]:hover:after,.-w7upG_handle[data-side=details][data-dragging=true]:after{background:var(--dsw-alias-button-floating-hover);border-color:var(--dsw-alias-border-l3)}.-w7upG_overlayLayer{z-index:20;pointer-events:none;position:absolute;inset:0}.-w7upG_overlayLayer>*{pointer-events:auto}";
 		const tagId = "@deepseek-ai/dsh-client-ui-layout/AppFrame.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -63,12 +63,12 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var AppFrame_module_css_default = {
-			"detailsCol": "pwwnZW_detailsCol",
-			"overlayLayer": "pwwnZW_overlayLayer",
-			"centerCol": "pwwnZW_centerCol",
-			"sidebarCol": "pwwnZW_sidebarCol",
-			"frame": "pwwnZW_frame",
-			"handle": "pwwnZW_handle"
+			"frame": "-w7upG_frame",
+			"overlayLayer": "-w7upG_overlayLayer",
+			"centerCol": "-w7upG_centerCol",
+			"handle": "-w7upG_handle",
+			"sidebarCol": "-w7upG_sidebarCol",
+			"detailsCol": "-w7upG_detailsCol"
 		};
 		//#endregion
 		//#region lib/types/client/AppFrame.js

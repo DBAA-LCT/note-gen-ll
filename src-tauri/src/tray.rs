@@ -19,8 +19,7 @@ pub const ID_HIDE_WINDOW: &str = "hide-window";
 pub const ID_SETTINGS: &str = "settings";
 pub const ID_QUIT: &str = "quit";
 
-const DEFAULT_RECORD_TOOL_ORDER: &[&str] =
-    &["text", "recording", "image", "link", "todo"];
+const DEFAULT_RECORD_TOOL_ORDER: &[&str] = &["text", "recording", "image", "link", "todo"];
 const QUICK_RECORD_VISIBLE_LIMIT: usize = 4;
 
 #[derive(Clone, serde::Deserialize)]

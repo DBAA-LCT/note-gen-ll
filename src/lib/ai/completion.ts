@@ -2,7 +2,6 @@ import {
   getEditorAISettings,
   validateAIService,
   createOpenAIClient,
-  handleAIError,
   withEditorFastAiRequestOptions,
 } from './utils';
 
@@ -123,7 +122,9 @@ export async function fetchCompletion(context: string, abortSignal?: AbortSignal
     const aiConfig = await getEditorAISettings()
 
     // 验证AI服务
-    if (await validateAIService(aiConfig?.baseURL) === null) return ''
+    if (!aiConfig?.model || await validateAIService(aiConfig.baseURL) === null) {
+      throw new Error('AI_CONFIGURATION_INVALID')
+    }
 
     const openai = await createOpenAIClient(aiConfig)
 
@@ -157,7 +158,7 @@ Continuation:`
     const result = completion.choices[0].message.content || ''
     return cleanupCompletion(result)
   } catch (error) {
-    return handleAIError(error) || ''
+    throw error
   }
 }
 
@@ -174,7 +175,9 @@ export async function fetchCompletionStream(
     const aiConfig = await getEditorAISettings()
 
     // 验证AI服务
-    if (await validateAIService(aiConfig?.baseURL) === null) return
+    if (!aiConfig?.model || await validateAIService(aiConfig.baseURL) === null) {
+      throw new Error('AI_CONFIGURATION_INVALID')
+    }
 
     const openai = await createOpenAIClient(aiConfig)
 
@@ -219,7 +222,9 @@ Continuation:`
     }
   } catch (error) {
     // 对于 abort 请求，静默处理不抛出错误
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (abortSignal?.aborted || (error instanceof Error && (
+      error.name === 'AbortError' || error.message === 'Request was aborted.'
+    ))) {
       return
     }
     // 其他错误重新抛出
@@ -238,7 +243,9 @@ export async function fetchEditorAiGenerationStream(
   try {
     const aiConfig = await getEditorAISettings()
 
-    if (await validateAIService(aiConfig?.baseURL) === null) return
+    if (!aiConfig?.model || await validateAIService(aiConfig.baseURL) === null) {
+      throw new Error('AI_CONFIGURATION_INVALID')
+    }
 
     const openai = await createOpenAIClient(aiConfig)
     const maxTokensByAction: Record<EditorAiGenerationAction, number> = {
@@ -272,7 +279,9 @@ export async function fetchEditorAiGenerationStream(
       }
     }
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (abortSignal?.aborted || (error instanceof Error && (
+      error.name === 'AbortError' || error.message === 'Request was aborted.'
+    ))) {
       return
     }
     throw error

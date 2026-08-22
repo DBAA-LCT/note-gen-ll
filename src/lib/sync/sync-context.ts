@@ -3,6 +3,7 @@ import { Store } from '@tauri-apps/plugin-store'
 import { getOptionalSyncRepoName } from './repo-utils'
 import { resolvePrimarySyncMapping } from './connector-mappings'
 import type { CloudFolderConfig } from '@/types/sync'
+import type { ResolvedSyncMapping } from './connector-mappings'
 
 const GIT_SYNC_PROVIDERS = ['github', 'gitee', 'gitlab', 'gitea'] as const
 type GitSyncProvider = typeof GIT_SYNC_PROVIDERS[number]
@@ -37,7 +38,21 @@ export async function getCurrentSyncContext(localPath = '') {
   }
 }
 
-export async function getSyncMetadataKey(path: string) {
+export async function getSyncMetadataKey(
+  path: string,
+  selectedMapping?: ResolvedSyncMapping,
+) {
+  if (selectedMapping) {
+    return JSON.stringify([
+      normalizeWorkspacePath(selectedMapping.localWorkspacePath) || '__default__',
+      selectedMapping.platform,
+      selectedMapping.remoteTarget,
+      selectedMapping.id,
+      selectedMapping.remoteFilePath,
+      path,
+    ])
+  }
+
   const context = await getCurrentSyncContext(path)
   return JSON.stringify([
     context.workspaceKey,

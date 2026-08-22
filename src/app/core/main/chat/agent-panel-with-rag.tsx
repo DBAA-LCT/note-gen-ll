@@ -73,7 +73,7 @@ interface AgentPanelWithRagProps {
   confirmationHistory?: Array<{
     toolName: string
     params: Record<string, any>
-    status: "pending" | "confirmed" | "cancelled"
+    status: "pending" | "confirmed" | "cancelled" | "superseded"
     timestamp: number
     scope?: "once" | "conversation"
     sessionApprovalType?: "runtime-script"
@@ -119,7 +119,7 @@ export function AgentPanelWithRag({
   const pathname = usePathname()
   const [isRagExpanded, setIsRagExpanded] = useState(false)
   const [expandedFiles, setExpandedFiles] = useState<string[]>([])
-  const { setActiveFilePath, readArticle } = useArticleStore()
+  const { setActiveFilePath, readArticle, addTab } = useArticleStore()
 
   const structuredHistory = React.useMemo<StructuredAgentHistory | null>(() => {
     if (!agentHistoryJson) {
@@ -140,22 +140,31 @@ export function AgentPanelWithRag({
     structuredHistory?.traceEvents?.length
   )
 
-  // 创建文件名到详情的映射
-  const detailMap = React.useMemo(
-    () => new Map(ragSourceDetails.map((d) => [d.filename, d])),
-    [ragSourceDetails]
-  )
+  // 新数据以 sourceKey 为稳定标识；历史数据仅在文件名唯一时回退。
+  const detailMap = React.useMemo(() => {
+    const map = new Map<string, RagSourceDetail>()
+    const filenameCounts = new Map<string, number>()
+    ragSourceDetails.forEach(detail => {
+      filenameCounts.set(detail.filename, (filenameCounts.get(detail.filename) || 0) + 1)
+      if (detail.sourceKey) map.set(detail.sourceKey, detail)
+    })
+    ragSourceDetails.forEach(detail => {
+      if (filenameCounts.get(detail.filename) === 1) map.set(detail.filename, detail)
+    })
+    return map
+  }, [ragSourceDetails])
 
   const sourceSummary = React.useMemo(() => {
     const counts = { article: 0, record: 0, canvas: 0, unknown: 0 }
     ragSources.forEach((source) => {
       const sourceType = detailMap.get(source)?.sourceType
-      if (sourceType === 'article' || sourceType === 'record') counts[sourceType] += 1
+      if (sourceType === 'article' || sourceType === 'record' || sourceType === 'canvas') counts[sourceType] += 1
       else counts.unknown += 1
     })
     const parts = [
       counts.article ? t('record.chat.ragSources.articleCount', { count: counts.article }) : '',
       counts.record ? t('record.chat.ragSources.recordCount', { count: counts.record }) : '',
+      counts.canvas ? t('record.chat.ragSources.sourceCount', { count: counts.canvas }) : '',
       counts.unknown ? t('record.chat.ragSources.sourceCount', { count: counts.unknown }) : '',
     ].filter(Boolean)
     return new Intl.ListFormat(locale, { style: 'short', type: 'conjunction' }).format(parts)
@@ -170,6 +179,26 @@ export function AgentPanelWithRag({
       useMarkStore.getState().setPendingScrollMarkId(detail.locator.markId)
       useMarkStore.getState().setHighlightedMarkId(detail.locator.markId)
       if (pathname.startsWith('/mobile')) router.push('/mobile/record')
+      return
+    }
+    if (detail.sourceType === 'canvas') {
+      const canvasId = detail.locator?.canvasId || detail.sourceId
+      if (!canvasId) return
+      const { default: useCanvasStore } = await import('@/stores/canvas')
+      const canvasStore = useCanvasStore.getState()
+      const project = await canvasStore.openProject(canvasId)
+      if (!project) return
+      await addTab({
+        id: `canvas:${canvasId}`,
+        path: `canvas://project/${canvasId}`,
+        name: project.title,
+        isFolder: false,
+        kind: 'canvas',
+        canvasId,
+      })
+      if (detail.locator?.nodeIds?.length) {
+        canvasStore.setPendingFocus({ canvasId, nodeIds: detail.locator.nodeIds })
+      }
       return
     }
     const filepath = detail.locator?.filePath || detail.filepath
@@ -282,7 +311,7 @@ export function AgentPanelWithRag({
                               : "text-muted-foreground"
                           }`}
                         >
-                          {source}
+                          {detail?.filename || source}
                         </span>
                         {hasDetail && (
                           <ChevronRight
@@ -296,7 +325,7 @@ export function AgentPanelWithRag({
 
                     {/* 展开的详情内容 */}
                     {isFileExpanded && hasDetail && detail?.content && (
-                      <div className="border-muted mt-1 mr-2 mb-1.5 ml-10">
+                      <div className="border-muted mt-1 mr-2 mb-1.5 ml-10 max-h-[min(18rem,45vh)] overflow-y-auto overscroll-contain">
                         <div className="text-muted-foreground border-foreground/20 border-l border-dashed pl-3 text-xs">
                           <div className="flex items-center justify-between gap-2 py-1">
                             <div className="flex items-center gap-2">

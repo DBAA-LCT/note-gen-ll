@@ -632,7 +632,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn uses_bun_dot_com_installer_for_bun() {
         let recipe = install_recipe_for(&RuntimeKind::Bunx, "linux")
             .expect("bunx should have a Linux install recipe");

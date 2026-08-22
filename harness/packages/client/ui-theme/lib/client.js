@@ -22,8 +22,8 @@ window.__ModuleLoader__.load({
 			return n;
 		}
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-theme\src\client\AppearanceRow.module.css.mjs
-		const css = ".P8lJ3q_group{border-bottom:1px solid var(--dsw-alias-border-l2);flex-direction:column;gap:8px;padding:16px 0;display:flex}.P8lJ3q_title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px}.P8lJ3q_cubeRow{flex-wrap:wrap;align-items:stretch;gap:8px;display:flex}.P8lJ3q_themeCube{box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;background:0 0;border-radius:16px;flex-direction:column;flex:180px;justify-content:center;align-items:center;gap:4px;padding:20px 32px;font-size:14px;line-height:22px;display:flex}.P8lJ3q_themeCube:hover:not(.P8lJ3q_selected){background:var(--dsw-alias-interactive-bg-hover)}.P8lJ3q_selected{background:var(--dsw-alias-bg-module-platform);border-color:var(--dsw-static-neutral-bluish-400)}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-theme\src\client\AppearanceRow.module.css.mjs
+		const css = ".Rv69TW_group{border-bottom:1px solid var(--dsw-alias-border-l2);flex-direction:column;gap:8px;padding:16px 0;display:flex}.Rv69TW_title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:400;line-height:22px}.Rv69TW_cubeRow{flex-wrap:wrap;align-items:stretch;gap:8px;display:flex}.Rv69TW_themeCube{box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;background:0 0;border-radius:16px;flex-direction:column;flex:180px;justify-content:center;align-items:center;gap:4px;padding:20px 32px;font-size:14px;line-height:22px;display:flex}.Rv69TW_themeCube:hover:not(.Rv69TW_selected){background:var(--dsw-alias-interactive-bg-hover)}.Rv69TW_selected{background:var(--dsw-alias-bg-module-platform);border-color:var(--dsw-static-neutral-bluish-400)}";
 		const tagId = "@deepseek-ai/dsh-client-ui-theme/AppearanceRow.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -33,11 +33,11 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var AppearanceRow_module_css_default = {
-			"title": "P8lJ3q_title",
-			"group": "P8lJ3q_group",
-			"cubeRow": "P8lJ3q_cubeRow",
-			"themeCube": "P8lJ3q_themeCube",
-			"selected": "P8lJ3q_selected"
+			"themeCube": "Rv69TW_themeCube",
+			"title": "Rv69TW_title",
+			"cubeRow": "Rv69TW_cubeRow",
+			"group": "Rv69TW_group",
+			"selected": "Rv69TW_selected"
 		};
 		//#endregion
 		//#region lib/types/client/AppearanceRow.js

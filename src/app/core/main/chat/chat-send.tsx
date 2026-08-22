@@ -126,12 +126,27 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
   const steeringChainRef = useRef<Promise<void>>(Promise.resolve())
   const pendingSteeringRef = useRef<AgentSteeringPayload[]>([])
   const activeRunRef = useRef(false)
+  const activeRunTokenRef = useRef<string | null>(null)
+  const approvalResolversRef = useRef(new Map<string, {
+    unsubscribe: () => void
+    timeout: ReturnType<typeof setTimeout>
+    resolve: (decision: AgentApprovalDecision) => void
+  }>())
   const repeatedScriptApprovalRef = useRef<{ signature: string; count: number }>({ signature: '', count: 0 })
   const contextOverflowRetryRef = useRef(0)
   const recentSubmissionRef = useRef<{ fingerprint: string; timestamp: number } | null>(null)
   const regenerateResponseRef = useRef<(assistantChatId: number) => Promise<void>>(async () => {})
   const t = useTranslations()
   const requestText = inputValue.trim() || t('record.chat.input.addAttachment.attachmentOnlyPrompt')
+
+  useEffect(() => () => {
+    for (const resolver of approvalResolversRef.current.values()) {
+      resolver.unsubscribe()
+      clearTimeout(resolver.timeout)
+      resolver.resolve('denied')
+    }
+    approvalResolversRef.current.clear()
+  }, [])
 
   const buildPartialSuccessContent = (result: string, toolCalls: { result?: { success?: boolean; data?: any; error?: string } }[]) => {
     const generatedOutputFiles = toolCalls.flatMap((toolCall) => {
@@ -303,6 +318,8 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
     toolName: string,
     params: Record<string, any>,
     context?: {
+      runId?: string
+      toolCallId?: string
       previewParams?: Record<string, any>
       originalContent?: string
       modifiedContent?: string
@@ -347,56 +364,85 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       return Promise.resolve('approved')
     }
 
-    return new Promise((resolve) => {
-      agentDebugLog('approval_pending_set', {
+    const runToken = activeRunTokenRef.current
+    if (!runToken) return Promise.resolve('denied')
+
+    const approvalId = crypto.randomUUID()
+    const runId = context?.runId || runToken
+    const toolCallId = context?.toolCallId || crypto.randomUUID()
+    const conversationId = currentChatState.currentConversationId
+    agentDebugLog('approval_pending_set', {
+      approvalId,
+      runToken,
+      toolName,
+      params,
+      context,
+      canApproveForSession,
+      sessionApprovalScope,
+    })
+
+    setAgentState({
+      pendingConfirmation: {
+        approvalId,
+        runToken,
+        conversationId,
+        runId,
+        toolCallId,
         toolName,
         params,
-        context,
+        previewParams: context?.previewParams,
+        ...context,
         canApproveForSession,
-        sessionApprovalScope,
-      })
+        sessionApprovalType: sessionApprovalScope?.type,
+        sessionApprovalKey: sessionApprovalScope?.permissionKey,
+      }
+    })
 
-      // 将确认请求保存到 store，在对话中显示
-      setAgentState({
-        pendingConfirmation: {
-          toolName,
-          params,
-          previewParams: context?.previewParams,
-          ...context,
-          canApproveForSession,
-          sessionApprovalType: sessionApprovalScope?.type,
-          sessionApprovalKey: sessionApprovalScope?.permissionKey,
-        }
-      })
-      
-      // 轮询检查用户是否已确认或取消
-      const checkInterval = setInterval(() => {
-        const currentState = useChatStore.getState()
-        
-        // 如果 pendingConfirmation 被清除，说明用户已操作
-        if (!currentState.agentState.pendingConfirmation) {
-          clearInterval(checkInterval)
-          const latestRecord = [...currentState.agentState.confirmationHistory]
-            .reverse()
-            .find((record) =>
-              record.toolName === toolName &&
-              JSON.stringify(record.params) === JSON.stringify(params)
-            )
-
-          agentDebugLog('approval_pending_resolved', {
-            toolName,
-            params,
-            latestRecord,
-            resolved: latestRecord?.status === 'confirmed',
-          })
-
-          resolve(latestRecord?.status === 'confirmed'
+    return new Promise((resolve) => {
+      let settled = false
+      const finish = (decision: AgentApprovalDecision) => {
+        if (settled) return
+        settled = true
+        const resolver = approvalResolversRef.current.get(approvalId)
+        resolver?.unsubscribe()
+        if (resolver) clearTimeout(resolver.timeout)
+        approvalResolversRef.current.delete(approvalId)
+        resolve(decision)
+      }
+      const unsubscribe = useChatStore.subscribe((state) => {
+        const record = [...state.agentState.confirmationHistory]
+          .reverse()
+          .find(item => item.approvalId === approvalId && item.runToken === runToken)
+        if (record) {
+          agentDebugLog('approval_pending_resolved', { approvalId, record })
+          finish(record.status === 'confirmed'
             ? 'approved'
-            : latestRecord?.status === 'superseded'
+            : record.status === 'superseded'
               ? 'steered'
               : 'denied')
+          return
         }
-      }, 100)
+
+        const pending = state.agentState.pendingConfirmation
+        if (
+          state.agentState.clientRunToken !== runToken
+          || !pending
+          || pending.approvalId !== approvalId
+          || pending.runToken !== runToken
+        ) {
+          agentDebugLog('approval_pending_invalidated', { approvalId, toolName })
+          finish('denied')
+        }
+      })
+      const timeout = setTimeout(() => {
+        const state = useChatStore.getState()
+        if (state.agentState.pendingConfirmation?.approvalId === approvalId) {
+          state.setAgentState({ pendingConfirmation: undefined })
+        }
+        agentDebugLog('approval_pending_timeout', { approvalId, toolName })
+        finish('denied')
+      }, 10 * 60 * 1000)
+      approvalResolversRef.current.set(approvalId, { unsubscribe, timeout, resolve })
     })
   }
 
@@ -404,6 +450,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
   async function handleAgentMode(
     images: ImageAttachment[],
     userMessage: Chat,
+    runToken: string,
     regeneration?: { requestText: string; quoteData?: QuoteData | null; selectedSkills?: string[] }
   ) {
     const effectiveRequestText = regeneration?.requestText ?? requestText
@@ -418,11 +465,21 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       inserted: false,
     })
 
-    if (!placeholderMessage) return
+    if (!placeholderMessage || activeRunTokenRef.current !== runToken) return
 
     setAgentState({
       activeChatId: placeholderMessage.id,
+      clientRunToken: runToken,
     })
+    const ownsRun = () => {
+      const state = useChatStore.getState()
+      return activeRunTokenRef.current === runToken
+        && state.agentState.clientRunToken === runToken
+        && state.agentState.activeChatId === placeholderMessage.id
+        && (placeholderMessage.conversationId === undefined
+          ? state.isTemporaryConversation
+          : state.currentConversationId === placeholderMessage.conversationId)
+    }
 
     const useArticleStore = (await import('@/stores/article')).default
     const articleStore = useArticleStore.getState()
@@ -434,6 +491,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
     )
 
     const persistAgentError = async (error: string) => {
+      if (!ownsRun()) return
       const currentState = useChatStore.getState()
       const currentMessage = currentState.chats.find(c => c.id === placeholderMessage.id)
       const resolvedRagSources = currentState.agentState.ragSources?.length
@@ -489,6 +547,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
         agentHistory: JSON.stringify(agentHistory),
       }, true)
 
+      if (!ownsRun()) return
       setAgentState({
         activeChatId: undefined,
         isFinalAnswerMode: false,
@@ -503,6 +562,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
 
     // 每次都创建新的 AgentHandler，使用当前的 placeholderMessage
     const agentHandler = new AgentHandler({
+      runToken,
       activeChatId: placeholderMessage.id,
       conversationId: placeholderMessage.conversationId,
       workspaceId: useSettingStore.getState().workspacePath.trim().replace(/\\/g, '/').replace(/\/+$/, '') || 'default',
@@ -527,6 +587,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
         useChatStore.getState().chats.map(chat => chat.agentHistory),
       ),
       onFinalAnswerRender: (markdownContent) => {
+        if (!ownsRun()) return
         // 检测到 Final Answer 时触发渲染
         setAgentState({
           activeChatId: placeholderMessage.id,
@@ -536,6 +597,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       },
       formatAutoFinalAnswer: (key, values) => t(key as any, values),
       onComplete: async (result, steps, stopped) => {
+        if (!ownsRun()) return
         deferredOverflowError = undefined
         // 获取 Agent 执行历史，保存结构化运行轨迹
         const { agentState } = useChatStore.getState()
@@ -630,6 +692,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
           agentHistory: JSON.stringify(agentHistory),
         }, true)
 
+        if (!ownsRun()) return
         // 清空 Final Answer 模式状态
         setAgentState({
           activeChatId: undefined,
@@ -648,6 +711,7 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
         agentHandlerRef.current = null
       },
       onError: async (error) => {
+        if (!ownsRun()) return
         const parsedOverflow = parseContextOverflowError(error)
         const inferredOverflow =
           !parsedOverflow.detected
@@ -694,7 +758,8 @@ export const ChatSend = forwardRef<{ sendChat: () => void }, ChatSendProps>(({
       },
     })
 
-    // 保存到 ref
+    // 保存到 ref；只有当前 token 可以接管运行控制。
+    if (!ownsRun()) return
     agentHandlerRef.current = agentHandler
     for (const payload of pendingSteeringRef.current.splice(0)) {
       agentHandler.steer(payload)
@@ -1053,8 +1118,7 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
       }
       console.error('Agent execution error:', error)
     } finally {
-      // 清空 ref
-      agentHandlerRef.current = null
+      if (agentHandlerRef.current === agentHandler) agentHandlerRef.current = null
     }
   }
 
@@ -1120,19 +1184,28 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
 
     manualStopRequestedRef.current = false
     contextOverflowRetryRef.current = 0
+    const runToken = crypto.randomUUID()
+    activeRunTokenRef.current = runToken
     activeRunRef.current = true
     repeatedScriptApprovalRef.current = { signature: '', count: 0 }
     setLoading(true)
     try {
       await chatState.deleteChat(assistantChatId)
-      await handleAgentMode(previousImages, userMessage, {
+      await handleAgentMode(previousImages, userMessage, runToken, {
         requestText: userMessage.content?.trim() || t('record.chat.input.addAttachment.attachmentOnlyPrompt'),
         quoteData: previousQuote,
         selectedSkills: previousSelectedSkills,
       })
     } finally {
-      activeRunRef.current = false
-      setLoading(false)
+      if (activeRunTokenRef.current === runToken) {
+        activeRunTokenRef.current = null
+        activeRunRef.current = false
+        const state = useChatStore.getState()
+        if (state.agentState.clientRunToken === runToken) {
+          state.setAgentState({ clientRunToken: undefined })
+        }
+        setLoading(false)
+      }
     }
   }
 
@@ -1215,6 +1288,8 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
 
     manualStopRequestedRef.current = false
     contextOverflowRetryRef.current = 0
+    const runToken = crypto.randomUUID()
+    activeRunTokenRef.current = runToken
     activeRunRef.current = true
     repeatedScriptApprovalRef.current = { signature: '', count: 0 }
     onSent?.()
@@ -1236,17 +1311,23 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
         quoteData: quoteData ? JSON.stringify(quoteData) : undefined,
       })
       if (userMessage) {
-        await handleAgentMode(attachedImages, userMessage)
+        await handleAgentMode(attachedImages, userMessage, runToken)
       }
     } finally {
-      activeRunRef.current = false
-      setLoading(false)
+      if (activeRunTokenRef.current === runToken) {
+        activeRunTokenRef.current = null
+        activeRunRef.current = false
+        const state = useChatStore.getState()
+        if (state.agentState.clientRunToken === runToken) {
+          state.setAgentState({ clientRunToken: undefined })
+        }
+        setLoading(false)
+      }
     }
   }
 
   const handleStop = async () => {
     manualStopRequestedRef.current = true
-    activeRunRef.current = false
     pendingSteeringRef.current = []
     imageAnalysisAbortControllerRef.current?.abort()
     imageAnalysisAbortControllerRef.current = null
@@ -1263,8 +1344,8 @@ ${hasValidRange ? `**仅在用户明确要求修改/改写/补充/插入时才�
       // 不立即清空 ref，等待 Agent 的错误处理完成并调用 onComplete
     }
 
-    // 重置 loading 状态
-    setLoading(false)
+    // 保持 active/loading，直到旧 run 的 onComplete/finally 真正收敛。
+    // 这样停止后不能立即启动新 run，旧回调也就无法覆盖新状态。
   }
 
   const hasInput = Boolean(inputValue.trim() || attachedImages.length > 0 || fileAttachments.length > 0)

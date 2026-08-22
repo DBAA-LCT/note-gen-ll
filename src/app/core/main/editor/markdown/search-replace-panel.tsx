@@ -125,13 +125,11 @@ function prevResult(editor: Editor) {
 function replaceCurrent(editor: Editor) {
   try {
     const storage = getSearchAndReplaceStorage(editor)
-    if (storage && storage.results.length > 0 && storage.replaceTerm) {
+    if (storage && storage.results.length > 0) {
       const { from, to } = storage.results[storage.resultIndex]
       editor.view.dispatch(
         editor.state.tr.insertText(storage.replaceTerm, from, to)
       )
-      storage.searchTerm = storage.searchTerm
-      editor.view.dispatch(editor.state.tr)
     }
   } catch {
     // 忽略错误
@@ -141,17 +139,17 @@ function replaceCurrent(editor: Editor) {
 function replaceAll(editor: Editor) {
   try {
     const storage = getSearchAndReplaceStorage(editor)
-    if (storage && storage.results.length > 0 && storage.replaceTerm) {
-      for (let i = storage.results.length - 1; i >= 0; i--) {
-        const { from, to } = storage.results[i]
-        editor.view.dispatch(
-          editor.state.tr.insertText(storage.replaceTerm, from, to)
-        )
+    if (storage && storage.results.length > 0) {
+      const results = [...storage.results]
+      const transaction = editor.state.tr
+      for (let i = results.length - 1; i >= 0; i--) {
+        const { from, to } = results[i]
+        transaction.insertText(storage.replaceTerm, from, to)
       }
       storage.searchTerm = ''
       storage.results = []
       storage.resultIndex = 0
-      editor.view.dispatch(editor.state.tr)
+      editor.view.dispatch(transaction)
     }
   } catch {
     // 忽略错误

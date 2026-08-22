@@ -39,7 +39,7 @@ interface ToolCall {
 interface ConfirmationRecord {
   toolName: string;
   params: Record<string, any>;
-  status: "pending" | "confirmed" | "cancelled";
+  status: "pending" | "confirmed" | "cancelled" | "superseded";
   timestamp: number;
   scope?: "once" | "conversation";
   sessionApprovalType?: "runtime-script";

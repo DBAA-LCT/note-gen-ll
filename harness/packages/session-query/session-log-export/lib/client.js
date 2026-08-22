@@ -168,8 +168,8 @@ window.__ModuleLoader__.load({
 			});
 		}
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\session-query\session-log-export\src\client\HeaderAction.module.css.mjs
-		const css = ".G2Qwza_sessionLogButton{border:1px solid var(--dsw-alias-border-l2);min-width:111px;height:32px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);cursor:pointer;background:0 0;border-radius:18px;justify-content:center;align-items:center;gap:4px;padding:6px 12px;font-size:13px;font-weight:400;line-height:20px;display:inline-flex}.G2Qwza_sessionLogButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.G2Qwza_sessionLogButton:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.G2Qwza_sessionLogButton span,.G2Qwza_sessionLogButton svg{flex:none}.G2Qwza_sessionLogButton span{white-space:nowrap}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\session-query\session-log-export\src\client\HeaderAction.module.css.mjs
+		const css = ".e3xQIa_sessionLogButton{border:1px solid var(--dsw-alias-border-l2);min-width:111px;height:32px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);cursor:pointer;background:0 0;border-radius:18px;justify-content:center;align-items:center;gap:4px;padding:6px 12px;font-size:13px;font-weight:400;line-height:20px;display:inline-flex}.e3xQIa_sessionLogButton:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}.e3xQIa_sessionLogButton:disabled{color:var(--dsw-alias-label-dimmed);cursor:wait}.e3xQIa_sessionLogButton span,.e3xQIa_sessionLogButton svg{flex:none}.e3xQIa_sessionLogButton span{white-space:nowrap}";
 		const tagId = "@deepseek-ai/dsh-session-log-export/HeaderAction.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -178,7 +178,7 @@ window.__ModuleLoader__.load({
 			tag.textContent = css;
 			document.head.appendChild(tag);
 		}
-		var HeaderAction_module_css_default = { "sessionLogButton": "G2Qwza_sessionLogButton" };
+		var HeaderAction_module_css_default = { "sessionLogButton": "e3xQIa_sessionLogButton" };
 		//#endregion
 		//#region lib/types/client/HeaderAction.js
 		/**

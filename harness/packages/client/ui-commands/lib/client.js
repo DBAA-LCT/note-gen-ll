@@ -844,8 +844,8 @@ window.__ModuleLoader__.load({
 			return n;
 		}
 		//#endregion
-		//#region \0dsh-css:C:\Users\Leonard\Documents\note-gen-ll\harness\packages\client\ui-commands\src\client\PopupSelectView.module.css.mjs
-		const css = ".zPNyLa_card{z-index:100;--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);border:1px solid var(--dsw-alias-border-inverted);background:var(--dsw-specific-menu);min-width:min(220px,100%);max-width:100%;max-height:320px;box-shadow:var(--dsw-shadow-lv3);border-radius:12px;outline:none;flex-direction:column;padding:4px;display:flex;position:absolute;bottom:calc(100% + 4px);left:0;overflow:hidden}.zPNyLa_viewport{flex-direction:column;min-height:0;display:flex;overflow-y:auto}.zPNyLa_row{cursor:pointer;color:var(--dsw-alias-label-primary);border-radius:8px;align-items:center;gap:8px;padding:6px 8px;font-size:13px;display:flex}.zPNyLa_rowActive{background:var(--dsw-alias-interactive-bg-hover)}.zPNyLa_label{white-space:nowrap;text-overflow:ellipsis;flex:auto;min-width:0;overflow:hidden}.zPNyLa_detail{color:var(--dsw-alias-label-tertiary);white-space:nowrap;text-overflow:ellipsis;font-size:12px;overflow:hidden}.zPNyLa_check{color:var(--dsw-alias-label-primary);flex:none;display:inline-flex}.zPNyLa_status{color:var(--dsw-alias-label-tertiary);padding:8px 10px;font-size:13px}.zPNyLa_search{border:1px solid var(--dsw-alias-border-inverted);color:var(--dsw-alias-label-primary);background:0 0;border-radius:8px;outline:none;margin:2px 2px 4px;padding:6px 8px;font-size:13px}.zPNyLa_error{color:var(--dsw-alias-state-error-primary);align-items:center;gap:8px;padding:6px 8px;font-size:12px;display:flex}.zPNyLa_errorText{text-overflow:ellipsis;flex:1;overflow:hidden}.zPNyLa_retry{border:1px solid var(--dsw-alias-border-inverted);color:var(--dsw-alias-label-primary);cursor:pointer;background:0 0;border-radius:6px;padding:2px 8px;font-size:12px}";
+		//#region \0dsh-css:D:\code\note-gen-ll\harness\packages\client\ui-commands\src\client\PopupSelectView.module.css.mjs
+		const css = ".MFg0eq_card{z-index:100;--dsh-scrollbar-thumb:var(--dsw-alias-scrollbar-bg-l2);--dsh-scrollbar-thumb-hover:var(--dsw-alias-scrollbar-hover-l2);border:1px solid var(--dsw-alias-border-inverted);background:var(--dsw-specific-menu);min-width:min(220px,100%);max-width:100%;max-height:320px;box-shadow:var(--dsw-shadow-lv3);border-radius:12px;outline:none;flex-direction:column;padding:4px;display:flex;position:absolute;bottom:calc(100% + 4px);left:0;overflow:hidden}.MFg0eq_viewport{flex-direction:column;min-height:0;display:flex;overflow-y:auto}.MFg0eq_row{cursor:pointer;color:var(--dsw-alias-label-primary);border-radius:8px;align-items:center;gap:8px;padding:6px 8px;font-size:13px;display:flex}.MFg0eq_rowActive{background:var(--dsw-alias-interactive-bg-hover)}.MFg0eq_label{white-space:nowrap;text-overflow:ellipsis;flex:auto;min-width:0;overflow:hidden}.MFg0eq_detail{color:var(--dsw-alias-label-tertiary);white-space:nowrap;text-overflow:ellipsis;font-size:12px;overflow:hidden}.MFg0eq_check{color:var(--dsw-alias-label-primary);flex:none;display:inline-flex}.MFg0eq_status{color:var(--dsw-alias-label-tertiary);padding:8px 10px;font-size:13px}.MFg0eq_search{border:1px solid var(--dsw-alias-border-inverted);color:var(--dsw-alias-label-primary);background:0 0;border-radius:8px;outline:none;margin:2px 2px 4px;padding:6px 8px;font-size:13px}.MFg0eq_error{color:var(--dsw-alias-state-error-primary);align-items:center;gap:8px;padding:6px 8px;font-size:12px;display:flex}.MFg0eq_errorText{text-overflow:ellipsis;flex:1;overflow:hidden}.MFg0eq_retry{border:1px solid var(--dsw-alias-border-inverted);color:var(--dsw-alias-label-primary);cursor:pointer;background:0 0;border-radius:6px;padding:2px 8px;font-size:12px}";
 		const tagId = "@deepseek-ai/dsh-client-ui-commands/PopupSelectView.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -855,18 +855,18 @@ window.__ModuleLoader__.load({
 			document.head.appendChild(tag);
 		}
 		var PopupSelectView_module_css_default = {
-			"error": "zPNyLa_error",
-			"card": "zPNyLa_card",
-			"check": "zPNyLa_check",
-			"rowActive": "zPNyLa_rowActive",
-			"row": "zPNyLa_row",
-			"status": "zPNyLa_status",
-			"errorText": "zPNyLa_errorText",
-			"viewport": "zPNyLa_viewport",
-			"retry": "zPNyLa_retry",
-			"search": "zPNyLa_search",
-			"detail": "zPNyLa_detail",
-			"label": "zPNyLa_label"
+			"errorText": "MFg0eq_errorText",
+			"viewport": "MFg0eq_viewport",
+			"rowActive": "MFg0eq_rowActive",
+			"detail": "MFg0eq_detail",
+			"status": "MFg0eq_status",
+			"search": "MFg0eq_search",
+			"check": "MFg0eq_check",
+			"retry": "MFg0eq_retry",
+			"card": "MFg0eq_card",
+			"row": "MFg0eq_row",
+			"error": "MFg0eq_error",
+			"label": "MFg0eq_label"
 		};
 		//#endregion
 		//#region lib/types/client/PopupSelectView.js

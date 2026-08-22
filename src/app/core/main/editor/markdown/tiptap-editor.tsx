@@ -20,7 +20,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import Image from '@tiptap/extension-image'
 import { common, createLowlight } from 'lowlight'
 import { Markdown } from '@tiptap/markdown'
-import { SearchAndReplace } from '@sereneinserenade/tiptap-search-and-replace'
+import { SearchAndReplace } from './search-and-replace-extension'
 import { Extension, nodeInputRule, ResizableNodeView, type Editor as CoreEditor, type ResizableNodeViewDirection } from '@tiptap/core'
 import { AllSelection, EditorState, Plugin, PluginKey, TextSelection, type Selection } from '@tiptap/pm/state'
 import { redoDepth, undoDepth } from '@tiptap/pm/history'
@@ -404,12 +404,60 @@ function getEditorPositionRect(targetEditor: TipTapReactEditor, position: number
   }
 }
 
+type AiGeneratedRange = { from: number; to: number }
+
+type AiSelectionStream = (
+  text: string,
+  onChunk: (chunk: string, isFirst: boolean) => void,
+  abortSignal: AbortSignal,
+  onThinkingUpdate: (thinking: string) => void,
+) => Promise<void>
+
 function getInsertedContentRange(targetEditor: TipTapReactEditor, from: number, docSizeBeforeInsert: number) {
   const insertedSize = Math.max(0, targetEditor.state.doc.content.size - docSizeBeforeInsert)
 
   return {
     from,
     to: from + insertedSize,
+  }
+}
+
+function clampGeneratedRange(targetEditor: TipTapReactEditor, range: AiGeneratedRange): AiGeneratedRange {
+  const docSize = targetEditor.state.doc.content.size
+  const from = clampSelectionPosition(range.from, docSize)
+  const to = clampSelectionPosition(range.to, docSize)
+
+  return { from: Math.min(from, to), to: Math.max(from, to) }
+}
+
+function lockEditorForAiRequest(targetEditor: TipTapReactEditor) {
+  const wasEditable = targetEditor.isEditable
+  let released = false
+  if (wasEditable) targetEditor.setEditable(false)
+  return () => {
+    if (released) return
+    released = true
+    if (wasEditable && !targetEditor.isDestroyed) targetEditor.setEditable(true)
+  }
+}
+
+function deleteGeneratedRange(targetEditor: TipTapReactEditor, range: AiGeneratedRange) {
+  const safeRange = clampGeneratedRange(targetEditor, range)
+  if (safeRange.from < safeRange.to) {
+    targetEditor.commands.deleteRange(safeRange)
+  }
+}
+
+function restoreOriginalText(
+  targetEditor: TipTapReactEditor,
+  generatedRange: AiGeneratedRange,
+  startPosition: number,
+  originalText: string,
+) {
+  deleteGeneratedRange(targetEditor, generatedRange)
+  if (originalText) {
+    const safeStartPosition = clampSelectionPosition(startPosition, targetEditor.state.doc.content.size)
+    targetEditor.commands.insertContentAt(safeStartPosition, originalText)
   }
 }
 
@@ -1314,6 +1362,11 @@ export function TipTapEditor({
   const [imageSrcDraft, setImageSrcDraft] = useState('')
   const [imageAltDraft, setImageAltDraft] = useState('')
   const [customAiInstruction, setCustomAiInstruction] = useState('')
+  const activeAiRequestRef = useRef<{
+    requestId: string
+    controller: AbortController
+    cleanup: () => void
+  } | null>(null)
   const aiActionHandlersRef = useRef({
     polish: async () => {},
     concise: async () => {},
@@ -3196,370 +3249,172 @@ export function TipTapEditor({
     }
   }, [editor])
 
-  // Handle AI Polish - improve selected text (with streaming and suggestion mode)
+  useEffect(() => {
+    const handleAbortAiRequest = ({ requestId }: { requestId: string | null }) => {
+      const activeRequest = activeAiRequestRef.current
+      if (!activeRequest || (requestId !== null && activeRequest.requestId !== requestId)) return
+
+      activeRequest.controller.abort()
+      activeRequest.cleanup()
+      activeAiRequestRef.current = null
+    }
+
+    emitter.on('abort-ai-streaming', handleAbortAiRequest)
+    return () => {
+      emitter.off('abort-ai-streaming', handleAbortAiRequest)
+      const activeRequest = activeAiRequestRef.current
+      activeRequest?.controller.abort()
+      activeRequest?.cleanup()
+      activeAiRequestRef.current = null
+    }
+  }, [])
+
+  // Handle selection-based AI transforms with request-scoped streaming and rollback.
+  const runAISelectionTransform = useCallback(async (type: string, stream: AiSelectionStream) => {
+    if (!editor) return
+
+    const previousRequest = activeAiRequestRef.current
+    if (previousRequest) {
+      previousRequest.controller.abort()
+      previousRequest.cleanup()
+      activeAiRequestRef.current = null
+      emitter.emit('abort-ai-streaming', { requestId: previousRequest.requestId })
+    }
+
+    const { from: startPosition, to } = editor.state.selection
+    const originalText = editor.state.doc.textBetween(startPosition, to)
+    if (!originalText.trim()) return
+
+    const requestId = crypto.randomUUID()
+    const controller = new AbortController()
+    const releaseEditorLock = lockEditorForAiRequest(editor)
+    let accumulatedResult = ''
+    let generatedRange: AiGeneratedRange = { from: startPosition, to: startPosition }
+    let cleanedUp = false
+
+    const cleanup = () => {
+      if (cleanedUp) return
+      cleanedUp = true
+      restoreOriginalText(editor, generatedRange, startPosition, originalText)
+      releaseEditorLock()
+    }
+
+    editor.commands.deleteRange({ from: startPosition, to })
+    const initialCoords = getEditorPositionRect(editor, startPosition)
+    activeAiRequestRef.current = { requestId, controller, cleanup }
+
+    emitter.emit('start-ai-streaming', {
+      requestId,
+      originalText,
+      type,
+      startPosition,
+      position: initialCoords,
+      generatedRange,
+      controller,
+      releaseEditorLock,
+    })
+
+    try {
+      await stream(
+        originalText,
+        (chunk) => {
+          if (controller.signal.aborted || activeAiRequestRef.current?.requestId !== requestId) return
+
+          const insertionPosition = clampSelectionPosition(generatedRange.to, editor.state.doc.content.size)
+          const docSizeBeforeInsert = editor.state.doc.content.size
+          editor.chain().insertContentAt(insertionPosition, chunk).run()
+          const insertedSize = Math.max(0, editor.state.doc.content.size - docSizeBeforeInsert)
+          generatedRange = {
+            from: clampSelectionPosition(generatedRange.from, editor.state.doc.content.size),
+            to: insertionPosition + insertedSize,
+          }
+          accumulatedResult += chunk
+
+          emitter.emit('update-ai-streaming-content', {
+            requestId,
+            suggestedText: accumulatedResult,
+            position: getEditorPositionRect(editor, generatedRange.to),
+            generatedRange,
+          })
+        },
+        controller.signal,
+        (thinkingText) => {
+          if (controller.signal.aborted || activeAiRequestRef.current?.requestId !== requestId) return
+          emitter.emit('update-ai-thinking-content', {
+            requestId,
+            thinkingText,
+            position: initialCoords,
+            generatedRange,
+          })
+        },
+      )
+
+      if (controller.signal.aborted || activeAiRequestRef.current?.requestId !== requestId) {
+        cleanup()
+        return
+      }
+
+      deleteGeneratedRange(editor, generatedRange)
+      const insertionPosition = clampSelectionPosition(startPosition, editor.state.doc.content.size)
+      const docSizeBeforeInsert = editor.state.doc.content.size
+      editor.chain().insertContentAt(insertionPosition, accumulatedResult, { contentType: 'markdown' }).run()
+      generatedRange = getInsertedContentRange(editor, insertionPosition, docSizeBeforeInsert)
+      cleanedUp = true
+      activeAiRequestRef.current = null
+
+      emitter.emit('ai-streaming-complete', {
+        requestId,
+        originalText,
+        suggestedText: accumulatedResult,
+        type,
+        startPosition,
+        position: getEditorPositionRect(editor, generatedRange.to),
+        generatedRange,
+        releaseEditorLock,
+      })
+      if (type !== 'translate') {
+        emitter.emit('onboarding-step-complete', { step: 'ai-polish' })
+      }
+    } catch (error) {
+      cleanup()
+      if (activeAiRequestRef.current?.requestId === requestId) {
+        activeAiRequestRef.current = null
+      }
+      emitter.emit('ai-streaming-complete', { requestId })
+      if (!controller.signal.aborted) {
+        toast({
+          title: 'AI 改写失败',
+          description: error instanceof Error ? error.message : '网络错误',
+          variant: 'destructive',
+        })
+      }
+    }
+  }, [editor])
+
   const handleAIPolish = useCallback(async () => {
-    if (!editor) return
+    await runAISelectionTransform('polish', fetchAiPolishStream)
+  }, [runAISelectionTransform])
 
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to)
-
-    if (!selectedText.trim()) {
-      return
-    }
-
-    // Create abort controller for this request
-    const controller = new AbortController()
-
-    // Delete original text and start streaming
-    editor.chain()
-      .focus()
-      .deleteSelection()
-      .run()
-
-    // Get initial position and start streaming immediately
-    const initialCoords = editor.view.coordsAtPos(editor.state.selection.from)
-    emitter.emit('start-ai-streaming', {
-      originalText: selectedText,
-      type: 'polish',
-      position: initialCoords,
-      controller,
-    })
-
-    // Track accumulated result
-    let accumulatedResult = ''
-    const startPosition = editor.state.selection.from
-
-    try {
-      await fetchAiPolishStream(
-        selectedText,
-        (chunk) => {
-          // Insert chunk as plain text during streaming
-          editor.chain()
-            .insertContentAt(startPosition + accumulatedResult.length, chunk)
-            .run()
-
-          // Update tracking
-          accumulatedResult += chunk
-
-          // Update floating menu with streaming content and position
-          const coords = editor.view.coordsAtPos(startPosition + accumulatedResult.length)
-          emitter.emit('update-ai-streaming-content', {
-            suggestedText: accumulatedResult,
-            position: coords,
-          })
-        },
-        controller.signal,
-        (thinkingText) => {
-          emitter.emit('update-ai-thinking-content', {
-            thinkingText,
-            position: initialCoords,
-          })
-        },
-      )
-
-      // Streaming complete - replace all content with proper Markdown parsing
-      editor.chain()
-        .deleteRange({ from: startPosition, to: startPosition + accumulatedResult.length })
-        .run()
-
-      const docSizeBeforeInsert = editor.state.doc.content.size
-      editor.chain()
-        .insertContentAt(startPosition, accumulatedResult, { contentType: 'markdown' })
-        .run()
-      const generatedRange = getInsertedContentRange(editor, startPosition, docSizeBeforeInsert)
-
-      // Send completion event
-      emitter.emit('ai-streaming-complete', {
-        originalText: selectedText,
-        suggestedText: accumulatedResult,
-        type: 'polish',
-        position: getEditorPositionRect(editor, generatedRange.to),
-        generatedRange,
-      })
-      emitter.emit('onboarding-step-complete', { step: 'ai-polish' })
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return
-      }
-      // Restore original text on error
-      editor.chain()
-        .focus()
-        .insertContent(selectedText)
-        .run()
-      emitter.emit('ai-streaming-complete')
-    }
-  }, [editor])
-
-  // Handle AI Concise - simplify selected text (with streaming and suggestion mode)
   const handleAIConcise = useCallback(async () => {
-    if (!editor) return
+    await runAISelectionTransform('concise', fetchAiConciseStream)
+  }, [runAISelectionTransform])
 
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to)
-
-    if (!selectedText.trim()) {
-      return
-    }
-
-    // Create abort controller for this request
-    const controller = new AbortController()
-
-    // Delete original text and start streaming
-    editor.chain()
-      .focus()
-      .deleteSelection()
-      .run()
-
-    // Get initial position and start streaming immediately
-    const initialCoords = editor.view.coordsAtPos(editor.state.selection.from)
-    emitter.emit('start-ai-streaming', {
-      originalText: selectedText,
-      type: 'concise',
-      position: initialCoords,
-      controller,
-    })
-
-    // Track accumulated result
-    let accumulatedResult = ''
-    const startPosition = editor.state.selection.from
-
-    try {
-      await fetchAiConciseStream(
-        selectedText,
-        (chunk) => {
-          // Insert chunk as plain text during streaming
-          editor.chain()
-            .insertContentAt(startPosition + accumulatedResult.length, chunk)
-            .run()
-
-          // Update tracking
-          accumulatedResult += chunk
-
-          // Update floating menu with streaming content and position
-          const coords = editor.view.coordsAtPos(startPosition + accumulatedResult.length)
-          emitter.emit('update-ai-streaming-content', {
-            suggestedText: accumulatedResult,
-            position: coords,
-          })
-        },
-        controller.signal,
-        (thinkingText) => {
-          emitter.emit('update-ai-thinking-content', {
-            thinkingText,
-            position: initialCoords,
-          })
-        },
-      )
-
-      // Streaming complete - replace all content with proper Markdown parsing
-      editor.chain()
-        .deleteRange({ from: startPosition, to: startPosition + accumulatedResult.length })
-        .run()
-
-      const docSizeBeforeInsert = editor.state.doc.content.size
-      editor.chain()
-        .insertContentAt(startPosition, accumulatedResult, { contentType: 'markdown' })
-        .run()
-      const generatedRange = getInsertedContentRange(editor, startPosition, docSizeBeforeInsert)
-
-      // Send completion event
-      emitter.emit('ai-streaming-complete', {
-        originalText: selectedText,
-        suggestedText: accumulatedResult,
-        type: 'concise',
-        position: getEditorPositionRect(editor, generatedRange.to),
-        generatedRange,
-      })
-      emitter.emit('onboarding-step-complete', { step: 'ai-polish' })
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return
-      }
-      // Restore original text on error
-      editor.chain()
-        .focus()
-        .insertContent(selectedText)
-        .run()
-      emitter.emit('ai-streaming-complete')
-    }
-  }, [editor])
-
-  // Handle AI Expand - expand selected text (with streaming and suggestion mode)
   const handleAIExpand = useCallback(async () => {
-    if (!editor) return
-
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to)
-
-    if (!selectedText.trim()) {
-      return
-    }
-
-    // Create abort controller for this request
-    const controller = new AbortController()
-
-    // Delete original text and start streaming
-    editor.chain()
-      .focus()
-      .deleteSelection()
-      .run()
-
-    // Get initial position and start streaming immediately
-    const initialCoords = editor.view.coordsAtPos(editor.state.selection.from)
-    emitter.emit('start-ai-streaming', {
-      originalText: selectedText,
-      type: 'expand',
-      position: initialCoords,
-      controller,
-    })
-
-    // Track accumulated result
-    let accumulatedResult = ''
-    const startPosition = editor.state.selection.from
-
-    try {
-      await fetchAiExpandStream(
-        selectedText,
-        (chunk) => {
-          // Insert chunk as plain text during streaming
-          editor.chain()
-            .insertContentAt(startPosition + accumulatedResult.length, chunk)
-            .run()
-
-          // Update tracking
-          accumulatedResult += chunk
-
-          // Update floating menu with streaming content and position
-          const coords = editor.view.coordsAtPos(startPosition + accumulatedResult.length)
-          emitter.emit('update-ai-streaming-content', {
-            suggestedText: accumulatedResult,
-            position: coords,
-          })
-        },
-        controller.signal,
-        (thinkingText) => {
-          emitter.emit('update-ai-thinking-content', {
-            thinkingText,
-            position: initialCoords,
-          })
-        },
-      )
-
-      // Streaming complete - replace all content with proper Markdown parsing
-      editor.chain()
-        .deleteRange({ from: startPosition, to: startPosition + accumulatedResult.length })
-        .run()
-
-      const docSizeBeforeInsert = editor.state.doc.content.size
-      editor.chain()
-        .insertContentAt(startPosition, accumulatedResult, { contentType: 'markdown' })
-        .run()
-      const generatedRange = getInsertedContentRange(editor, startPosition, docSizeBeforeInsert)
-
-      // Send completion event
-      emitter.emit('ai-streaming-complete', {
-        originalText: selectedText,
-        suggestedText: accumulatedResult,
-        type: 'expand',
-        position: getEditorPositionRect(editor, generatedRange.to),
-        generatedRange,
-      })
-      emitter.emit('onboarding-step-complete', { step: 'ai-polish' })
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return
-      }
-      // Restore original text on error
-      editor.chain()
-        .focus()
-        .insertContent(selectedText)
-        .run()
-      emitter.emit('ai-streaming-complete')
-    }
-  }, [editor])
+    await runAISelectionTransform('expand', fetchAiExpandStream)
+  }, [runAISelectionTransform])
 
   const handleAITranslate = useCallback(async (targetLanguage: string) => {
-    if (!editor) return
-
-    const { from, to } = editor.state.selection
-    const selectedText = editor.state.doc.textBetween(from, to)
-
-    if (!selectedText.trim()) {
-      return
-    }
-
-    const controller = new AbortController()
-
-    editor.chain()
-      .focus()
-      .deleteSelection()
-      .run()
-
-    const initialCoords = editor.view.coordsAtPos(editor.state.selection.from)
-    emitter.emit('start-ai-streaming', {
-      originalText: selectedText,
-      type: 'translate',
-      position: initialCoords,
-      controller,
-    })
-
-    let accumulatedResult = ''
-    const startPosition = editor.state.selection.from
-
-    try {
-      await fetchAiTranslateStream(
-        selectedText,
+    await runAISelectionTransform(
+      'translate',
+      (text, onChunk, abortSignal, onThinkingUpdate) => fetchAiTranslateStream(
+        text,
         targetLanguage,
-        (chunk) => {
-          editor.chain()
-            .insertContentAt(startPosition + accumulatedResult.length, chunk)
-            .run()
-
-          accumulatedResult += chunk
-
-          const coords = editor.view.coordsAtPos(startPosition + accumulatedResult.length)
-          emitter.emit('update-ai-streaming-content', {
-            suggestedText: accumulatedResult,
-            position: coords,
-          })
-        },
-        controller.signal,
-        (thinkingText) => {
-          emitter.emit('update-ai-thinking-content', {
-            thinkingText,
-            position: initialCoords,
-          })
-        },
-      )
-
-      editor.chain()
-        .deleteRange({ from: startPosition, to: startPosition + accumulatedResult.length })
-        .run()
-
-      const docSizeBeforeInsert = editor.state.doc.content.size
-      editor.chain()
-        .insertContentAt(startPosition, accumulatedResult, { contentType: 'markdown' })
-        .run()
-      const generatedRange = getInsertedContentRange(editor, startPosition, docSizeBeforeInsert)
-
-      emitter.emit('ai-streaming-complete', {
-        originalText: selectedText,
-        suggestedText: accumulatedResult,
-        type: 'translate',
-        position: getEditorPositionRect(editor, generatedRange.to),
-        generatedRange,
-      })
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return
-      }
-      editor.chain()
-        .focus()
-        .insertContent(selectedText)
-        .run()
-      emitter.emit('ai-streaming-complete')
-    }
-  }, [editor])
+        onChunk,
+        abortSignal,
+        onThinkingUpdate,
+      ),
+    )
+  }, [runAISelectionTransform])
 
   useEffect(() => {
     aiActionHandlersRef.current = {
@@ -3729,7 +3584,9 @@ export function TipTapEditor({
         if (onTerminate) {
           onTerminate()
         } else {
-          emitter.emit('abort-ai-streaming')
+          emitter.emit('abort-ai-streaming', {
+            requestId: activeAiRequestRef.current?.requestId ?? null,
+          })
         }
         return true
       },
@@ -4137,8 +3994,6 @@ export function TipTapEditor({
 
   // Handle AI continue writing
   useEffect(() => {
-    let abortController: AbortController | null = null
-
     const handleAIContinue = async (event: Event) => {
       if (!editor) return
 
@@ -4150,13 +4005,9 @@ export function TipTapEditor({
         }
       }
 
-      // Get content before cursor as context
-      const { from } = editor.state.selection
-      const textBefore = editor.state.doc.textBetween(0, from, '\n')
-
-      // Get last 500 characters as context
+      const { from: startPosition } = editor.state.selection
+      const textBefore = editor.state.doc.textBetween(0, startPosition, '\n')
       const context = textBefore.slice(-500)
-
       if (!context.trim()) {
         toast({
           title: '续写失败',
@@ -4166,81 +4017,100 @@ export function TipTapEditor({
         return
       }
 
-      abortController?.abort()
-      abortController = new AbortController()
+      const previousRequest = activeAiRequestRef.current
+      if (previousRequest) {
+        previousRequest.controller.abort()
+        previousRequest.cleanup()
+        activeAiRequestRef.current = null
+        emitter.emit('abort-ai-streaming', { requestId: previousRequest.requestId })
+      }
 
-      const startPosition = from
+      const requestId = crypto.randomUUID()
+      const controller = new AbortController()
       let accumulatedResult = ''
+      let generatedRange: AiGeneratedRange = { from: startPosition, to: startPosition }
       let loadingVisible = true
+      let cleanedUp = false
 
+      const cleanup = () => {
+        if (cleanedUp) return
+        cleanedUp = true
+        deleteGeneratedRange(editor, generatedRange)
+        releaseEditorLock()
+      }
       const removeLoadingIndicator = () => {
-        if (!loadingVisible) {
-          return
-        }
-        editorChain()
-          .deleteRange({
-            from: startPosition,
-            to: startPosition + AI_GENERATION_LOADING_TEXT.length,
-          })
-          .run()
+        if (!loadingVisible) return
+        deleteGeneratedRange(editor, generatedRange)
+        generatedRange = { from: startPosition, to: startPosition }
         loadingVisible = false
       }
 
-      editorChain().insertContent(AI_GENERATION_LOADING_TEXT).run()
+      const docSizeBeforeLoading = editor.state.doc.content.size
+      editorChain().insertContentAt(startPosition, AI_GENERATION_LOADING_TEXT).run()
+      generatedRange = getInsertedContentRange(editor, startPosition, docSizeBeforeLoading)
+      activeAiRequestRef.current = { requestId, controller, cleanup }
       blurEditor()
+      const releaseEditorLock = lockEditorForAiRequest(editor)
 
       try {
         await fetchCompletionStream(
           context,
           (chunk, isFirst) => {
-            if (isFirst) {
-              removeLoadingIndicator()
+            if (controller.signal.aborted || activeAiRequestRef.current?.requestId !== requestId) return
+            if (isFirst) removeLoadingIndicator()
+
+            const insertionPosition = clampSelectionPosition(generatedRange.to, editor.state.doc.content.size)
+            const docSizeBeforeInsert = editor.state.doc.content.size
+            editorChain().insertContentAt(insertionPosition, chunk).run()
+            const insertedSize = Math.max(0, editor.state.doc.content.size - docSizeBeforeInsert)
+            generatedRange = {
+              from: clampSelectionPosition(generatedRange.from, editor.state.doc.content.size),
+              to: insertionPosition + insertedSize,
             }
-            editorChain()
-              .insertContentAt(startPosition + accumulatedResult.length, chunk)
-              .run()
-            blurEditor()
             accumulatedResult += chunk
+            blurEditor()
           },
-          abortController.signal
+          controller.signal,
         )
 
+        if (controller.signal.aborted || activeAiRequestRef.current?.requestId !== requestId) {
+          cleanup()
+          return
+        }
         if (!accumulatedResult) {
-          removeLoadingIndicator()
+          cleanup()
+          activeAiRequestRef.current = null
           return
         }
 
-        editorChain()
-          .deleteRange({ from: startPosition, to: startPosition + accumulatedResult.length })
-          .run()
-
+        deleteGeneratedRange(editor, generatedRange)
+        const insertionPosition = clampSelectionPosition(startPosition, editor.state.doc.content.size)
         const docSizeBeforeInsert = editor.state.doc.content.size
-        editorChain()
-          .insertContentAt(startPosition, accumulatedResult, { contentType: 'markdown' })
-          .run()
+        editorChain().insertContentAt(insertionPosition, accumulatedResult, { contentType: 'markdown' }).run()
+        generatedRange = getInsertedContentRange(editor, insertionPosition, docSizeBeforeInsert)
         blurEditor()
 
-        const insertedSize = Math.max(0, editor.state.doc.content.size - docSizeBeforeInsert)
-        const generatedRange = {
-          from: startPosition,
-          to: startPosition + insertedSize,
-        }
-
+        cleanedUp = true
+        activeAiRequestRef.current = null
         editor.commands.setTextSelection(generatedRange.to)
-
         emitter.emit('show-ai-suggestion', {
+          requestId,
           originalText: '',
           suggestedText: accumulatedResult,
           type: 'continue',
+          startPosition,
           position: getEditorPositionRect(editor, generatedRange.to),
           generatedRange,
+          releaseEditorLock,
         })
       } catch (error) {
-        removeLoadingIndicator()
+        cleanup()
+        if (activeAiRequestRef.current?.requestId === requestId) {
+          activeAiRequestRef.current = null
+        }
         blurEditor()
 
-        // Show error toast (but not for aborted requests)
-        if (error instanceof Error && error.message !== 'Request was aborted.') {
+        if (!controller.signal.aborted && error instanceof Error) {
           toast({
             title: '续写失败',
             description: error.message || '网络错误',
@@ -4251,16 +4121,11 @@ export function TipTapEditor({
     }
 
     document.addEventListener('tiptap-ai-continue', handleAIContinue)
-    return () => {
-      document.removeEventListener('tiptap-ai-continue', handleAIContinue)
-      abortController?.abort()
-    }
+    return () => document.removeEventListener('tiptap-ai-continue', handleAIContinue)
   }, [editor, isMobile])
 
   // Handle slash-command AI generation actions that operate without selected text.
   useEffect(() => {
-    let abortController: AbortController | null = null
-
     const actionTitle: Record<EditorAiGenerationAction, string> = {
       section: '生成章节',
       summary: '总结',
@@ -4275,19 +4140,14 @@ export function TipTapEditor({
         instruction?: string
         suppressKeyboard?: boolean
       }>).detail
-
-      if (!isEditorAiGenerationAction(detail?.action)) {
-        return
-      }
+      if (!isEditorAiGenerationAction(detail?.action)) return
 
       const action = detail.action
       const instruction = detail.instruction?.trim()
       const shouldSuppressKeyboard = isMobile && detail.suppressKeyboard === true
       const editorChain = () => shouldSuppressKeyboard ? editor.chain() : editor.chain().focus()
       const blurEditor = () => {
-        if (shouldSuppressKeyboard) {
-          blurActiveEditableElement()
-        }
+        if (shouldSuppressKeyboard) blurActiveEditableElement()
       }
 
       if (action === 'custom' && !instruction) {
@@ -4299,12 +4159,11 @@ export function TipTapEditor({
         return
       }
 
-      const { from } = editor.state.selection
+      const { from: startPosition } = editor.state.selection
       const fullText = normalizeMarkdownPlaceholders(editor.getMarkdown())
       const plainText = editor.getText()
-      const textBeforeCursor = editor.state.doc.textBetween(0, from, '\n')
-      const textAfterCursor = editor.state.doc.textBetween(from, editor.state.doc.content.size, '\n')
-
+      const textBeforeCursor = editor.state.doc.textBetween(0, startPosition, '\n')
+      const textAfterCursor = editor.state.doc.textBetween(startPosition, editor.state.doc.content.size, '\n')
       if (action !== 'custom' && !plainText.trim()) {
         toast({
           title: `${actionTitle[action]}失败`,
@@ -4314,28 +4173,40 @@ export function TipTapEditor({
         return
       }
 
-      abortController?.abort()
-      abortController = new AbortController()
+      const previousRequest = activeAiRequestRef.current
+      if (previousRequest) {
+        previousRequest.controller.abort()
+        previousRequest.cleanup()
+        activeAiRequestRef.current = null
+        emitter.emit('abort-ai-streaming', { requestId: previousRequest.requestId })
+      }
 
-      const startPosition = from
+      const requestId = crypto.randomUUID()
+      const controller = new AbortController()
       let accumulatedResult = ''
+      let generatedRange: AiGeneratedRange = { from: startPosition, to: startPosition }
       let loadingVisible = true
+      let cleanedUp = false
 
+      const cleanup = () => {
+        if (cleanedUp) return
+        cleanedUp = true
+        deleteGeneratedRange(editor, generatedRange)
+        releaseEditorLock()
+      }
       const removeLoadingIndicator = () => {
-        if (!loadingVisible) {
-          return
-        }
-        editorChain()
-          .deleteRange({
-            from: startPosition,
-            to: startPosition + AI_GENERATION_LOADING_TEXT.length,
-          })
-          .run()
+        if (!loadingVisible) return
+        deleteGeneratedRange(editor, generatedRange)
+        generatedRange = { from: startPosition, to: startPosition }
         loadingVisible = false
       }
 
-      editorChain().insertContent(AI_GENERATION_LOADING_TEXT).run()
+      const docSizeBeforeLoading = editor.state.doc.content.size
+      editorChain().insertContentAt(startPosition, AI_GENERATION_LOADING_TEXT).run()
+      generatedRange = getInsertedContentRange(editor, startPosition, docSizeBeforeLoading)
+      activeAiRequestRef.current = { requestId, controller, cleanup }
       blurEditor()
+      const releaseEditorLock = lockEditorForAiRequest(editor)
 
       try {
         await fetchEditorAiGenerationStream(
@@ -4347,61 +4218,69 @@ export function TipTapEditor({
             instruction,
           },
           (chunk, isFirst) => {
-            if (isFirst) {
-              removeLoadingIndicator()
+            if (controller.signal.aborted || activeAiRequestRef.current?.requestId !== requestId) return
+            if (isFirst) removeLoadingIndicator()
+
+            const insertionPosition = clampSelectionPosition(generatedRange.to, editor.state.doc.content.size)
+            const docSizeBeforeInsert = editor.state.doc.content.size
+            editorChain().insertContentAt(insertionPosition, chunk).run()
+            const insertedSize = Math.max(0, editor.state.doc.content.size - docSizeBeforeInsert)
+            generatedRange = {
+              from: clampSelectionPosition(generatedRange.from, editor.state.doc.content.size),
+              to: insertionPosition + insertedSize,
             }
-            editorChain()
-              .insertContentAt(startPosition + accumulatedResult.length, chunk)
-              .run()
-            blurEditor()
             accumulatedResult += chunk
+            blurEditor()
           },
-          abortController.signal
+          controller.signal,
         )
 
+        if (controller.signal.aborted || activeAiRequestRef.current?.requestId !== requestId) {
+          cleanup()
+          return
+        }
         if (!accumulatedResult) {
-          removeLoadingIndicator()
+          cleanup()
+          activeAiRequestRef.current = null
           return
         }
 
         const sanitizedResult = sanitizeEditorAiGenerationOutput(accumulatedResult)
-        editorChain()
-          .deleteRange({
-            from: startPosition,
-            to: startPosition + accumulatedResult.length,
-          })
-          .run()
-
+        deleteGeneratedRange(editor, generatedRange)
         if (!sanitizedResult) {
+          cleanedUp = true
+          activeAiRequestRef.current = null
+          releaseEditorLock()
           return
         }
 
+        const insertionPosition = clampSelectionPosition(startPosition, editor.state.doc.content.size)
         const docSizeBeforeInsert = editor.state.doc.content.size
-        editorChain()
-          .insertContentAt(startPosition, sanitizedResult, { contentType: 'markdown' })
-          .run()
+        editorChain().insertContentAt(insertionPosition, sanitizedResult, { contentType: 'markdown' }).run()
+        generatedRange = getInsertedContentRange(editor, insertionPosition, docSizeBeforeInsert)
         blurEditor()
 
-        const insertedSize = Math.max(0, editor.state.doc.content.size - docSizeBeforeInsert)
-        const generatedRange = {
-          from: startPosition,
-          to: startPosition + insertedSize,
-        }
-
+        cleanedUp = true
+        activeAiRequestRef.current = null
         editor.commands.setTextSelection(generatedRange.to)
-
         emitter.emit('show-ai-suggestion', {
+          requestId,
           originalText: '',
           suggestedText: sanitizedResult,
           type: action,
+          startPosition,
           position: getEditorPositionRect(editor, generatedRange.to),
           generatedRange,
+          releaseEditorLock,
         })
       } catch (error) {
-        removeLoadingIndicator()
+        cleanup()
+        if (activeAiRequestRef.current?.requestId === requestId) {
+          activeAiRequestRef.current = null
+        }
         blurEditor()
 
-        if (error instanceof Error && error.message !== 'Request was aborted.') {
+        if (!controller.signal.aborted && error instanceof Error) {
           toast({
             title: `${actionTitle[action]}失败`,
             description: error.message || '网络错误',
@@ -4412,10 +4291,7 @@ export function TipTapEditor({
     }
 
     document.addEventListener('tiptap-ai-generate', handleAIGenerate)
-    return () => {
-      document.removeEventListener('tiptap-ai-generate', handleAIGenerate)
-      abortController?.abort()
-    }
+    return () => document.removeEventListener('tiptap-ai-generate', handleAIGenerate)
   }, [editor, isMobile])
 
   // Handle drag and drop from marks

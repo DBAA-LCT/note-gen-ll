@@ -159,7 +159,7 @@ export function AgentApprovalPanel({
   }
 
   return (
-    <div className="flex w-full flex-col gap-2 rounded-md border bg-background p-2 shadow-sm">
+    <div className="flex w-full max-h-[min(24rem,calc(var(--mobile-viewport-height,100vh)*0.52))] flex-col gap-2 overflow-y-auto overscroll-contain rounded-md border bg-background p-2 shadow-sm">
       <div>
         <button
           type="button"

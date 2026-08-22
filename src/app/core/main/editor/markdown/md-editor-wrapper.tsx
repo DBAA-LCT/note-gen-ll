@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { useTranslations } from 'next-intl'
 import emitter from '@/lib/emitter'
+import { getActiveAiSuggestionRequestId } from '@/lib/ai-suggestion-shortcut-state'
 import {
   DEFAULT_OUTLINE_WIDTH,
   normalizeOutlineWidth,
@@ -463,7 +464,9 @@ export function MdEditor({ tabContentsRef, filePath, isActive }: MdEditorProps) 
             terminateRef.current()
           } else {
             // If terminateRef is not set, emit abort event
-            emitter.emit('abort-ai-streaming')
+            emitter.emit('abort-ai-streaming', {
+              requestId: getActiveAiSuggestionRequestId(),
+            })
           }}
         }
       />

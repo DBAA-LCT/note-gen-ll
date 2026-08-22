@@ -782,35 +782,35 @@ export const TYPERT = {
             "name": "register",
             "signature": "register(registration: HostCordisInspectProviderRegistration): () => void",
             "summary": "Register one Host provider.",
-            "jsDoc": "/**\n * Register one Host provider.\n * @param registration - manifest and local query handler.\n * @returns idempotent disposer.\n */"
+            "jsDoc": "/**\r\n * Register one Host provider.\r\n * @param registration - manifest and local query handler.\r\n * @returns idempotent disposer.\r\n */"
           },
           {
             "kind": "method",
             "name": "syncClientManifest",
             "signature": "syncClientManifest(providers: readonly CordisInspectProviderManifest[]): void",
             "summary": "Replace the mirrored Client provider directory.",
-            "jsDoc": "/**\n * Replace the mirrored Client provider directory.\n * @param providers - complete Client manifest snapshot.\n */"
+            "jsDoc": "/**\r\n * Replace the mirrored Client provider directory.\r\n * @param providers - complete Client manifest snapshot.\r\n */"
           },
           {
             "kind": "method",
             "name": "list",
             "signature": "list(): CordisInspectProviderView[]",
             "summary": "Return the complete known Host and Client provider directory.",
-            "jsDoc": "/**\n * Return the complete known Host and Client provider directory.\n * @returns Host providers followed by the Client providers.\n */"
+            "jsDoc": "/**\r\n * Return the complete known Host and Client provider directory.\r\n * @returns Host providers followed by the Client providers.\r\n */"
           },
           {
             "kind": "method",
             "name": "query",
             "signature": "async query( platform: CordisInspectPlatform, providerId: string, methodName: string, input: JsonValue | undefined, agent: Agent, signal: AbortSignal, ): Promise<JsonValue>",
             "summary": "Execute one provider query on its owning platform.",
-            "jsDoc": "/**\n * Execute one provider query on its owning platform.\n * @param platform - Host or Client runtime.\n * @param providerId - provider selected from {@link list}.\n * @param methodName - declared method name.\n * @param input - optional lossless JSON input.\n * @param agent - requesting Agent and scope.\n * @param signal - tool-call cancellation.\n * @returns provider JSON data.\n */"
+            "jsDoc": "/**\r\n * Execute one provider query on its owning platform.\r\n * @param platform - Host or Client runtime.\r\n * @param providerId - provider selected from {@link list}.\r\n * @param methodName - declared method name.\r\n * @param input - optional lossless JSON input.\r\n * @param agent - requesting Agent and scope.\r\n * @param signal - tool-call cancellation.\r\n * @returns provider JSON data.\r\n */"
           },
           {
             "kind": "method",
             "name": "resolveClientQuery",
             "signature": "resolveClientQuery( agent: Agent, requestId: CordisInspectRequestId, resolution: CordisInspectQueryResolution, ): CordisInspectResolveAck",
             "summary": "Accept the first valid Client response for a pending query.",
-            "jsDoc": "/**\n * Accept the first valid Client response for a pending query.\n * @param agent - Agent whose Session owns the query.\n * @param requestId - Pending Client query identity.\n * @param resolution - Client provider result or failure.\n * @returns whether this response settled the still-pending query.\n */"
+            "jsDoc": "/**\r\n * Accept the first valid Client response for a pending query.\r\n * @param agent - Agent whose Session owns the query.\r\n * @param requestId - Pending Client query identity.\r\n * @param resolution - Client provider result or failure.\r\n * @returns whether this response settled the still-pending query.\r\n */"
           }
         ],
         "types": [
@@ -1177,147 +1177,147 @@ export const TYPERT = {
             "name": "define",
             "signature": "define(request: DynamicCordisDefineRequest): DynamicCordisDefineReceipt",
             "summary": "Define a new Plugin's first Package or append a Package to an existing Plugin.",
-            "jsDoc": "/**\n * Define a new Plugin's first Package or append a Package to an existing Plugin.\n * @param request - Session ownership, Plugin selection, metadata, and source code.\n * @returns Host-minted Plugin and Package identities with declared-half metadata.\n */"
+            "jsDoc": "/**\r\n * Define a new Plugin's first Package or append a Package to an existing Plugin.\r\n * @param request - Session ownership, Plugin selection, metadata, and source code.\r\n * @returns Host-minted Plugin and Package identities with declared-half metadata.\r\n */"
           },
           {
             "kind": "method",
             "name": "undefine",
             "signature": "async undefine(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCordisUndefineReceipt>",
             "summary": "Remove a Plugin, its active run, and all immutable Packages.",
-            "jsDoc": "/**\n * Remove a Plugin, its active run, and all immutable Packages.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity to remove.\n * @returns Whether removal succeeded and whether it stopped an active run.\n */"
+            "jsDoc": "/**\r\n * Remove a Plugin, its active run, and all immutable Packages.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity to remove.\r\n * @returns Whether removal succeeded and whether it stopped an active run.\r\n */"
           },
           {
             "kind": "method",
             "name": "undefineFromPanel",
             "signature": "@Remote('undefineFromPanel') async undefineFromPanel(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCordisUndefineReceipt>",
             "summary": "Remove a Plugin from the user panel and queue the resulting state change for the model's next step.",
-            "jsDoc": "/**\n * Remove a Plugin from the user panel and queue the resulting state change for the model's next step.\n * @param agent - Agent whose Session owns the Plugin and receives the context.\n * @param pluginId - Stable Plugin identity to remove.\n * @returns Whether removal succeeded and whether it stopped an active run.\n */"
+            "jsDoc": "/**\r\n * Remove a Plugin from the user panel and queue the resulting state change for the model's next step.\r\n * @param agent - Agent whose Session owns the Plugin and receives the context.\r\n * @param pluginId - Stable Plugin identity to remove.\r\n * @returns Whether removal succeeded and whether it stopped an active run.\r\n */"
           },
           {
             "kind": "method",
             "name": "run",
             "signature": "async run( agent: Agent, pluginId: CordisDynamicPluginId, packageId: CordisDynamicPackageId, mode: CordisDynamicRunMode, signal?: AbortSignal, ): Promise<DynamicCordisRunResponse>",
             "summary": "Start or update one Package for a model tool call.",
-            "jsDoc": "/**\n * Start or update one Package for a model tool call. An unauthorized Client\n * Package waits for approval; Plugin-wide authorization covers later versions.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity to activate.\n * @param packageId - Immutable Package version to activate.\n * @param mode - Whether to run the current version or switch versions.\n * @param signal - Tool-call cancellation signal while the activation request is being created.\n * @returns The successful activation identity or an actionable refusal.\n */"
+            "jsDoc": "/**\r\n * Start or update one Package for a model tool call. An unauthorized Client\r\n * Package waits for approval; Plugin-wide authorization covers later versions.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity to activate.\r\n * @param packageId - Immutable Package version to activate.\r\n * @param mode - Whether to run the current version or switch versions.\r\n * @param signal - Tool-call cancellation signal while the activation request is being created.\r\n * @returns The successful activation identity or an actionable refusal.\r\n */"
           },
           {
             "kind": "method",
             "name": "runHostHalf",
             "signature": "@Remote('runHostHalf') async runHostHalf( agent: Agent, pluginId: CordisDynamicPluginId, packageId: CordisDynamicPackageId, mode: CordisDynamicRunMode, requestId: ApprovalRequestId | null, approveFutureVersions: boolean, ): Promise<DynamicCordisHostHalfResult>",
             "summary": "Start Host code for an approved request or a direct panel gesture.",
-            "jsDoc": "/**\n * Start Host code for an approved request or a direct panel gesture.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity to activate.\n * @param packageId - Immutable Package version to activate.\n * @param mode - Whether to run the current version or switch versions.\n * @param requestId - Model-driven request identity, or null for a direct user gesture.\n * @param approveFutureVersions - Whether this approval covers later Packages of the same Plugin.\n * @returns The exact Host activation or a failure message.\n */"
+            "jsDoc": "/**\r\n * Start Host code for an approved request or a direct panel gesture.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity to activate.\r\n * @param packageId - Immutable Package version to activate.\r\n * @param mode - Whether to run the current version or switch versions.\r\n * @param requestId - Model-driven request identity, or null for a direct user gesture.\r\n * @param approveFutureVersions - Whether this approval covers later Packages of the same Plugin.\r\n * @returns The exact Host activation or a failure message.\r\n */"
           },
           {
             "kind": "method",
             "name": "getClientCode",
             "signature": "@Remote('getClientCode') getClientCode( agent: Agent, pluginId: CordisDynamicPluginId, pluginRunId: CordisDynamicPluginRunId, ): DynamicCordisClientSource",
             "summary": "Fetch Client code for the exact active run.",
-            "jsDoc": "/**\n * Fetch Client code for the exact active run.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity to read.\n * @param pluginRunId - Exact active run authorized to receive source.\n * @returns Client source and its Plugin, Package, and run identities.\n */"
+            "jsDoc": "/**\r\n * Fetch Client code for the exact active run.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity to read.\r\n * @param pluginRunId - Exact active run authorized to receive source.\r\n * @returns Client source and its Plugin, Package, and run identities.\r\n */"
           },
           {
             "kind": "method",
             "name": "resolveRequestRun",
             "signature": "@Remote('resolveRequestRun') async resolveRequestRun( requestId: ApprovalRequestId, resolution: DynamicCordisRunResolution, ): Promise<DynamicCordisResolveAck>",
             "summary": "Resolve one model-driven Client activation request.",
-            "jsDoc": "/**\n * Resolve one model-driven Client activation request.\n * @param requestId - Request identity to settle once.\n * @param resolution - Browser refusal or exact Client activation result.\n * @returns Whether the still-pending request accepted this resolution.\n */"
+            "jsDoc": "/**\r\n * Resolve one model-driven Client activation request.\r\n * @param requestId - Request identity to settle once.\r\n * @param resolution - Browser refusal or exact Client activation result.\r\n * @returns Whether the still-pending request accepted this resolution.\r\n */"
           },
           {
             "kind": "method",
             "name": "settleUserRun",
             "signature": "@Remote('settleUserRun') async settleUserRun( agent: Agent, pluginId: CordisDynamicPluginId, resolution: DynamicCordisRunResolution, ): Promise<DynamicCordisRunResponse>",
             "summary": "Settle a direct panel run after this page loaded or failed its Client half.",
-            "jsDoc": "/**\n * Settle a direct panel run after this page loaded or failed its Client half.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity being settled.\n * @param resolution - Exact Client activation result from the acting page.\n * @returns The committed activation or its failure.\n */"
+            "jsDoc": "/**\r\n * Settle a direct panel run after this page loaded or failed its Client half.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity being settled.\r\n * @param resolution - Exact Client activation result from the acting page.\r\n * @returns The committed activation or its failure.\r\n */"
           },
           {
             "kind": "method",
             "name": "stop",
             "signature": "async stop(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCordisStopResponse>",
             "summary": "Stop the active run while retaining every Package version.",
-            "jsDoc": "/**\n * Stop the active run while retaining every Package version.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity to stop.\n * @returns Success or the reason no run was stopped.\n */"
+            "jsDoc": "/**\r\n * Stop the active run while retaining every Package version.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity to stop.\r\n * @returns Success or the reason no run was stopped.\r\n */"
           },
           {
             "kind": "method",
             "name": "stopFromPanel",
             "signature": "@Remote('stopFromPanel') async stopFromPanel(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCordisStopResponse>",
             "summary": "Stop a Plugin from the user panel and queue the resulting state change for the model's next step.",
-            "jsDoc": "/**\n * Stop a Plugin from the user panel and queue the resulting state change for the model's next step.\n * @param agent - Agent whose Session owns the Plugin and receives the context.\n * @param pluginId - Stable Plugin identity to stop.\n * @returns Success or the reason no run was stopped.\n */"
+            "jsDoc": "/**\r\n * Stop a Plugin from the user panel and queue the resulting state change for the model's next step.\r\n * @param agent - Agent whose Session owns the Plugin and receives the context.\r\n * @param pluginId - Stable Plugin identity to stop.\r\n * @returns Success or the reason no run was stopped.\r\n */"
           },
           {
             "kind": "method",
             "name": "syncInspectManifest",
             "signature": "@Remote('syncInspectManifest') syncInspectManifest(providers: readonly CordisInspectProviderManifest[]): null",
             "summary": "Replace the Host mirror of the Client inspect provider directory.",
-            "jsDoc": "/**\n * Replace the Host mirror of the Client inspect provider directory.\n * @param providers - complete Client provider manifest.\n * @returns null after accepting the manifest.\n */"
+            "jsDoc": "/**\r\n * Replace the Host mirror of the Client inspect provider directory.\r\n * @param providers - complete Client provider manifest.\r\n * @returns null after accepting the manifest.\r\n */"
           },
           {
             "kind": "method",
             "name": "resolveInspectQuery",
             "signature": "@Remote('resolveInspectQuery') resolveInspectQuery( agent: Agent, requestId: CordisInspectRequestId, resolution: CordisInspectQueryResolution, ): CordisInspectResolveAck",
             "summary": "Claim one pending Client inspect query with its live result.",
-            "jsDoc": "/**\n * Claim one pending Client inspect query with its live result.\n * @param agent - Session that owns the query.\n * @param requestId - exact pending query identity.\n * @param resolution - provider result or structured refusal.\n * @returns whether this answer won the query.\n */"
+            "jsDoc": "/**\r\n * Claim one pending Client inspect query with its live result.\r\n * @param agent - Session that owns the query.\r\n * @param requestId - exact pending query identity.\r\n * @param resolution - provider result or structured refusal.\r\n * @returns whether this answer won the query.\r\n */"
           },
           {
             "kind": "method",
             "name": "inventory",
             "signature": "@Remote('inventory') inventory(): DynamicCordisInventoryRow[]",
             "summary": "Frame-wide inventory, grouped as one row per stable Plugin.",
-            "jsDoc": "/**\n * Frame-wide inventory, grouped as one row per stable Plugin.\n * @returns Source-free metadata for every process-local Plugin.\n */"
+            "jsDoc": "/**\r\n * Frame-wide inventory, grouped as one row per stable Plugin.\r\n * @returns Source-free metadata for every process-local Plugin.\r\n */"
           },
           {
             "kind": "method",
             "name": "snapshot",
             "signature": "snapshot(agent: Agent): DynamicCordisSnapshotRow[]",
             "summary": "Read one Session's Host-rich state for inspection and result rendering.",
-            "jsDoc": "/**\n * Read one Session's Host-rich state for inspection and result rendering.\n * @param agent - Agent whose Session selects visible Plugins.\n * @returns Plugin versions, active runs, Host fibers, and render failures.\n */"
+            "jsDoc": "/**\r\n * Read one Session's Host-rich state for inspection and result rendering.\r\n * @param agent - Agent whose Session selects visible Plugins.\r\n * @returns Plugin versions, active runs, Host fibers, and render failures.\r\n */"
           },
           {
             "kind": "method",
             "name": "reference",
             "signature": "reference(agent: Agent, pluginId: CordisDynamicPluginId): DynamicCordisReference | undefined",
             "summary": "Read source-free context for an explicit `@pluginId` user gesture.",
-            "jsDoc": "/**\n * Read source-free context for an explicit `@pluginId` user gesture.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity referenced by the user.\n * @returns The preferred modification base, or undefined when unavailable.\n */"
+            "jsDoc": "/**\r\n * Read source-free context for an explicit `@pluginId` user gesture.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity referenced by the user.\r\n * @returns The preferred modification base, or undefined when unavailable.\r\n */"
           },
           {
             "kind": "method",
             "name": "listPlugins",
             "signature": "listPlugins(agent: Agent): DynamicCordisPluginInspection[]",
             "summary": "List source-free Plugin summaries owned by one Session.",
-            "jsDoc": "/**\n * List source-free Plugin summaries owned by one Session.\n * @param agent - Agent whose Session selects visible Plugins.\n * @returns one summary per Plugin in creation order.\n */"
+            "jsDoc": "/**\r\n * List source-free Plugin summaries owned by one Session.\r\n * @param agent - Agent whose Session selects visible Plugins.\r\n * @returns one summary per Plugin in creation order.\r\n */"
           },
           {
             "kind": "method",
             "name": "inspectPlugin",
             "signature": "inspectPlugin(agent: Agent, pluginId: CordisDynamicPluginId): DynamicCordisPluginInspection",
             "summary": "Inspect one Plugin without returning Package source.",
-            "jsDoc": "/**\n * Inspect one Plugin without returning Package source.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - stable Plugin identity.\n * @returns version pointers, latest run, and all Package summaries.\n */"
+            "jsDoc": "/**\r\n * Inspect one Plugin without returning Package source.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - stable Plugin identity.\r\n * @returns version pointers, latest run, and all Package summaries.\r\n */"
           },
           {
             "kind": "method",
             "name": "inspectPackage",
             "signature": "inspectPackage( agent: Agent, pluginId: CordisDynamicPluginId, packageId: CordisDynamicPackageId, ): DynamicCordisPackageInspection",
             "summary": "Read one exact immutable Package and its Host and Client source.",
-            "jsDoc": "/**\n * Read one exact immutable Package and its Host and Client source.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity that owns the Package.\n * @param packageId - Exact immutable Package identity to inspect.\n * @returns Package metadata, source, and the Plugin's lifecycle pointers.\n */"
+            "jsDoc": "/**\r\n * Read one exact immutable Package and its Host and Client source.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity that owns the Package.\r\n * @param packageId - Exact immutable Package identity to inspect.\r\n * @returns Package metadata, source, and the Plugin's lifecycle pointers.\r\n */"
           },
           {
             "kind": "method",
             "name": "reportRenderFailure",
             "signature": "@Remote('reportRenderFailure') async reportRenderFailure( agent: Agent, pluginId: CordisDynamicPluginId, pluginRunId: CordisDynamicPluginRunId, failure: DynamicCordisRenderFailure, ): Promise<null>",
             "summary": "Record a post-load render failure for the exact active run.",
-            "jsDoc": "/**\n * Record a post-load render failure for the exact active run.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity that rendered.\n * @param pluginRunId - Exact active run that produced the failure.\n * @param failure - Slot, message, and entry-retirement result.\n * @returns Null after recording or ignoring a stale report.\n */"
+            "jsDoc": "/**\r\n * Record a post-load render failure for the exact active run.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity that rendered.\r\n * @param pluginRunId - Exact active run that produced the failure.\r\n * @param failure - Slot, message, and entry-retirement result.\r\n * @returns Null after recording or ignoring a stale report.\r\n */"
           },
           {
             "kind": "method",
             "name": "reportClientGuardFailure",
             "signature": "@Remote('reportClientGuardFailure') async reportClientGuardFailure( agent: Agent, pluginId: CordisDynamicPluginId, pluginRunId: CordisDynamicPluginRunId, failure: CordisErrorDetails, ): Promise<null>",
             "summary": "Report a Client guard rejection that happened after the Package completed activation.",
-            "jsDoc": "/**\n * Report a Client guard rejection that happened after the Package completed activation.\n * @param agent - Agent whose Session must own the Plugin.\n * @param pluginId - Stable Plugin identity whose Client code was rejected.\n * @param pluginRunId - Exact active run that produced the rejection.\n * @param failure - Original guard message and stack.\n * @returns Null after reporting or ignoring a stale/startup failure.\n */"
+            "jsDoc": "/**\r\n * Report a Client guard rejection that happened after the Package completed activation.\r\n * @param agent - Agent whose Session must own the Plugin.\r\n * @param pluginId - Stable Plugin identity whose Client code was rejected.\r\n * @param pluginRunId - Exact active run that produced the rejection.\r\n * @param failure - Original guard message and stack.\r\n * @returns Null after reporting or ignoring a stale/startup failure.\r\n */"
           },
           {
             "kind": "method",
             "name": "invoke",
             "signature": "@Remote('invoke') async invoke( pluginId: CordisDynamicPluginId, pluginRunId: CordisDynamicPluginRunId, method: string, args: JsonValue, ): Promise<DynamicCordisInvokeResult>",
             "summary": "Invoke an active Host method while rejecting stale Client runs.",
-            "jsDoc": "/**\n * Invoke an active Host method while rejecting stale Client runs.\n * @param pluginId - Stable Plugin identity that owns the method.\n * @param pluginRunId - Exact active run authorizing the call.\n * @param method - Registered Host handler name.\n * @param args - JSON argument delivered to the handler.\n * @returns The JSON result or a typed invocation failure.\n */"
+            "jsDoc": "/**\r\n * Invoke an active Host method while rejecting stale Client runs.\r\n * @param pluginId - Stable Plugin identity that owns the method.\r\n * @param pluginRunId - Exact active run authorizing the call.\r\n * @param method - Registered Host handler name.\r\n * @param args - JSON argument delivered to the handler.\r\n * @returns The JSON result or a typed invocation failure.\r\n */"
           }
         ],
         "types": [
@@ -1773,7 +1773,7 @@ export const TYPERT = {
             "name": "param",
             "argument": "pkg",
             "comment": "- stable plugin, immutable package, run identity, and label.",
-            "text": "@param pkg - stable plugin, immutable package, run identity, and label.\n     *"
+            "text": "@param pkg - stable plugin, immutable package, run identity, and label.\r\n     *"
           },
           {
             "name": "mode",
@@ -1781,7 +1781,7 @@ export const TYPERT = {
             "text": "@mode emit"
           }
         ],
-        "jsDoc": "/**\n * One exact Plugin/Package activation is now live in the Host.\n * @param pkg - stable plugin, immutable package, run identity, and label.\n * @mode emit\n */",
+        "jsDoc": "/**\r\n * One exact Plugin/Package activation is now live in the Host.\r\n * @param pkg - stable plugin, immutable package, run identity, and label.\r\n * @mode emit\r\n */",
         "name": "cordis/dynamic-package",
         "mode": "emit",
         "signature": "'cordis/dynamic-package'(pkg: DynamicCordisPackage): void"
@@ -1794,7 +1794,7 @@ export const TYPERT = {
             "name": "param",
             "argument": "retracted",
             "comment": "- plugin, package, and run identity.",
-            "text": "@param retracted - plugin, package, and run identity.\n     *"
+            "text": "@param retracted - plugin, package, and run identity.\r\n     *"
           },
           {
             "name": "mode",
@@ -1802,7 +1802,7 @@ export const TYPERT = {
             "text": "@mode emit"
           }
         ],
-        "jsDoc": "/**\n * One exact activation was withdrawn.\n * @param retracted - plugin, package, and run identity.\n * @mode emit\n */",
+        "jsDoc": "/**\r\n * One exact activation was withdrawn.\r\n * @param retracted - plugin, package, and run identity.\r\n * @mode emit\r\n */",
         "name": "cordis/dynamic-retract",
         "mode": "emit",
         "signature": "'cordis/dynamic-retract'(retracted: DynamicCordisRetracted): void"
@@ -1815,7 +1815,7 @@ export const TYPERT = {
             "name": "param",
             "argument": "request",
             "comment": "- correlation, Session, provider, method, and JSON input.",
-            "text": "@param request - correlation, Session, provider, method, and JSON input.\n     *"
+            "text": "@param request - correlation, Session, provider, method, and JSON input.\r\n     *"
           },
           {
             "name": "mode",
@@ -1823,7 +1823,7 @@ export const TYPERT = {
             "text": "@mode emit"
           }
         ],
-        "jsDoc": "/**\n * Request a live read-only query from the Client inspect registry.\n * @param request - correlation, Session, provider, method, and JSON input.\n * @mode emit\n */",
+        "jsDoc": "/**\r\n * Request a live read-only query from the Client inspect registry.\r\n * @param request - correlation, Session, provider, method, and JSON input.\r\n * @mode emit\r\n */",
         "name": "cordis/inspect-query",
         "mode": "emit",
         "signature": "'cordis/inspect-query'(request: CordisInspectQueryRequest): void"
@@ -1836,7 +1836,7 @@ export const TYPERT = {
             "name": "param",
             "argument": "resolved",
             "comment": "- exact query identity that is no longer answerable.",
-            "text": "@param resolved - exact query identity that is no longer answerable.\n     *"
+            "text": "@param resolved - exact query identity that is no longer answerable.\r\n     *"
           },
           {
             "name": "mode",
@@ -1844,7 +1844,7 @@ export const TYPERT = {
             "text": "@mode emit"
           }
         ],
-        "jsDoc": "/**\n * Notify every Client that an inspect query has settled or been cancelled.\n * @param resolved - exact query identity that is no longer answerable.\n * @mode emit\n */",
+        "jsDoc": "/**\r\n * Notify every Client that an inspect query has settled or been cancelled.\r\n * @param resolved - exact query identity that is no longer answerable.\r\n * @mode emit\r\n */",
         "name": "cordis/inspect-query-resolved",
         "mode": "emit",
         "signature": "'cordis/inspect-query-resolved'(resolved: CordisInspectQueryResolved): void"
@@ -1857,7 +1857,7 @@ export const TYPERT = {
             "name": "param",
             "argument": "request",
             "comment": "- correlation identity, owner, target version, mode, and approval requirement.",
-            "text": "@param request - correlation identity, owner, target version, mode, and approval requirement.\n     *"
+            "text": "@param request - correlation identity, owner, target version, mode, and approval requirement.\r\n     *"
           },
           {
             "name": "mode",
@@ -1865,7 +1865,7 @@ export const TYPERT = {
             "text": "@mode emit"
           }
         ],
-        "jsDoc": "/**\n * A Client-bearing activation needs a browser page, and may require a user decision.\n * @param request - correlation identity, owner, target version, mode, and approval requirement.\n * @mode emit\n */",
+        "jsDoc": "/**\r\n * A Client-bearing activation needs a browser page, and may require a user decision.\r\n * @param request - correlation identity, owner, target version, mode, and approval requirement.\r\n * @mode emit\r\n */",
         "name": "cordis/request-run",
         "mode": "emit",
         "signature": "'cordis/request-run'(request: DynamicCordisRunRequest): void"
@@ -1878,7 +1878,7 @@ export const TYPERT = {
             "name": "param",
             "argument": "resolved",
             "comment": "- request identity and outcome.",
-            "text": "@param resolved - request identity and outcome.\n     *"
+            "text": "@param resolved - request identity and outcome.\r\n     *"
           },
           {
             "name": "mode",
@@ -1886,7 +1886,7 @@ export const TYPERT = {
             "text": "@mode emit"
           }
         ],
-        "jsDoc": "/**\n * A pending Client activation request left the answerable state.\n * @param resolved - request identity and outcome.\n * @mode emit\n */",
+        "jsDoc": "/**\r\n * A pending Client activation request left the answerable state.\r\n * @param resolved - request identity and outcome.\r\n * @mode emit\r\n */",
         "name": "cordis/request-run-resolved",
         "mode": "emit",
         "signature": "'cordis/request-run-resolved'(resolved: DynamicCordisRequestResolved): void"

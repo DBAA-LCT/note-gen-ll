@@ -253,7 +253,7 @@ export async function getFiles({ path, repo, sha }: { path: string; repo: string
     const giteaUsername = await store.get<string>('giteaUsername');
 
     if (!giteaUsername) {
-      return null;
+      throw new Error('Gitea 用户名未配置');
     }
 
     const baseUrl = await getGiteaApiBaseUrl();
@@ -316,14 +316,14 @@ export async function getFiles({ path, repo, sha }: { path: string; repo: string
       } as GiteaError;
     }
 
-    return null;
+    const errorData = await response.text().catch(() => '');
+    throw {
+      status: response.status,
+      message: errorData || `获取文件列表失败: ${response.status}`,
+    } as GiteaError;
 
   } catch (error) {
-    // 重新抛出已处理的错误，静默处理其他错误
-    if ((error as GiteaError).status) {
-      throw error;
-    }
-    return null;
+    throw error;
   }
 }
 
